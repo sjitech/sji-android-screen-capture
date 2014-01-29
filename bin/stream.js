@@ -724,9 +724,9 @@ function startRecording(q/*same as capture*/, on_complete) {
       }
   );
 
-  function callbackOnce() {
+  function callbackOnce(err, wfile) {
     if (on_complete) {
-      on_complete.apply(null, arguments);
+      on_complete(err, wfile);
       on_complete = null;
     }
   }
