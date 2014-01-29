@@ -16,17 +16,51 @@
 #include <math.h>
 #include <err.h>
 #include <stdbool.h>
+#include <sys/time.h>
+#include <time.h>
+#include <signal.h>
 
 #define FRAME_BUFFER_DEV "/dev/graphics/fb0"
 
-#define LOG(fmt, arg...) fprintf(stderr, "[get-raw-image]" fmt "\n", ##arg)
+void _LOG(const char* format, ...) {
+    char buf[4096];
+    int cnt;
+    va_list va;
+    struct timeval tv;
+    long long mms;
+    time_t t;
+    struct tm * st;
 
-void error(const char *msg, ...) {
-    va_list vl;
-    va_start(vl, msg);
-    verr(1, msg, vl); //exit(1)
-    va_end(vl);
+    gettimeofday(&tv, NULL);
+    mms = ((long long) tv.tv_sec) * (1000 * 1000) + tv.tv_usec;
+    t = time(NULL);
+    st = localtime(&t);
+
+    memset(buf, 0, sizeof(buf));
+    sprintf(buf, "%02d/%02d %02d:%02d:%02d.%06d",
+        st->tm_mon+1,
+        st->tm_mday,
+        st->tm_hour,
+        st->tm_min,
+        st->tm_sec,
+        (int)(mms%1000000)
+        );
+    cnt = strlen(buf);
+
+    va_start(va, format);
+    vsnprintf(buf+cnt, sizeof(buf)-cnt-1, format, va);
+    va_end(va);
+
+    cnt = strlen(buf); //gcc 3.3 snprintf can not correctly return copied length, so i have to count by myself
+    if (cnt==0 || buf[cnt-1]!='\n') {
+        buf[cnt++] = '\n';
+    }
+    write(STDERR_FILENO, buf, cnt);
 }
+
+#define LOG(fmt, arg...)      _LOG("[get-raw-image]" fmt "\n", ##arg)
+#define LOGERR(fmt, arg...)   _LOG("[get-raw-image][Error%d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
+#define ABORT(fmt, arg...)  ({_LOG("[get-raw-image][Error%d(%s)]" fmt "\nNow exit\n", errno, strerror(errno), ##arg); exit(1);})
 
 static int64_t microSecondOfNow() {
     struct timeval t;
@@ -35,15 +69,20 @@ static int64_t microSecondOfNow() {
 }
 
 
+static void on_SIGPIPE(int signum) {
+    LOG("pipe peer ended first, no problem");
+    exit(1);
+}
+
 // hack android OS head file
 #if defined(TARGET_ICS) || defined(TARGET_JB)
 namespace android {
 
 template <typename T> class sp {
 public:
-	union{
-		T* m_ptr;
-		char data[32];
+    union{
+        T* m_ptr;
+        char data[32];
     };
 };
 
@@ -99,163 +138,211 @@ using android::SurfaceComposerClient;
 #endif
 
 int main(int argc, char** argv) {
-    LOG("start");
-	int64_t interval_mms = -1;
-	bool isGetFormat = false;
+    LOG("start. pid %d", getpid());
+    int64_t interval_mms = -1;
+    bool isGetFormat = false;
+    bool forceUseFbFormat = false;
+    const char* tmps;
+    int width, height;
 
-	if (argc>1) {
-		double fps = atof(argv[1]);
-		if (fps==0) {
-			//error("wrong parameter for fps(frames_per_second)");
-		}
-		else {
-			interval_mms = ((double)1000000)/fps;
-			LOG("use fps=%.3lf (interval=%.3lfms)", fps, (double)interval_mms/1000);
-		}
-	} else {
-		isGetFormat = true;
-	}
+    if (argc>1) {
+        double fps = atof(argv[1]);
+        if (fps==0) {
+            //
+        }
+        else {
+            interval_mms = ((double)1000000)/fps;
+            LOG("use fps=%.3lf (interval=%.3lfms)", fps, (double)interval_mms/1000);
+        }
+    } else {
+        isGetFormat = true;
+    }
 
-	int fb = -1;
-	char* mapbase = NULL;
+    if (isGetFormat && (tmps=getenv("forceUseFbFormat")) && 0==strcmp(tmps, "forceUseFbFormat")) {
+        LOG("forceUseFbFormat");
+        forceUseFbFormat = true;
+    }
+
+    int fb = -1;
+    char* mapbase = NULL;
 
 #if defined(TARGET_JB) || defined(TARGET_ICS)
-	LOG("call ScreenshotClient init");
+    LOG("call ScreenshotClient init");
     ScreenshotClient screenshot;
 #endif
 
 #if defined(TARGET_JB)
-	LOG("call SurfaceComposerClient::getBuiltInDisplay");
+    LOG("call SurfaceComposerClient::getBuiltInDisplay");
     sp<IBinder> display = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
     if (display.m_ptr==NULL)
-		LOG("error getBuiltInDisplay");
+        LOGERR("failed to getBuiltInDisplay. So use fb0");
 #endif
 
-	int errcount = 0;
-	//LOG(isGetFormat ? "capture once" : "start capture");
-	int64_t count_start_mms = microSecondOfNow();
-	int64_t until_mms = count_start_mms + interval_mms;
-	
-	for (int count=1; ;count++, until_mms += interval_mms) {
+    int errcount = 0;
+    //LOG(isGetFormat ? "capture once" : "start capture");
+    int64_t count_start_mms = microSecondOfNow();
+    int64_t until_mms = count_start_mms + interval_mms;
+
+    for (int count=1; ;count++, until_mms += interval_mms) {
 
         char* rawImageData;
         size_t rawImageSize;
 
 #if defined(TARGET_JB) || defined(TARGET_ICS)
-		bool surfaceOK = false;
+        bool surfaceOK = false;
 #endif
 
 #if defined(TARGET_JB)
-		if (display.m_ptr != NULL) {
-			if (count==1) LOG("call ScreenshotClient.update(display)");
-			surfaceOK = (screenshot.update(display) == 0);
-		}
+        if (!forceUseFbFormat) {
+            if (display.m_ptr != NULL) {
+                if (count==1) LOG("call ScreenshotClient.update(display)");
+                surfaceOK = (screenshot.update(display) == 0);
+                if (!surfaceOK) if (++errcount<10||errcount%100==0) LOGERR("failed to ScreenshotClient.update(display). So use fb0");
+            }
+        }
 #endif
 #if defined(TARGET_ICS)
-		if (count==1) LOG("call ScreenshotClient.update()");
-		surfaceOK = (screenshot.update() == 0);
+        if (!forceUseFbFormat) {
+            if (count==1) LOG("call ScreenshotClient.update()");
+            surfaceOK = (screenshot.update() == 0);
+            if (!surfaceOK) if (++errcount<10||errcount%100==0) LOGERR("failed to ScreenshotClient.update(). So use fb0");
+        }
 #endif
 #if defined(TARGET_JB) || defined(TARGET_ICS)
-		if (!surfaceOK) if (++errcount<10||errcount%100==0) LOG("error ScreenshotClient.update. So use fb0");
-		if (surfaceOK) {
-			rawImageData = (char*)screenshot.getPixels();
-			rawImageSize = screenshot.getSize();
-			
-			if (isGetFormat) {
-				int width = screenshot.getWidth();
-				int height = screenshot.getHeight();
-				int bytesPerPixel = rawImageSize/width/height;
-				printf("-s %dx%d -pix_fmt %s\n", width, height, 
-					(bytesPerPixel==4) ? "rgb0" :
-					(bytesPerPixel==3) ? "rgb24" :
-					(bytesPerPixel==2) ? "rgb565le" :
-					(bytesPerPixel==5) ? "rgb48le" :
-					(bytesPerPixel==6) ? "rgba64le" :
-					(LOG("strange bytesPerPixel:%d", bytesPerPixel),"unknown"));
-				LOG("end");
-				return 0;
-			}
-    	} else
+        if (surfaceOK) {
+            rawImageData = (char*)screenshot.getPixels();
+            rawImageSize = screenshot.getSize();
+            width = screenshot.getWidth();
+            height = screenshot.getHeight();
+
+            if (isGetFormat) {
+                int fmt = screenshot.getFormat();
+                int bytesPerPixel = rawImageSize/width/height;
+                printf("-s %dx%d -pix_fmt %s\n", width, height,
+                    (bytesPerPixel==4) ? "rgb0" :
+                    (bytesPerPixel==3) ? "rgb24" :
+                    (bytesPerPixel==2) ? "rgb565le" :
+                    (bytesPerPixel==5) ? "rgb48le" :
+                    (bytesPerPixel==6) ? "rgba64le" :
+                    (LOG("strange bytesPerPixel:%d", bytesPerPixel),"unknown"));
+                LOG("end. w:%d h:%d fmt:%d bytesPerPixel:%d", width, height, fmt, bytesPerPixel);
+                return 0;
+            }
+        } else
 #endif
-		{
-			if (fb < 0) {
-				fb = open(FRAME_BUFFER_DEV, O_RDONLY);
-				if (fb < 0) {
-					if (++errcount<10) error("open");
-					if (errcount%100==0) errcount=0;
-				}
-			}
+        {
+            if (fb < 0) {
+                fb = open(FRAME_BUFFER_DEV, O_RDONLY);
+                if (fb < 0) {
+                    if (++errcount<10) ABORT("open fb0");
+                    if (errcount%100==0) errcount=0;
+                }
+            }
 
-			struct fb_var_screeninfo vinfo;
-			if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-				if (++errcount<10) error("ioctl");
-				if (errcount%100==0) errcount=0;
-			}
+            struct fb_var_screeninfo vinfo;
+            if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) != 0) {
+                if (++errcount<10) ABORT("ioctl fb0");
+                if (errcount%100==0) errcount=0;
+            }
+            width = vinfo.xres;
+            height = vinfo.yres;
 
-			if (isGetFormat) {
-				printf("-s %dx%d -pix_fmt %s\n", vinfo.xres, vinfo.yres, 
-					(vinfo.bits_per_pixel==32&&vinfo.red.offset==0) ? "rgb0" :
-					(vinfo.bits_per_pixel==32&&vinfo.red.offset!=0) ? "bgr0" :
-					(vinfo.bits_per_pixel==24&&vinfo.red.offset==0) ? "rgb24" :
-					(vinfo.bits_per_pixel==24&&vinfo.red.offset!=0) ? "bgr24" :
-					(vinfo.bits_per_pixel==16&&vinfo.red.offset==0) ? "rgb565le" :
-					(vinfo.bits_per_pixel==16&&vinfo.red.offset!=0) ? "bgr565le" :
-					(vinfo.bits_per_pixel==48&&vinfo.red.offset==0) ? "rgb48le" :
-					(vinfo.bits_per_pixel==48&&vinfo.red.offset!=0) ? "bgr48le" :
-					(vinfo.bits_per_pixel==64&&vinfo.red.offset==0) ? "rgba64le" :
-					(vinfo.bits_per_pixel==64&&vinfo.red.offset!=0) ? "bgra64le" :
-					(LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"));
-				LOG("end");
-				return 0;
-			}
-			else {
-				int bytesPerPixel = vinfo.bits_per_pixel/8;
-				
-				if (mapbase==NULL) {
-					int virtualSize = vinfo.xres_virtual*vinfo.yres_virtual*bytesPerPixel;
-					mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, fb, 0);
-					if (mapbase==NULL) {
-						if (++errcount<10) error("mmap %d", virtualSize);
-						if (errcount%100==0) errcount=0;
-					}
-				}
+            if (isGetFormat) {
+                printf("-s %dx%d -pix_fmt %s\n", vinfo.xres, vinfo.yres,
+                    (vinfo.bits_per_pixel==32&&vinfo.red.offset==0) ? "rgb0" :
+                    (vinfo.bits_per_pixel==32&&vinfo.red.offset!=0) ? "bgr0" :
+                    (vinfo.bits_per_pixel==24&&vinfo.red.offset==0) ? "rgb24" :
+                    (vinfo.bits_per_pixel==24&&vinfo.red.offset!=0) ? "bgr24" :
+                    (vinfo.bits_per_pixel==16&&vinfo.red.offset==0) ? "rgb565le" :
+                    (vinfo.bits_per_pixel==16&&vinfo.red.offset!=0) ? "bgr565le" :
+                    (vinfo.bits_per_pixel==48&&vinfo.red.offset==0) ? "rgb48le" :
+                    (vinfo.bits_per_pixel==48&&vinfo.red.offset!=0) ? "bgr48le" :
+                    (vinfo.bits_per_pixel==64&&vinfo.red.offset==0) ? "rgba64le" :
+                    (vinfo.bits_per_pixel==64&&vinfo.red.offset!=0) ? "bgra64le" :
+                    (LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"));
+                LOG("end. fbinfo: bits:%d"
+                    " R:(offset:%d length:%d msb_right:%d)"
+                    " G:(offset:%d length:%d msb_right:%d)"
+                    " B:(offset:%d length:%d msb_right:%d)"
+                    " A:(offset:%d length:%d msb_right:%d)"
+                    " grayscale:%d nonstd:%d rotate:%d"
+                    ,vinfo.bits_per_pixel
+                    ,vinfo.red.offset, vinfo.red.length, vinfo.red.msb_right
+                    ,vinfo.green.offset, vinfo.green.length, vinfo.green.msb_right
+                    ,vinfo.blue.offset, vinfo.blue.length, vinfo.blue.msb_right
+                    ,vinfo.transp.offset, vinfo.transp.length, vinfo.transp.msb_right
+                    ,vinfo.grayscale, vinfo.nonstd, vinfo.rotate
+                    );
+                return 0;
+            }
+            else {
+                int bytesPerPixel = vinfo.bits_per_pixel/8;
 
-				uint32_t offset =  (vinfo.xoffset + vinfo.yoffset*vinfo.xres) *bytesPerPixel;
-				rawImageData = mapbase + offset;
-				rawImageSize = (vinfo.xres*vinfo.yres) * bytesPerPixel;
-			}
-		}
+                if (mapbase==NULL) {
+                    int virtualSize = vinfo.xres_virtual*vinfo.yres_virtual*bytesPerPixel;
+                    mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, fb, 0);
+                    if (mapbase==NULL) {
+                        if (++errcount<10) ABORT("mmap %d", virtualSize);
+                        if (errcount%100==0) errcount=0;
+                    }
+                }
 
-		if (fwrite(rawImageData, 1, rawImageSize, stdout) < rawImageSize)
-			error("fwrite");
-		fflush(stdout);
+                uint32_t offset =  (vinfo.xoffset + vinfo.yoffset*vinfo.xres) *bytesPerPixel;
+                rawImageData = mapbase + offset;
+                rawImageSize = (vinfo.xres*vinfo.yres) * bytesPerPixel;
+            }
+        }
 
-		if (interval_mms==-1) {
-			LOG("stop get raw image due to fps argument is 0");
-			exit(0);
-		}
-		else {
-			if (count==1) LOG("continue capturing......");
-		}
+        if (count==1) { //when first time, set SIGPIPE handler to default (terminate)
+            signal(SIGPIPE, on_SIGPIPE);
+        }
 
-		int64_t now_mms = microSecondOfNow();
-		int64_t diff_mms = until_mms - now_mms;
-		if (diff_mms > 0) {
-			usleep(diff_mms);
-			now_mms += diff_mms;
-		}
+        #define MAX_WRITE_SIZE (32*1024*1024)
+        int rest = rawImageSize;
+        int callCount = 0;
+        while (rest > 0) {
+            int request = rest <= MAX_WRITE_SIZE ? rest : MAX_WRITE_SIZE;
+            if (callCount > 0 ||request < rest) LOG("data is too big so try to write %d of rest %d", request, rest);
+            int bytesWritten = write(STDOUT_FILENO, rawImageData+(rawImageSize-rest), request);
+            if (bytesWritten < 0) {
+                ABORT("write result:%d but requested %d", bytesWritten, request);
+            } else if (bytesWritten < request) {
+                LOG("write result:%d < requested %d. errno %d(%s). Continue writing rest data", bytesWritten, request, errno, strerror(errno));
+            } else {
+//                if (callCount > 0) LOG("write %d OK", request);
+            }
+            rest -= bytesWritten;
+            callCount++;
+        }
+        if (callCount > 1) LOG("write %d finished", rawImageSize);
 
-		/*
-		//show statistics at every about 10 seconds
-		diff_mms = now_mms-count_start_mms;
-		if (diff_mms >= 10*1000000) {
-			//LOG("count: %d now-count_start_ms: %lld", count, diff_mms);
-			LOG("raw fps: %.2lf   ", ((double)count) / (((double)diff_mms)/1000000));
-			count_start_mms = now_mms;
-			count = 0;
-		}
-		*/
-	}
+        if (interval_mms==-1) {
+            LOG("stop due to fps argument is 0");
+            close(STDOUT_FILENO); //let pipe peer known end, maybe unnecessary
+            exit(0);
+        }
+        else {
+            if (count==1) LOG("continue capturing......");
+        }
 
-	return 0;
+        int64_t now_mms = microSecondOfNow();
+        int64_t diff_mms = until_mms - now_mms;
+        if (diff_mms > 0) {
+            usleep(diff_mms);
+            now_mms += diff_mms;
+        }
+
+        /*
+        //show statistics at every about 10 seconds
+        diff_mms = now_mms-count_start_mms;
+        if (diff_mms >= 10*1000000) {
+            //LOG("count: %d now-count_start_ms: %lld", count, diff_mms);
+            LOG("raw fps: %.2lf   ", ((double)count) / (((double)diff_mms)/1000000));
+            count_start_mms = now_mms;
+            count = 0;
+        }
+        */
+    }
+
+    return 0;
 }

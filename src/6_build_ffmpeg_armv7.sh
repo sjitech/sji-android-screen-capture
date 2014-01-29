@@ -21,6 +21,7 @@ echo ""; echo ok; echo ""
 echo ---------------patch some files--------------------
 cp -fv $OLD_DIR/patch_ffmpeg_file.c ./libavformat/file.c || exit 1
 cp -fv $OLD_DIR/patch_ffmpeg_cmdutils.c ./cmdutils.c || exit 1
+cp -fv $OLD_DIR/patch_ffmpeg_log.c ./libavutil/log.c || exit 1
 echo ""; echo ok; echo ""
 
 echo ---------------config ffmpeg [armv7]--------------------
@@ -45,8 +46,8 @@ export CPPFLAGS="--sysroot=$SYS_ROOT"   #ubuntu NDK need this flag when check as
 	\
 	--enable-muxer=image2 \
 	--enable-encoder=png \
-	\
-	--enable-protocol=tcp \
+	--enable-encoder=mjpeg \
+	--enable-muxer=mjpeg \
 	\
 	|| exit 1
 

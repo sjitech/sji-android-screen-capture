@@ -11,7 +11,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, supportXmlHttpRequest: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logAPNGProgress: false, logStreamWrite: false};
+  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logAPNGProgress: false, forceUseFbFormat: false, ffmpegOption: {}};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -24,44 +24,70 @@ log('use configuration: ' + JSON.stringify(conf, null, '  '));
 //************************global var  ****************************************************
 var MIN_FPS = 0.1, MAX_FPS = 30;
 var UPLOAD_LOCAL_DIR = './android', ANDROID_WORK_DIR = '/data/local/tmp/sji-asc';
-var PNG_TAIL_LEN = 8, APNG_CACHE_LEN = 6 * 1024 * 1024 + PNG_TAIL_LEN - 1; //todo: restore
+var PNG_TAIL_LEN = 8, APNG_CACHE_LEN = 6 * 1024 * 1024 + PNG_TAIL_LEN - 1; //still need be adjusted
 var MULTIPART_BOUNDARY = 'MULTIPART_BOUNDARY', MULTIPART_MIXED_REPLACE = 'multipart/x-mixed-replace;boundary=' + MULTIPART_BOUNDARY;
 var CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = BUF_CR2.slice(0, 1);
 var re_adbNewLineSeq = /\r?\r?\n$/; // CR LF or CR CR LF
-var devMgr = {}; //key:device serial number, value:device info
-var chkerr = '';
-var htmlCache = {};
-var dynamicConfKeyList = ['ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logAPNGProgress', 'logStreamWrite'];
+var devMgr = {}; //key:device serial number, value:device info. See getOrCreateDevCtx()
+var chkerr = ''; //for chkerrXxx() to save error info 
+var htmlCache = {}; //key:filename
+var status = { consumerMap: {}};
+var overallCounterMap = {streaming: null, recording: null, recorded: {bytes: 0}};
+var recordingFileMap = {}; //key:filename
+var childProcPidMap = {}; //key: pid
+var videoTypeMap = {apng: {name: 'Animated PNG'}, webm: {name: 'WebM Video'}};
+var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPEG'}};
+var videoAndImageTypeAry = Object.keys(videoTypeMap).concat(Object.keys(imageTypeMap));
+var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logAPNGProgress', 'forceUseFbFormat'];
 
 //************************common *********************************************************
+function getOrCreateDevCtx(device/*device serial number*/) {
+  var dev;
+  if (!(dev = devMgr[device])) {
+    devMgr[device] = dev = {device: device};
+    dev.counterMapRoot = {};
+    videoAndImageTypeAry.forEach(function (type) {
+      dev.counterMapRoot[type] = {};
+    });
+  }
+  return dev;
+}
+
 function spawn(logHead, _path, args, on_close, opt) {
   log(logHead + 'spawn ' + _path + ' with args: ' + JSON.stringify(args));
 
   var childProc = child_process.spawn(_path, args);
-
-  childProc.logHead = (logHead.slice(-1) === ']' ? logHead.slice(0, -1) : logHead) + ' pid#' + childProc.pid + ']';
-  log(childProc.logHead + 'spawned');
+  if (childProc.pid > 0) {
+    childProcPidMap[childProc.pid] = true;
+    childProc.logHead = logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
+    log(childProc.logHead + 'spawned');
+  } else {
+    log(childProc.logHead + 'spawn failed');
+  }
 
   childProc.once('error', function (err) {
     if (err.code === 'ENOENT') {
       var hasDir = /[\/\\]/.test(_path);
-      var hint = hasDir ? '' : ', Please use full path or add dir of file to PATH env var';
+      var hint = hasDir ? '' : ', Please use full path or add dir of file to `PATH` environment variable';
       err = 'Error ENOENT(file is not found' + (hasDir ? '' : ' in dir list defined by PATH environment variable') + '). File: ' + _path + hint;
     } else if (err.code === 'EACCES') {
       err = 'Error EACCES(file is not executable or you have no permission to execute). File: ' + _path;
     }
-    log(childProc.logHead + err);
+    log(childProc.logHead + (childProc.__spawnErr = err));
   });
-  childProc.once('close', function (ret, signal) {
-    log(childProc.logHead + 'exited: ' + (ret || '') + ' ' + (signal || ''));
+  childProc.once('close', function (ret, signal) { //exited or failed to spawn
+    log(childProc.logHead + 'exited: ' + (ret === null || ret === undefined ? '' : ret) + ' ' + (signal || ''));
+    delete childProcPidMap[childProc.pid];
   });
+
+  //if specified on_close callback, then wait process finished and get stdout,stderr output
   if (typeof(on_close) === 'function') {
     var stdoutBufAry = [];
     childProc.stdout.on('data', function (buf) {
       stdoutBufAry.push(buf);
       if (opt && opt.noLogStdout === true) {
-        if (!childProc.didOmittedStdout) {
-          childProc.didOmittedStdout = true;
+        if (!childProc.didOmitStdout) {
+          childProc.didOmitStdout = true;
           log(childProc.logHead + 'stdout output... omitted');
         }
       } else {
@@ -73,7 +99,7 @@ function spawn(logHead, _path, args, on_close, opt) {
       stderrBufAry.push(buf);
       log(buf, {noNewLine: true, head: childProc.logHead});
     });
-    childProc.once('close', function (ret) {
+    childProc.once('close', function (ret) { //exited or failed to spawn
       var stdout = Buffer.concat(stdoutBufAry).toString();
       stdoutBufAry = null;
       var stderr = Buffer.concat(stderrBufAry).toString();
@@ -81,15 +107,36 @@ function spawn(logHead, _path, args, on_close, opt) {
       on_close(ret, stdout, stderr);
     });
   }
+  else {
+    childProc.stdout.on('data', function (buf) {
+      if (!childProc.__didGetStdoutData) {
+        childProc.__didGetStdoutData = true;
+        log(childProc.logHead + 'got stdout data first time. ' + buf.length + ' bytes');
+      }
+    });
+    childProc.stdout.on('end', function () {
+      log(childProc.logHead + 'stdout read end');
+    });
+  }
+
   return childProc;
 }
 
-function beautifyErrMsg(err) {
-  return err.toString().replace('EACCES', 'EACCES(access denied)').replace('ENOENT', 'ENOENT(not found)').replace('EADDRINUSE', 'EADDRINUSE(ip:port already in use)').replace(/\r*\n$/, '');
+function stringifyError(err) {
+  return err.toString().replace('EACCES', 'EACCES(access denied)').replace('ENOENT', 'ENOENT(not found)').replace('EADDRINUSE', 'EADDRINUSE(IP or port already in use)').replace(/\r*\n$/, '');
 }
-
-function beautifyStderr(stderr) {
-  return stderr.replace(/^error: */i, '').replace(/\r*\n$/, '');
+function toErrSentence(s) {
+  if (!s) {
+    return '';
+  }
+  s = s.replace(/\r*\n$/, '');
+  if (s.match(/error/i)) {
+    return s;
+  }
+  return 'error: ' + s;
+}
+function removeNullChar(s) {
+  return !s ? '' : s.replace(/\0/, '');
 }
 
 function htmlEncode(text) {
@@ -97,33 +144,47 @@ function htmlEncode(text) {
 }
 
 function uniqueNonEmptyArray(ary) {
-  return ary.reduce(function (p, c) {
-    if (c && p.indexOf(c) < 0) {
-      p.push(c);
+  if (!Array.isArray(ary)) {
+    return [ary];
+  }
+  var resultAry = [];
+  ary.forEach(function (v) {
+    if (v && resultAry.indexOf(v) < 0) {
+      resultAry.push(v);
     }
-    return p;
-  }, []);
+  });
+  return resultAry;
+}
+
+function forEachValueIn(mapOrArray, callback, extraParameterForCallback/*optional*/) {
+  var _argLen = arguments.length;
+  Object.keys(mapOrArray).forEach(function (k) {
+    var v = mapOrArray[k];
+    if (_argLen === 2) {
+      callback(v, k, mapOrArray);
+    } else {
+      callback(v, extraParameterForCallback, k, mapOrArray);
+    }
+  });
 }
 
 function dpad2(d) {
   return (d < 10) ? '0' + d : d.toString();
 }
-
 function dpad3(d) {
   return (d < 10) ? '00' + d : (d < 100) ? '0' + d : d.toString();
 }
-
 function dpad4(d) {
   return (d < 10) ? '000' + d : (d < 100) ? '00' + d : (d < 1000) ? '0' + d : d.toString();
 }
 
 function nowStr() {
   var dt = new Date();
-  if (dt === nowStr.dt) {
+  if (dt.valueOf() === nowStr.dtMs) {
     nowStr.seq++;
   } else {
     nowStr.seq = 0;
-    nowStr.dt = dt;
+    nowStr.dtMs = dt.valueOf();
   }
   return dpad4(dt.getFullYear()) + dpad2(dt.getMonth() + 1) + dpad2(dt.getDate()) + '_' + dpad2(dt.getHours()) + dpad2(dt.getMinutes()) + dpad2(dt.getSeconds()) + '_' + dpad3(dt.getMilliseconds()) + '_' + dpad3(nowStr.seq);
 }
@@ -135,32 +196,29 @@ function setchkerr(err) {
 }
 
 function chkerrRequired(name, value /*candidateArray | candidateValue | candidateMinValue, candidateMaxValue*/) {
-  var canBeArray = false;
-  if (name.slice(-2) === '[]') {
-    canBeArray = true;
-    name = name.slice(0, -2);
-  }
+  var origDispName = name.replace(/`?(\w+)`?/, '`$1`'), canBeArray = (name = origDispName.replace(/\[\]/, '')) !== origDispName;
+
   if (arguments.length === 3) { //check against array
     if (value === undefined || (Array.isArray(arguments[2]) ? arguments[2] : [arguments[2]]).indexOf(value) < 0) {
-      return setchkerr(name + ' parameter must be in ' + JSON.stringify(arguments[2]));
+      return setchkerr(name + ' must be in ' + JSON.stringify(arguments[2]));
     }
   } else if (arguments.length === 4) { //check against range
     if (value === undefined || !(value >= arguments[2] && value <= arguments[3])) { //do not use v < min || v > max due to NaN always cause false
-      return setchkerr(name + ' parameter must be in (' + arguments[2] + ' ~ ' + arguments[3] + ')');
+      return setchkerr(name + ' must be in (' + arguments[2] + ' ~ ' + arguments[3] + ')');
     }
   } else { //check required only
     if (!value) {
-      return setchkerr(name + ' parameter must be specified');
+      return setchkerr(name + ' must be specified');
     }
     if (Array.isArray(value)) { //check array type value
       if (canBeArray) {
         if (value.every(function (el) {
           return !el && el !== 0;
         })) {
-          return setchkerr(name + ' parameter is an empty array');
+          return setchkerr(name + ' must not be an empty array');
         }
       } else {
-        return setchkerr(name + ' parameter is duplicated');
+        return setchkerr(name + ' must not be duplicated');
       }
     }
   }
@@ -172,13 +230,22 @@ function chkerrOptional(name, value /*,arrayOrMinValue, maxValue*/) {
 }
 
 function write(res, dataStrOfBuf) {
-  if (!res.didWrite) {
-    res.didWrite = true;
-    log((res.logHead || '') + 'start output......');
+  if (res.__bytesWritten === undefined) {
+    log(res.logHead + 'start output......');
+    res.__bytesWritten = 0;
   }
+  res.__bytesWritten += dataStrOfBuf.length;
 
-  if (conf.logStreamWrite && !res.isAdminWeb) {
-    log(res.logHead + 'output ' + dataStrOfBuf.length + ' bytes');
+  var counter;
+  if (res.filename) {
+    if ((counter = res.counter)) {
+      counter.bytes += dataStrOfBuf.length; //set recording bytes counter per device/type
+    }
+    if ((counter = overallCounterMap.recorded)) {
+      counter.bytes += dataStrOfBuf.length; //set recorded bytes counter overall
+    }
+  } else if ((counter = overallCounterMap.streaming)) {
+    counter.bytes += dataStrOfBuf.length; //set streaming bytes counter overall
   }
 
   res.write(dataStrOfBuf);
@@ -186,22 +253,37 @@ function write(res, dataStrOfBuf) {
   if (res.filename) { //FileRecorder
     res.fileSize = (res.fileSize || 0) + dataStrOfBuf.length;
     if (res.fileSize >= conf.maxRecordedFileSize) {
-      log(res.logHead + 'stop recording due to size too big');
+      log(res.logHead + 'stop recording due to size too big (> ' + conf.maxRecordedFileSize + ' bytes)');
       end(res);
     }
   }
 }
 
 function end(res, dataStrOfBuf) {
-  if (res.didWrite) {
+  if (res.__isEnded || res.__isClosed) {
+    return;
+  }
+  res.__isEnded = true;
+
+  if (res.__bytesWritten) {
     dataStrOfBuf = '';
+    if (res.logHead) {
+      log(res.logHead + 'end. total ' + res.__bytesWritten + ' bytes written');
+    }
   } else {
-    if (res.setHeader && !res.headersSent && (res.getHeader('Content-Type') || '').slice(0, 5) !== 'text/') {
-      res.setHeader('Content-Type', 'text/plain');
+    if (res.setHeader && !res.headersSent) {
+      if ((res.getHeader('Content-Type') || '').slice(0, 5) !== 'text/') {
+        res.setHeader('Content-Type', 'text/plain');
+      }
+      res.removeHeader('Content-Length');
+      res.removeHeader('Content-Disposition');
     }
   }
-  var s = dataStrOfBuf === undefined ? '' : String(dataStrOfBuf).replace(/\n[ \t]*/g, ' ');
-  log((res.logHead || '') + 'end' + (s ? (': ' + (s.length > 50 ? s.slice(0, 50) + '...' : s)) : ''));
+  if (res.logHead) {
+    var s = dataStrOfBuf === undefined ? '' : String(dataStrOfBuf).replace(/\n[ \t]*/g, ' ');
+    log(res.logHead + 'end' + (s ? (' with data: ' + (s.length > 50 ? s.slice(0, 50) + '...' : s)) : ''));
+  }
+
   res.end(dataStrOfBuf);
 }
 
@@ -211,23 +293,23 @@ function isAnyIp(ip) {
 
 //****************************************************************************************
 
-function checkAdb(on_ok) {
-  spawn('[checkAdb]', conf.adb, ['version'],
+function checkAdb(on_complete) {
+  spawn('[CheckAdb]', conf.adb, ['version'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
           log('Failed to check Android Debug Bridge. Please check log', {stderr: true});
           process.exit(1);
         } else {
-          on_ok();
+          on_complete();
         }
       });
 }
 
-function getAllDev(on_ok, on_error) {
-  spawn('[getAllDev]', conf.adb, ['devices'],
+function getAllDev(on_complete) {
+  spawn('[GetAllDevices]', conf.adb, ['devices'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
-          return on_error(stderr ? beautifyStderr(stderr) : 'getAllDev error');
+          return on_complete(toErrSentence(stderr) || 'unknown error: failed to get all connected devices', []);
         }
         var deviceList = [], parts;
         stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
@@ -235,23 +317,24 @@ function getAllDev(on_ok, on_error) {
             deviceList.push(parts[0]);
           }
         });
-        return on_ok(deviceList);
+        return on_complete('', deviceList);
       });
 }
 
+var ADB_GET_DEV_INFO_CMD_ARGS = [
+  'getprop', 'ro.product.model;',
+  'getprop', 'ro.build.version.incremental;',
+  'getprop', 'ro.product.manufacturer;',
+  'getprop', 'ro.build.version.release;',
+  'getprop', 'ro.build.version.sdk;',
+  'getprop', 'ro.product.cpu.abi;'
+];
 function getDevInfo(device, on_complete, timeoutMs) {
   if (!conf.reloadDevInfo && devMgr[device] && devMgr[device].info) {
     on_complete('', devMgr[device].info);
     return;
   }
-  var childProc = spawn('[getDevInfo]', conf.adb, ['-s', device, 'shell', 'echo', '`',
-    'getprop', 'ro.product.model;',
-    'getprop', 'ro.build.version.incremental;',
-    'getprop', 'ro.product.manufacturer;',
-    'getprop', 'ro.build.version.release;',
-    'getprop', 'ro.build.version.sdk;',
-    'getprop', 'ro.product.cpu.abi;',
-    '`'],
+  var childProc = spawn('[GetDevInfo]', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('`'),
       function  /*on_close*/(ret, stdout, stderr) {
         clearTimeout(childProc.myTimer);
         on_complete('', (ret === 0 && !stderr) ? stdout.replace(re_adbNewLineSeq, '') : '');
@@ -266,87 +349,95 @@ function getDevInfo(device, on_complete, timeoutMs) {
 }
 
 function getAllDevInfo(on_complete) {
-  getAllDev(
-      function/*on_ok*/(deviceList) {
-        var infoList = [];
-        (function get_next_device_info() {
-          if (infoList.length < deviceList.length) {
-            getDevInfo(deviceList[infoList.length],
-                function/*on_complete*/(err, info) {
-                  infoList.push(info);
-                  get_next_device_info();
-                },
-                1000/*timeoutMs*/);
-          } else {
-            on_complete('', deviceList, infoList);
-          }
-        })();
-      },
-      on_complete/*on_error*/);
+  getAllDev(function/*on_complete*/(err, deviceList) {
+    if (err) {
+      on_complete(err);
+      return;
+    }
+    var infoList = [];
+    (function get_next_device_info() {
+      if (infoList.length < deviceList.length) {
+        getDevInfo(deviceList[infoList.length],
+            function/*on_complete*/(err, info) {
+              infoList.push(info);
+              get_next_device_info();
+            },
+            1000/*timeoutMs*/);
+      } else {
+        on_complete('', deviceList, infoList);
+      }
+    })();
+  });
 }
 
 /*
  * upload all necessary files to android
  */
-function uploadFile(device, on_ok, on_error) {
-  if (!devMgr[device]) {
-    devMgr[device] = {};
+function prepareDeviceFile(device, on_complete) {
+  if (devMgr[device] && devMgr[device].didPrepare) {
+    on_complete();
+    return;
   }
-  if (devMgr[device].uploaded) {
-    on_ok();
-  } else {
-    spawn('[getRemoteVer]', conf.adb, ['-s', device, 'shell', 'cat', ANDROID_WORK_DIR + '/version'],
-        function /*on_close*/(ret, stdout, stderr) {
-          if (ret !== 0 || stderr) {
-            on_error(stderr ? beautifyStderr(stderr) : 'getRemoteVer error');
+  spawn('[CheckDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat(
+      'echo', '-n', '====;',
+      'cat', ANDROID_WORK_DIR + '/version',
+      (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log', '`'),
+      function /*on_close*/(ret, stdout, stderr) {
+        if (ret !== 0 || stderr || !stdout) {
+          on_complete(toErrSentence(stderr) || 'unknown error: failed to check device');
+        } else {
+          var stdoutNoCRLF = stdout.replace(re_adbNewLineSeq, '');
+          var parts = stdoutNoCRLF.split('====');
+          var _ver = parts[1].trim(); //get remote version file content
+
+          var dev = getOrCreateDevCtx(device);
+          dev.info = parts[0].trim(); //save device info for later use
+          // BTW, detect new line sequence returned by adb, Usually CrCount=0 (means need not convert), But for Windows OS, at least=1
+          dev.CrCount = (stdout.length - stdoutNoCRLF.length) - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
+
+          //compare to local version
+          if (_ver === prepareDeviceFile.ver) {
+            dev.didPrepare = true;
+            on_complete();
           } else {
-            // BTW, detect new line sequence returned by adb
-            devMgr[device].CrCount = stdout.match(re_adbNewLineSeq)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
-            if (stdout.replace(re_adbNewLineSeq, '') === uploadFile.ver) {
-              devMgr[device].uploaded = true;
-              on_ok();
-            } else {
-              spawn('[uploadFile]', conf.adb, ['-s', device , 'push', UPLOAD_LOCAL_DIR, ANDROID_WORK_DIR],
-                  function /*on_close*/(ret, stdout, stderr) {
-                    if (ret !== 0) {
-                      on_error(stderr ? beautifyStderr(stderr) : 'uploadFile error');
-                    } else {
-                      spawn('[updateRemoteVer]', conf.adb, ['-s', device, 'shell', 'echo', uploadFile.ver, '>', ANDROID_WORK_DIR + '/version'],
-                          function /*on_close*/(ret, stdout, stderr) {
-                            if (ret !== 0 || stdout || stderr) {
-                              on_error(stderr ? beautifyStderr(stderr) : 'updateRemoteVer error');
-                            } else {
-                              devMgr[device].uploaded = true;
-                              on_ok();
-                            }
-                          });
-                    }
-                  });
-            }
+            spawn('[PushFileToDevice ' + device + ']', conf.adb, ['-s', device , 'push', UPLOAD_LOCAL_DIR, ANDROID_WORK_DIR],
+                function /*on_close*/(ret, stdout, stderr) {
+                  if (ret !== 0) {
+                    on_complete(toErrSentence(stderr) || 'unknown error: failed to prepare device file');
+                  } else {
+                    spawn('[UpdateFileOnDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'chmod', '755', ANDROID_WORK_DIR + '/*', '&&',
+                      'echo', prepareDeviceFile.ver, '>', ANDROID_WORK_DIR + '/version'],
+                        function /*on_close*/(ret, stdout, stderr) {
+                          if (ret !== 0 || stdout || stderr) {
+                            on_complete(toErrSentence(stderr) || 'unknown error: failed to finish preparing device file');
+                          } else {
+                            dev.didPrepare = true;
+                            on_complete();
+                          }
+                        });
+                  }
+                });
           }
-        });
-  }
+        }
+      });
 }
 
 function chkerrCaptureParameter(q) {
-  if (chkerrRequired('device', q.device) ||
-      chkerrRequired('type', q.type, ['apng', 'webm', 'png']) ||
-      q.type !== 'png' && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
-      chkerrOptional('rotate', (q.rotate = Number(q.rotate)), [0, 90, 270])) {
+  if (chkerrRequired('type', q.type, videoAndImageTypeAry) ||
+      videoTypeMap[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
+      imageTypeMap[q.type] && (q.fps = 0) && false ||
+      chkerrOptional('rotate(optional)', (q.rotate = Number(q.rotate)), [0, 90, 270])) {
     return chkerr;
   }
   var n, match;
   if (q.scale) {
     if (!isNaN((n = Number(q.scale)))) { //can convert to a valid number
-      if (chkerrRequired('number formatted scale', (q.scale = n), 0.1/*min*/, 1/*max*/)) {
+      if (chkerrRequired('scale(optional) in number format', (q.scale = n), 0.1/*min*/, 1/*max*/)) {
         return chkerr;
-      }
-      if (q.scale === 1) {
-        q.scale = '';
       }
     } else { //treat as string format 9999x9999
       if (!(match = (q.scale = String(q.scale)).match(/^(\d{0,4})x(\d{0,4})$/)) || !match[1] && !match[2]) {
-        return setchkerr('string formatted scale parameter must be in pattern "9999x9999" or "9999x" or "x9999"');
+        return setchkerr('scale(optional) in string format must be in pattern "9999x9999" or "9999x" or "x9999"');
       }
       q.scale_w = match[1] ? Number(match[1]) : 0;
       q.scale_h = match[2] ? Number(match[2]) : 0;
@@ -354,136 +445,141 @@ function chkerrCaptureParameter(q) {
         q.scale = '';
       }
     }
-  } else {
-    q.scale = '';
   }
-
-  if (!q.rotate) {
-    q.rotate = '';
-  }
-
+  q.scale = q.scale === 1 ? '' : q.scale ? q.scale : '';
+  q.rotate = q.rotate || '';
   return '';
 }
 
-function stringifyCaptureParameter(q, format /*undefined, 'filename', 'querystring'*/) {
-  if (format === 'querystring') {
-    var kvAry = [];
-    ['device', (conf.adminWeb.adminKey ? 'accessKey' : ''), 'type', 'fps', 'scale', 'rotate'].forEach(function (name) {
-      if (name) {
-        kvAry.push(name + '=' + querystring.escape(q[name] || '')); //0, NaN are replaced by empty string
-      }
-    });
-    return kvAry.join('&');
-  } else {
-    var fps_scale_rotate = '';
-    if (q.fps) {
-      fps_scale_rotate += 'f' + q.fps;
-    }
-    if (q.scale) {
-      if (typeof(q.scale) === 'number') {
-        fps_scale_rotate += 's' + q.scale;
-      } else if (q.scale_w) {
-        fps_scale_rotate += 'w' + q.scale_w;
-      } else if (q.scale_h) {
-        fps_scale_rotate += 'h' + q.scale_h;
-      }
-    }
-    if (q.rotate) {
-      fps_scale_rotate += 'r' + q.rotate;
-    }
-
-    if (format === 'filename') {
-      return querystring.escape(q.device) + '~' + q.type + '~' + fps_scale_rotate + '~' + nowStr();
-    }
-    return q.device + '~' + q.type + '~' + fps_scale_rotate;
+function stringifyCaptureParameter(q, format /*undefined, 'filename'*/) {
+  var fps_scale_rotate = '';
+  if (q.fps) {
+    fps_scale_rotate += 'f' + q.fps;
   }
+  if (q.scale) {
+    if (typeof(q.scale) === 'number') {
+      fps_scale_rotate += 's' + q.scale;
+    } else if (q.scale_w) {
+      fps_scale_rotate += 'w' + q.scale_w;
+    } else if (q.scale_h) {
+      fps_scale_rotate += 'h' + q.scale_h;
+    }
+  }
+  if (q.rotate) {
+    fps_scale_rotate += 'r' + q.rotate;
+  }
+
+  if (format === 'filename') {
+    return querystring.escape(q.device) + '~' + q.type + '~' + fps_scale_rotate + '~' + nowStr();
+  }
+  return q.device + '~' + q.type + '~' + fps_scale_rotate;
 }
 
 /**
- * Capture screen, send result to output stream 'res'.
+ * Capture screen, send result to output stream 'res'. Maybe multiple output stream share a single capture process.
  * Please call chkerrCaptureParameter before this function.
  * @param outputStream result stream (e.g. HTTP response or file stream)
  * @param q option, Must have been checked by !chkerrCaptureParameter(q)
  *  {
- *    device:  device serial number
-      type:    'apng' or 'webm' or 'png'
+      device : device serial number
+      type:    'apng' or 'webm' or 'png' or 'jpg'
       fps:     [optional] rate for webm and apng. must be in range MIN_FPS~MAX_FPS
       scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999x or x9999
       rotate:  [optional] 0, 90, 270
     }
  */
 function capture(outputStream, q) {
-  var res = outputStream;
-  var dev = devMgr[q.device] || (devMgr[q.device] = {});
-  var useExistingCapture = false;
-  var provider, newProvider = {
-    consumerMap: {}, lastConsumerId: 0, dev: dev, type: q.type, fps: q.fps, scale: q.scale, rotate: q.rotate,
-    logHead: '[capture: ' + stringifyCaptureParameter(q, 'log') + ']'
-  };
-  if (q.type === 'png') {
-    //for single png, it is light process, so let it coexistent with existing capture.
-    provider = newProvider;
-  } else if (dev.liveStreamer) { //there is an existing capture running or preparing
-    if (dev.liveStreamer.type !== q.type) {
-      __cleanup_all(dev.liveStreamer, 'another capture with different type is requested');
-      provider = dev.liveStreamer = newProvider;
-    } else if (dev.liveStreamer.fps < q.fps) {
-      __cleanup_all(dev.liveStreamer, 'another capture with faster rate is requested');
-      provider = dev.liveStreamer = newProvider;
-    } else if (dev.liveStreamer.scale !== q.scale) {
-      __cleanup_all(dev.liveStreamer, 'another capture with different scale is requested');
-      provider = dev.liveStreamer = newProvider;
-    } else if (dev.liveStreamer.rotate !== q.rotate) {
-      __cleanup_all(dev.liveStreamer, 'another capture with different rotate degree is requested');
-      provider = dev.liveStreamer = newProvider;
-    } else if (dev.liveStreamer.type === 'webm') {
-      //theoretically WebM video stream can be broadcast to multiple client if fps is same,
-      //but currently can not be analysed correctly, so this feature is not supported yet.
-      //Specially, if no any consumer started output yet, it is possible to share the capture.
-      if (Object.keys(dev.liveStreamer.consumerMap).some(function (consumerId) {
-        return dev.liveStreamer.consumerMap[consumerId].didWrite;
-      })) {
-        __cleanup_all(dev.liveStreamer, 'interrupted by another WebM capture request');
-        provider = dev.liveStreamer = newProvider;
-      } else {
-        provider = dev.liveStreamer;
-        useExistingCapture = true;
-      }
-    } else {
-      //Animated PNG image stream can be broadcast to multiple client if fps is same
-      provider = dev.liveStreamer;
-      useExistingCapture = true;
+  var res = outputStream, dev = getOrCreateDevCtx(q.device), provider;
+
+  function createCaptureProvider() {
+    createCaptureProvider.called = true;
+    return {consumerMap: {}, lastConsumerId: 0, dev: dev, type: q.type, fps: q.fps, scale: q.scale, rotate: q.rotate,
+      logHead: '[Capture ' + stringifyCaptureParameter(q, 'log') + ']'};
+  }
+
+  if (imageTypeMap[q.type]) {
+    //for single image, it is light process, so let it coexistent with existing capture.
+    provider = createCaptureProvider();
+  } else {
+    if (dev.liveStreamer && res.filename) { //stop other recording
+      forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
+        if (_res.filename) {
+          endCaptureConsumer(_res, 'start another capture for recording');
+        }
+      });
     }
-  } else { //there is no existing capture running or preparing
-    provider = dev.liveStreamer = newProvider;
+    if (dev.liveStreamer) { //there is an existing capture running or preparing
+      if (dev.liveStreamer.type !== q.type || dev.liveStreamer.fps !== q.fps || dev.liveStreamer.scale !== q.scale || dev.liveStreamer.rotate !== q.rotate) {
+        forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
+        provider = dev.liveStreamer = createCaptureProvider();
+      } else if (dev.liveStreamer.type === 'webm') {
+        //theoretically WebM video stream can be broadcast to multiple client if fps is same,
+        //but currently can not be analysed correctly, so this feature is not supported yet.
+        //Specially, if no any consumer started output yet, it is possible to share the capture.
+        if (Object.keys(dev.liveStreamer.consumerMap).some(function (consumerId) {
+          return dev.liveStreamer.consumerMap[consumerId].__bytesWritten;
+        })) {
+          forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
+          provider = dev.liveStreamer = createCaptureProvider();
+        } else {
+          provider = dev.liveStreamer;
+        }
+      } else {
+        //Animated PNG image stream can be broadcast to multiple client if fps is same
+        provider = dev.liveStreamer;
+      }
+    } else { //there is no existing capture running or preparing
+      provider = dev.liveStreamer = createCaptureProvider();
+    }
   }
 
   /*
    * add consumer
    */
-  res.streamProvider = provider;
+  res.captureProvider = provider;
   res.consumerId = ++provider.lastConsumerId;
   provider.consumerMap[res.consumerId] = res;
-  res.logHead = (res.logHead || '[]').slice(0, -1) + ' consumer#' + res.consumerId + ' of ' + provider.logHead.slice(1, -1) + ']';
+  res.logHead = res.logHead.slice(0, -1) + ' @ ' + provider.logHead.slice(1, -1) + ']';
   log(res.logHead + 'added');
+  updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
+
   if (res.setHeader) {
-    res.setHeader('Content-Type', q.type === 'webm' ? 'webm' : q.type === 'png' ? 'image/png' : MULTIPART_MIXED_REPLACE);
+    res.setHeader('Content-Type', q.type === 'apng' ? MULTIPART_MIXED_REPLACE : imageTypeMap[q.type] ? 'image/' + q.type : 'video/' + q.type);
   }
-  res.on('close', function () {
-    __cleanup(res, 'output stream is closed by external'/*do not change this string*/);
+  res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
+    endCaptureConsumer(res, 'closed'/*do not change this string*/);
   });
 
-  if (useExistingCapture) {
-    log(res.logHead + 'use existing capture process ' + (provider.pid ? provider.pid : '(still in preparing)'));
+  if (!createCaptureProvider.called) {
+    log(res.logHead + 'use existing capture process ' + (provider.pid ? 'pid_' + provider.pid : '?(still in preparing)'));
   } else {
-    uploadFile(q.device,
-        function /*on_ok*/() {
+    prepareDeviceFile(q.device, function /*on_complete*/(err) {
           if (Object.keys(provider.consumerMap).length === 0) {
             return; //abort
+          } else if (err) {
+            forEachValueIn(provider.consumerMap, endCaptureConsumer, err);
+            return;
           }
-          var FFMPEG_OUTPUT = '';
+          var opt;
+          if (!(opt = conf.ffmpegOption[q.device]) && dev.info) {
+            Object.keys(conf.ffmpegOption).some(function (key) {
+              if (dev.info.match(key)) {
+                opt = conf.ffmpegOption[key];
+                return true;
+              }
+              return false;
+            });
+          }
+          opt = opt || {};
+          opt.in = opt.in || '';
+          opt.out = opt.out || '';
+
+          var FFMPEG_PARAM = ' -r ' + (q.fps || 1) + ' ' + opt.in + ' -i -';
           if (conf.ffmpegStatistics !== true) {
-            FFMPEG_OUTPUT += ' -nostats';
+            FFMPEG_PARAM += ' -nostats';
+          }
+          if (conf.ffmpegDebugLog === true) {
+            FFMPEG_PARAM += ' -loglevel debug';
           }
           if (q.scale || q.rotate) {
             var filter = '';
@@ -499,143 +595,148 @@ function capture(outputStream, q) {
             }
 
             if (filter) {
-              FFMPEG_OUTPUT += ' -vf ' + filter.slice(1);
+              FFMPEG_PARAM += ' -vf ' + filter.slice(1);
             }
           }
           if (q.type === 'webm') { //webm video
-            FFMPEG_OUTPUT += ' -f webm -vcodec libvpx -rc_lookahead 0 -qmin 0 -qmax 20 -b:v 1000k';
+            FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0 -qmin 0 -qmax 20 -b:v 1000k';
           } else if (q.type === 'apng') { //animated png image
-            FFMPEG_OUTPUT += ' -f image2 -vcodec png -update 1';
-          } else {               //single png image
-            FFMPEG_OUTPUT += ' -f image2 -vcodec png -vframes 1';
+            FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
+          } else if (q.type === 'png') {    //single png image
+            FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
+          } else if (q.type === 'jpg') {    //single jpg image
+            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1';
+          } else {
+            log('unknown type');
           }
-          FFMPEG_OUTPUT += ' -'; //means output to stdout
+          FFMPEG_PARAM += ' ' + opt.out + ' -'; //means output to stdout
           /*
            * ------------------------------------start new capture process ---------------------------------------------
            */
-          var childProc = spawn(provider.logHead, conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';', 'sh', './capture.sh', q.fps || 0, q.fps || 1, FFMPEG_OUTPUT, (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
-          provider.pid = childProc.pid;
+          var childProc = spawn(provider.logHead, conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
+            'sh', './capture.sh',
+            conf.forceUseFbFormat ? 'forceUseFbFormat' : 'autoDetectFormat',
+            q.fps, FFMPEG_PARAM,
+            (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
 
-          Object.keys(provider.consumerMap).forEach(function (consumerId) {
-            var _res = provider.consumerMap[consumerId];
-            _res.logHead = _res.logHead.replace(provider.logHead.slice(1, -1), childProc.logHead.slice(1, -1));
-          });
-          provider.logHead = childProc.logHead;
-
-          childProc.stdout.on('data', function (buf) {
-            __convertAdbNewLineSeqToLF(provider, buf).forEach(function (buf) {
-              if (provider.type === 'apng') { //broadcast animated png image to multiple client
-                playANPGBuffer(provider, buf, 0, buf.length);
-              } else {
-                Object.keys(provider.consumerMap).forEach(function (consumerId) {
-                  write(provider.consumerMap[consumerId], buf);
-                });
-              }
+          if (childProc.pid > 0) {
+            provider.pid = childProc.pid;
+            forEachValueIn(provider.consumerMap, function (res) {
+              res.logHead = res.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
             });
+            provider.logHead = provider.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
+
+            childProc.stdout.on('data', function (buf) {
+              convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
+                if (provider.type === 'apng') { //broadcast animated png image to multiple client
+                  playANPGBuffer(provider/*context*/, provider.consumerMap, buf, 0, buf.length);
+                } else {
+                  forEachValueIn(provider.consumerMap, write, buf);
+                }
+              });
+            });
+            childProc.stdout.on('end', function () {
+              forEachValueIn(provider.consumerMap, endCaptureConsumer, '');
+            });
+            childProc.stderr.on('data', function (buf) {
+              log(buf, {noNewLine: true, head: childProc.logHead});
+              forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'unexpected stderr output');
+            });
+          }
+
+          childProc.on('close', function () { //exited or failed to spawn
+            if (provider === dev.liveStreamer) {
+              log(provider.logHead + 'detach live streamer');
+              dev.liveStreamer = null;
+            }
+            if (Object.keys(provider.consumerMap).length) { //this should not happen
+              log(provider.logHead + 'capture process exited but ' + (childProc.__didGetStdoutData ? 'consumers have not got "read end" notification' : 'consumers have not received any data') + '. Wait a bit...');
+              setTimeout(function () { //wait for completion of receiving stdout data
+                forEachValueIn(provider.consumerMap, endCaptureConsumer, 'capture process exited');
+              }, 250);
+            }
           });
-          childProc.stderr.on('data', function (buf) {
-            log(buf, {noNewLine: true, head: childProc.logHead});
-            dev.uploaded = false;
-          });
-          childProc.on('close', function () {
-            __cleanup_all(provider, 'capture process exited'/*do not change this string*/);
-          });
-        },
-        function/*on_error*/(err) {
-          __cleanup_all(provider, err);
         }
-    ); //end of uploadFile
+    ); //end of prepareDeviceFile
   }
 }
 
-function startRecording(q/*same as capture*/, on_prepared) {
-  uploadFile(q.device,
-      function /*on_ok*/() {
+function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
+  var provider;
+  if (!res || !(provider = res.captureProvider).consumerMap[res.consumerId]) {
+    return; //if not exist in consumerMap, do nothing. This can prevent endless loop of error event of the output stream
+  }
+  log(res.logHead + 'cleanup' + (reason ? (' due to ' + reason) : ''));
+
+  delete provider.consumerMap[res.consumerId];
+  updateCounter(provider.dev.device, provider.type, -1, res/*ownerOutputStream*/);
+
+  end(res, reason);
+
+  endCaptureConsumer(provider.consumerMap[res.childConsumerId], 'parent consumer is closed');
+
+  if (provider === provider.dev.liveStreamer && Object.keys(provider.consumerMap).length === 0) {
+    if (provider.pid) {
+      log(provider.logHead + 'kill this live streamer process due to no more consumer');
+      try {
+        process.kill(provider.pid);
+      } catch (err) {
+        log('failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
+      }
+    }
+    log(provider.logHead + 'detach this live streamer');
+    provider.dev.liveStreamer = null;
+  }
+}
+
+function startRecording(q/*same as capture*/, on_complete) {
+  prepareDeviceFile(q.device, function /*on_complete*/(err) {
+        if (err) {
+          on_complete(err);
+          return;
+        }
         var filename = stringifyCaptureParameter(q, 'filename');
 
         var wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
-        wfile.logHead = '[record: ' + filename + ']';
+        wfile.logHead = '[FileWriter(Record) ' + filename + ']';
         wfile.filename = filename;
 
         wfile.on('open', function () {
-          log(wfile.logHead + 'open file for write OK');
-          capture(wfile, q); //capture to file
-          if (on_prepared) {
-            on_prepared('', wfile);
-            on_prepared = null;
-          }
+          log(wfile.logHead + 'opened for write');
+          recordingFileMap[filename] = true;
+          capture(wfile, q); //-----------------------------------capture to file---------------------------------------
+          callbackOnce('', wfile);
         });
-        wfile.on('close', function () {
-          log(wfile.logHead + 'file closed');
-          on_prepared = null;
+        wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
+          wfile.__isClosed = true;
+          log(wfile.logHead + 'closed');
+          delete recordingFileMap[filename];
+          callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
+          if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
+            log('all files have been flushed. Now exit');
+            process.exit(0);
+          }
         });
         wfile.on('error', function (err) {
-          log(wfile.logHead + beautifyErrMsg(err));
-          if (on_prepared) {
-            on_prepared('file operation error');
-            on_prepared = null;
-          }
+          log(wfile.logHead + stringifyError(err));
+          callbackOnce(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
         });
-        //do not worry, on close has been handled by capture()
-      },
-      function/*on_error*/(err) {
-        if (on_prepared) {
-          on_prepared(err);
-          on_prepared = null;
-        }
       }
   );
-}
 
-function stopRecording(device) {
-  var dev, provider, res;
-  if ((dev = devMgr[device]) && (provider = dev.liveStreamer)) {
-    Object.keys(provider.consumerMap).forEach(function (consumerId) {
-      if ((res = provider.consumerMap[consumerId]).filename) { //is file stream
-        log(res.logHead + 'end file to stop recording');
-        end(res); //cause end, close event
-      }
-    });
+  function callbackOnce() {
+    if (on_complete) {
+      on_complete.apply(null, arguments);
+      on_complete = null;
+    }
   }
-}
-
-function getRecordingFileName(device, type/*optional*/) {
-  var dev, provider, filename = '';
-  if ((dev = devMgr[device]) && (provider = dev.liveStreamer) && (!type || provider.type === type)) {
-    Object.keys(provider.consumerMap).some(function (consumerId) {
-      return (filename = provider.consumerMap[consumerId].filename) ? true : false;
-    });
-  }
-  return filename;
-}
-
-function chkerrRecordedFileParameter(q, forDownload) {
-  if (chkerrRequired('device', q.device) ||
-      chkerrRequired('type', q.type, ['apng', 'webm']) ||
-      !forDownload && q.type === 'apng' && chkerrOptional('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
-    return chkerr;
-  }
-  return '';
-}
-
-function stringifyRecordedFileParameter(q, format/*'querystring'*/) {
-  if (format === 'querystring') {
-    var kvAry = [];
-    ['device', (conf.adminWeb.adminKey ? 'accessKey' : ''), 'type', 'fileIndex', (q.type === 'apng' ? 'fps' : '')].forEach(function (name) {
-      if (name) {
-        kvAry.push(name + '=' + querystring.escape(q[name] || '')); //0, NaN are replaced by empty string
-      }
-    });
-    return kvAry.join('&');
-  }
-  return JSON.stringify(q);
 }
 
 /**
- * Play or download recorded file
- * must have been checked by !chkerrRecordedFileParameter(q)
+ * Play or download recorded video file
+ * must have been checked by !chkerrPlayRecordedFileParameter(q)
  * @param httpOutputStream
- * @param q option. must have been checked by !chkerrRecordedFileParameter(q)
+ * @param q option
  *  {
  *    device:  device serial number
       type:    'apng' or 'webm'
@@ -645,123 +746,126 @@ function stringifyRecordedFileParameter(q, format/*'querystring'*/) {
     }
  * @param forDownload  true/false
  */
-function playRecordedFile(httpOutputStream, q, forDownload/*optional*/) {
-  findRecordedFiles(q.device, q.type, function /*on_complete*/(err, filenameAry) {
+function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/) {
+  findFiles(q.device, q.type, function /*on_complete*/(err, filenameAry) {
     var res = httpOutputStream, filename;
-    if (!filenameAry || !(filename = filenameAry[q.fileIndex || 0])) {
-      return end(res, err ? 'file operation error' : 'file not found');
+    if (err || !(filename = filenameAry[q.fileIndex || 0])) {
+      return end(res, err || 'file not found');
     }
-    res.logHead = (res.logHead || '[]').slice(0, -1) + ' ' + (forDownload ? 'download' : 'play') + ': ' + filename + ']';
+    if (!q.fps) {
+      q.fps = Number(filename.slice(querystring.escape(q.device).length + '~' + q.type + '~f'.length).match(/^[0-9.]+/));
+      if (chkerrRequired('fps', q.fps, MIN_FPS, MAX_FPS)) {
+        return end(res, err || 'bad file name');
+      }
+    }
 
     var rfile = fs.createReadStream(conf.outputDir + '/' + filename);
+    rfile.logHead = '[FileReader(' + (forDownload ? 'Download' : 'Play') + ' ' + filename + ']';
+    res.logHead = res.logHead.slice(0, -1) + ' @ ' + rfile.logHead.slice(1, -1) + ']';
 
     rfile.on('open', function (fd) {
-      log(res.logHead + 'open file for read OK');
+      log(rfile.logHead + 'opened for read');
       fs.fstat(fd, function/*on_complete*/(err, stats) {
         if (err) {
-          log(res.logHead + 'fstat ' + err);
-          return end(res, 'file operation error'); //will cause res.close event and cause call rfile.close
+          log(rfile.logHead + 'fstat ' + err);
+          end(res, 'file operation error ' + err.code);
+          rfile.close(); //stop reading more
+          return;
         }
-        res.setHeader('Content-Type', (!forDownload && q.type === 'apng') ? MULTIPART_MIXED_REPLACE : 'video/' + q.type);
+        res.setHeader('Content-Type', (q.type === 'apng' && !forDownload) ? MULTIPART_MIXED_REPLACE : 'video/' + q.type);
         if (forDownload) {
           res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + q.type);
           res.setHeader('Content-Length', stats.size);
-        } else {
-          if (q.type === 'apng') {
-            if (!q.fps) {
-              q.fps = Number(filename.slice(querystring.escape(q.device).length + '~apng~f'.length).match(/^[0-9.]+/));
-            }
-          }
+        } else if (q.type === 'apng') {
+          rfile.frameIndex = 0;
+          rfile.startTimeMs = Date.now();
         }
-        rfile.streamerId = registerStaticStreamer(q.device, q.type);
-        rfile.restSize = stats.size;
+        updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
 
         rfile.on('data', function (buf) {
-          if (buf.length > rfile.restSize) { //do not play growing content
-            buf = buf.slice(0, rfile.restSize);
-          }
-          rfile.restSize -= buf.length;
-
-          if (q.type === 'apng') { //play apng specially, translate it to multipart output
-            if (!rfile.consumerMap) {
-              rfile.consumerMap = {undefined: res};
-              rfile.startTimeMs = Date.now();
-              rfile.frameIndex = 0;
-            }
-            playANPGBuffer(rfile/*as provider*/, buf, 0, buf.length, on_complete1Png);
-          }
-          else { //for normal video or download, just write content
+          if (forDownload) {
+            write(res, buf);
+          } else if (q.type === 'apng') { //play apng specially, translate it to multipart output
+            playANPGBuffer(rfile/*context*/, [res], buf, 0, buf.length, on_complete1Png);
+          } else { //for normal video, just write content
             write(res, buf);
           }
 
           function on_complete1Png(pos/*next png start position*/) {
             if (conf.logAPNGProgress) {
-              log((forDownload ? '[download: ' : '[play: ') + rfile.filename + ']frame ' + rfile.frameIndex + ' completed' + ((rfile.restSize === 0 && pos >= buf.length) ? '(last)' : ''));
+              log(rfile.logHead + 'frame ' + rfile.frameIndex + ' completed' + ((rfile.noMoreData && pos >= buf.length) ? '(last)' : ''));
             }
-            if (pos < buf.length || rfile.restSize > 0) { //if have rest data
+            if (pos < buf.length || !rfile.noMoreData) { //if have rest data
               //write next content-type early to force Chrome draw previous image immediately.
               //For last image, do not write next content-type head because it cause last image view invalidated.
               write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
               rfile.frameIndex++;
               rfile.pause();
-              rfile.apngTimer = setTimeout(function /*__resume*/() {
+              rfile.timer = setTimeout(function () {
                 rfile.resume();
-                playANPGBuffer(rfile/*as provider*/, buf, pos, buf.length, on_complete1Png);
-              }, (rfile.startTimeMs + rfile.frameIndex * 1000 / q.fps) - Date.now());
+                rfile.timer = null;
+                playANPGBuffer(rfile/*context*/, [res], buf, pos, buf.length, on_complete1Png);
+                if (!rfile.timer && rfile.noMoreData) {
+                  end(res);
+                }
+              }, Math.max(1, (rfile.startTimeMs + rfile.frameIndex * 1000 / q.fps) - Date.now()));
             }
           }
-        });
+        }); //end of 'data' event handler
 
         rfile.on('end', function () {
-          log(res.logHead + 'file end');
-          end(res);
+          log(rfile.logHead + 'read end');
+          if (!rfile.timer) {
+            end(res);
+          }
+          rfile.noMoreData = true;
         });
-        return null; //just for avoiding compiler warning
-      });
-    });
+      }); //end of on_complete of fstat
+    }); //end of 'open' event handler
 
-    rfile.on('close', function () {
-      log(res.logHead + 'file closed');
-      clearTimeout(rfile.apngTimer);
-      unregisterStaticStreamer(q.device, rfile.streamerId);
+    rfile.on('close', function () { //file's 'close' event will always be fired
+      log(rfile.logHead + 'closed');
+      if (!rfile.timer) {
+        end(res);
+      }
     });
-
     rfile.on('error', function (err) {
-      log(res.logHead + beautifyErrMsg(err));
-      end(res, err.code === 'ENOENT' ? 'file not found' : 'file operation error');
+      log(rfile.logHead + stringifyError(err));
+      end(res, err.code === 'ENOENT' ? 'error: file not found' : 'file operation error ' + err.code);
+      clearTimeout(rfile.timer);
     });
 
-    //stop if http connection is closed by peer
-    res.on('close', function () {
-      rfile.close();
+    res.on('close', function () { //closed without normal end(res,...). Note: this event DOES NOT means output data have been flushed
+      rfile.close(); //stop reading more
+      clearTimeout(rfile.timer);
+      updateCounter(q.device, q.type, -1, res/*ownerOutputStream*/);
     });
-    return null; //just for avoiding compiler warning
+    res.on('finish', function () { //data have been flushed. This event is not related with 'close' event
+      updateCounter(q.device, q.type, -1, res/*ownerOutputStream*/);
+    });
+    return ''; //just to avoid compiler warning
   });
 }
 
-function deleteRecordedFiles(device) {
-  findRecordedFiles(device, null/*any type*/, function /*on_complete*/(err, filenameAry) {
-    if (filenameAry) {
-      filenameAry.forEach(function (filename) {
-        fs.unlink(conf.outputDir + '/' + filename);
-      });
-    }
-  });
-}
+function findFiles(device/*optional*/, type/*optional*/, on_complete) {
+  var devAry = !device ? null : Array.isArray(device) ? device : [device];
+  var typeAry = !type ? null : Array.isArray(type) ? type : [type];
 
-function findRecordedFiles(device, type/*optional*/, on_complete) {
   fs.readdir(conf.outputDir, function (err, filenameAry) {
     if (err) {
-      log('readdir ' + err);
-      return on_complete(err);
+      log('[FindFiles]readdir ' + stringifyError(err));
+      return on_complete(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code, []);
     }
-    var recordingFileName = getRecordingFileName(device, type);
-    var devPrefix = querystring.escape(device) + '~';
 
     filenameAry = filenameAry.filter(function (filename) {
-      return filename.slice(0, devPrefix.length) === devPrefix &&
-          (!type || filename.slice(devPrefix.length).slice(0, 4) === type) &&
-          filename !== recordingFileName;
+      var parts = filename.split('~');
+      if (parts.length !== 4) {
+        return false;
+      }
+      if (recordingFileMap[filename]) {
+        return false;
+      }
+      return (!devAry || devAry.indexOf(querystring.unescape(parts[0])) >= 0) && (!typeAry || typeAry.indexOf(parts[1]) >= 0);
     });
 
     //sort by time (newer first)
@@ -771,129 +875,169 @@ function findRecordedFiles(device, type/*optional*/, on_complete) {
       return (a < b) ? 1 : (a > b) ? -1 : 0;
     });
 
-    //make it searchable by timestamp
+    //make it searchable by fileIndex (timestamp)
     filenameAry.forEach(function (filename) {
       filenameAry[filename.slice(-nowStr.LEN)] = filename;
     });
 
+    if (filenameAry.length) {
+      getOrCreateDevCtx(device); //ensure having created device context
+    }
     return on_complete('', filenameAry);
   });
 }
 
-function getLiveStreamConsumerCount(device, type) {
-  var dev, provider;
-  if ((dev = devMgr[device]) && (provider = dev.liveStreamer) && provider.type === type) {
-    return Object.keys(provider.consumerMap).reduce(function (previousSum, consumerId) {
-      return provider.consumerMap[consumerId].filename ? previousSum : previousSum + 1;
-    }, 0 /*initial previousSum*/);
-  }
-  return 0;
-}
-
-function registerStaticStreamer(device, type) {
-  var dev = devMgr[device] || (devMgr = devMgr[device]);
-  if (!dev.staticStreamerMap) {
-    dev.staticStreamerMap = {};
-    dev.lastStaticStreamerId = 0;
-  }
-  dev.staticStreamerMap[++(dev.lastStaticStreamerId)] = {type: type};
-  return dev.lastStaticStreamerId;
-}
-
-function unregisterStaticStreamer(device, streamerId) {
-  if (devMgr[device] && devMgr[device].staticStreamerMap) {
-    delete devMgr[device].staticStreamerMap[streamerId];
-  }
-}
-
-function getStaticStreamerCount(device, type) {
-  if (devMgr[device] && devMgr[device].staticStreamerMap) {
-    return Object.keys(devMgr[device].staticStreamerMap).reduce(function (previousSum, streamerId) {
-      return (devMgr[device].staticStreamerMap[streamerId].type === type) ? (previousSum + 1) : previousSum;
-    }, 0 /*initial previousSum*/);
-  }
-  return 0;
-}
-
-function __cleanup_all(provider, reason) {
-  Object.keys(provider.consumerMap).forEach(function (consumerId) {
-    __cleanup(provider.consumerMap[consumerId], reason);
+//if fileIndex querystring is specified(can be empty string) then delete single file, otherwise delete all files of the type
+function deleteFiles(device/*optional*/, type/*optional*/, fileIndex/*optional*/) {
+  findFiles(device, type, function /*on_complete*/(err, filenameAry) {
+    (fileIndex === undefined ? filenameAry : [filenameAry[fileIndex]]).forEach(function (filename) {
+      try {
+        fs.unlinkSync(conf.outputDir + '/' + filename);
+      } catch (err) {
+        log('failed to delete file ' + conf.outputDir + '/' + filename + '. ' + stringifyError(err));
+      }
+    });
+    loadResourceSync();
   });
 }
 
-function __cleanup(res, reason) {
-  //prevent endless loop by error event of the output stream
-  if (res.didCleanup) {
+function updateCounter(device, type, delta, res/*ownerOutputStream*/) {
+  var dev = devMgr[device], counter, counterType = res.filename ? 'recording' : 'streaming';
+
+  //set overall counter. overallCounterMap[counterType].bytes will be set by write(res,...)
+  if (!(counter = overallCounterMap[counterType])) {
+    counter = overallCounterMap[counterType] = {count: 0, bytes: 0, startTimeMs: Date.now()};
+    if (!status.timer) {
+      status.timer = setInterval(pushStatus, 1000);
+      status.timerRef = 1;
+    } else {
+      status.timerRef++;
+    }
+  }
+  if ((counter.count += delta) <= 0) { //destroy counter if count is 0
+    overallCounterMap[counterType] = null;
+    if ((--status.timerRef) <= 0) {
+      clearInterval(status.timer);
+      status.timer = null;
+    }
+  }
+
+  //set individual counter. res.counter.bytes will be set by write(res,...)
+  if (!(res.counter = dev.counterMapRoot[type][counterType])) {
+    res.counter = dev.counterMapRoot[type][counterType] = {count: 0, bytes: 0, startTimeMs: Date.now()};
+  }
+  if ((res.counter.count += delta) <= 0) { //destroy counter if count is 0
+    res.counter = dev.counterMapRoot[type][counterType] = null;
+  }
+  setTimeout(pushStatus, 0);
+}
+
+function pushStatus() {
+  if (Object.keys(status.consumerMap).length === 0) {
+    status.needRecalculation = true;
     return;
   }
-  res.didCleanup = true;
+  status.needRecalculation = false;
 
-  log(res.logHead + 'clean_up' + (reason ? (' due to ' + reason) : ''));
+  var sd = {}, counter, disp, json;
 
-  var provider = res.streamProvider;
-  if (res.childConsumerId && provider.consumerMap[res.childConsumerId]) {
-    __cleanup(provider.consumerMap[res.childConsumerId], 'parent consumer is closed');
+  //set overall counter. overallCounterMap[counterType].bytes will be set by write(res,...)
+  if ((counter = overallCounterMap.streaming)) {
+    var bytesPerSec = (counter.bytes * 1000 / Math.max(1, Date.now() - counter.startTimeMs)).toFixed();
+    sd.streamingSpeed = 'Network: ' + (bytesPerSec / 1000000).toFixed(3) + ' MB/s';
+  } else {
+    sd.streamingSpeed = '';
   }
+  sd.totalRecordedFileSize = 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB';
+  sd.totalRecordingCount = overallCounterMap.recording ? overallCounterMap.recording.count : 0;
 
-  if (reason !== 'output stream is closed by external') {
-    end(res, reason);
+  //set individual counter. res.counter.bytes will be set by write(res,...)
+  forEachValueIn(devMgr, function (dev, device) {
+    forEachValueIn(dev.counterMapRoot, function (counterMap, type) {
+      ['streaming', 'recording'].forEach(function (counterType) {
+        counter = counterMap[counterType];
+        disp = '';
+        if (counter && counter.count) {
+          if (counterType === 'streaming') {
+            disp = 'Viewers:\n' + counter.count;
+          } else {
+            disp = 'Recording:\n' + (counter.bytes / 1000000).toFixed(3) + ' MB/' + getPeriodDisp(counter.startTimeMs);
+          }
+        }
+        sd[counterType + 'Status_' + type + '_' + querystring.escape(device)] = disp;
+      });
+    });
+  });
+
+  if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
+    status.lastDataJson = json;
+    status.ver = nowStr();
   }
+  json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
 
-  //unsubscribe
-  delete provider.consumerMap[res.consumerId];
-
-  //if no consumer subscribe the output of screen capture process, then kill it
-  if (Object.keys(provider.consumerMap).length === 0) {
-    if (provider === provider.dev.liveStreamer) {
-      provider.dev.liveStreamer = null;
-    }
-    if (provider.pid && reason !== 'capture process exited') {
-      log(provider.logHead + 'kill due to all consumers are closed');
-      try {
-        process.kill(provider.pid, 'SIGKILL');
-      } catch (e) {
+  forEachValueIn(status.consumerMap, function (res) {
+    if (res.previousVer !== status.ver) {
+      if (!status.timer || !res.previousVer ||
+          Number(status.ver.slice(0, -4).replace(/_/g, '')) - Number(res.previousVer.slice(0, -4).replace(/_/g, '')) >= 1000) {
+        end(res, json);
+        delete status.consumerMap[res.consumerId];
       }
     }
+  });
+
+  function getPeriodDisp(startTimeMs) {
+    var deltaSec = (Date.now() - startTimeMs) / 1000 % 86400;
+    var h = (deltaSec / 3600).toFixed(), m = ((deltaSec %= 3600) / 60).toFixed(), s = (deltaSec % 60).toFixed();
+    return (h ? (dpad2(h) + ':') : '') + dpad2(m) + ':' + dpad2(s);
   }
+}
+
+function pushStatusForAppVer() {
+  var json = '{"appVer":"' + status.appVer + '"}';
+  forEachValueIn(status.consumerMap, function (res) {
+    end(res, json); //cause browser to refresh page
+  });
+  status.consumerMap = {};
 }
 
 /*
  * write animated png stream to all consumers
  */
-function playANPGBuffer(provider, buf, pos, endPos, on_complete1Png /*optional*/) {
+function playANPGBuffer(context, consumerMap, buf, pos, endPos, on_complete1Png /*optional*/) {
   if (pos >= endPos) {
     return;
   }
-  if (!provider.pngCacheLength) {
+  if (!context.pngCacheLength) {
     //mark each consumer's start flag
-    Object.keys(provider.consumerMap).forEach(__startPNG);
+    forEachValueIn(consumerMap, __startPNG);
 
-    provider.pngCacheLength = 0;
-    if (!provider.pngCache) {
-      provider.pngCache = new Buffer(APNG_CACHE_LEN);
+    context.pngCacheLength = 0;
+    if (!context.pngCache) {
+      context.pngCache = new Buffer(APNG_CACHE_LEN);
+      if (conf.logAPNGProgress) {
+        context.pngIndex = context.pngIndex === undefined ? 0 : context.pngIndex + 1;
+      }
     }
   }
 
-  buf.copy(provider.pngCache, provider.pngCacheLength, pos, Math.min(endPos, pos + APNG_CACHE_LEN - provider.pngCacheLength));
-
   for (; pos < endPos; pos++) {
-    provider.pngCacheLength++;
+    context.pngCache[context.pngCacheLength++] = buf[pos];
     /*
      * find tail
      */
-    if (__isPngTail(provider.pngCache, provider.pngCacheLength - PNG_TAIL_LEN)) {
+    if (__isPngTail(context.pngCache, context.pngCacheLength - PNG_TAIL_LEN)) {
       //ok, png complete, write last part
-      Object.keys(provider.consumerMap).forEach(__writeCache);
+      forEachValueIn(consumerMap, __writeCache);
 
       //reset parser
-      provider.pngCacheLength = 0;
+      context.pngCacheLength = 0;
       pos++;
 
       if (on_complete1Png) {
         on_complete1Png(pos);
       } else {
-        Object.keys(provider.consumerMap).forEach(__complete1Png);
-        playANPGBuffer(provider, buf, pos, endPos);
+        forEachValueIn(consumerMap, __complete1Png);
+        playANPGBuffer(context, consumerMap, buf, pos, endPos);
       }
 
       break;
@@ -901,29 +1045,27 @@ function playANPGBuffer(provider, buf, pos, endPos, on_complete1Png /*optional*/
     /*
      * find body
      */
-    else if (provider.pngCacheLength === APNG_CACHE_LEN) {
-      //move some provider.pngCache data to output stream if big enough
-      provider.pngCacheLength = APNG_CACHE_LEN - (PNG_TAIL_LEN - 1);
-      Object.keys(provider.consumerMap).forEach(__writeCache);
+    else if (context.pngCacheLength === APNG_CACHE_LEN) {
+      if (conf.logAPNGProgress) {
+        log('png cache full');
+      }
+      //move some pngCache data to output stream if big enough
+      context.pngCacheLength = APNG_CACHE_LEN - (PNG_TAIL_LEN - 1);
+      forEachValueIn(consumerMap, __writeCache);
       //copy last PNG_TAIL_LEN-1 byte to head
-      provider.pngCache.copy(provider.pngCache, 0, APNG_CACHE_LEN - (PNG_TAIL_LEN - 1));
-      provider.pngCacheLength = PNG_TAIL_LEN - 1;
+      context.pngCache.copy(context.pngCache, 0, APNG_CACHE_LEN - (PNG_TAIL_LEN - 1));
+      context.pngCacheLength = PNG_TAIL_LEN - 1;
     }
   }
 
-  function __writeCache(consumerId) {
-    var res = provider.consumerMap[consumerId];
+  function __writeCache(res) {
     if (res.isAPNGStarted) {
-      write(res, provider.pngCache.slice(0, provider.pngCacheLength));
+      write(res, context.pngCache.slice(0, context.pngCacheLength));
 
       if (conf.logAPNGProgress) {
-        if (res.pngIndex === undefined) {
-          res.pngIndex = 0;
-        }
-        var filename = (res.filename ? res.filename + '_write' : provider.filename ? provider.filename + '_read' : 'http_write') + '_png_' + res.pngIndex + '.png';
-        log(filename + ' length ' + provider.pngCacheLength);
-        fs.createWriteStream(conf.outputDir + '/' + filename).end(provider.pngCache.slice(0, provider.pngCacheLength));
-        res.pngIndex++;
+        var filename = (res.filename ? res.filename + '_write' : context.filename ? context.filename + '_read' : 'http_write') + '_png_' + context.pngIndex + '.png';
+        log(filename + ' length ' + context.pngCacheLength);
+        fs.createWriteStream(conf.outputDir + '/' + filename).end(context.pngCache.slice(0, context.pngCacheLength));
       }
     }
   }
@@ -932,18 +1074,14 @@ function playANPGBuffer(provider, buf, pos, endPos, on_complete1Png /*optional*/
     return (buf[i++] === 0x49 && buf[i++] === 0x45 && buf[i++] === 0x4E && buf[i++] === 0x44 && buf[i++] === 0xAE && buf[i++] === 0x42 && buf[i++] === 0x60 && buf[i] === 0x82);
   }
 
-  function __startPNG(consumerId) {
-    var res = provider.consumerMap[consumerId];
-    if (res.setHeader) { //animated png
-      if (!res.isAPNGStarted) {
-        write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
-      }
+  function __startPNG(res) {
+    if (!res.isAPNGStarted && res.setHeader) { //animated png
+      write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
     }
     res.isAPNGStarted = true;
   }
 
-  function __complete1Png(consumerId) {
-    var res = provider.consumerMap[consumerId];
+  function __complete1Png(res) {
     if (res.isAPNGStarted && res.setHeader) {
       //write next content-type early to force Chrome draw previous image immediately.
       write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
@@ -954,8 +1092,8 @@ function playANPGBuffer(provider, buf, pos, endPos, on_complete1Png /*optional*/
 /*
  * convert CRLF or CRCRLF to LF, return array of converted buf. Currently, this function only have effect on Windows OS
  */
-function __convertAdbNewLineSeqToLF(provider, buf) {
-  if (!provider.dev.CrCount) { //lucky! no CR prepended, so need not convert.
+function convertCRLFToLF(context, requiredCrCount, buf) {
+  if (!requiredCrCount) { //lucky! no CR prepended, so need not convert.
     return [buf];
   }
   var bufAry = [], startPos = 0, crCount = 0;
@@ -964,15 +1102,15 @@ function __convertAdbNewLineSeqToLF(provider, buf) {
    * If it is followed by [LF] or [CR,LF], then they together are treated as a [LF],
    * Otherwise, the orphan seq will be output normally.
    */
-  if (provider.orphanCrCount) {
-    var restCrCount = provider.dev.CrCount - provider.orphanCrCount;
+  if (context.orphanCrCount) {
+    var restCrCount = requiredCrCount - context.orphanCrCount;
     // if adbNewLineSeq is found then skip rest CR, start from LF. Otherwise push orphan CR into result
     if (!restCrCount && buf[0] === LF || restCrCount && buf[0] === CR && buf.length > 1 && buf[1] === LF) {
       startPos = restCrCount;
     } else {
-      bufAry.push(provider.orphanCrCount === 2 ? BUF_CR2 : BUF_CR);
+      bufAry.push(context.orphanCrCount === 2 ? BUF_CR2 : BUF_CR);
     }
-    provider.orphanCrCount = 0;
+    context.orphanCrCount = 0;
   }
 
   /*
@@ -987,10 +1125,10 @@ function __convertAdbNewLineSeqToLF(provider, buf) {
        *be processed by next call of this function
        */
       if (i + 1 === buf.length) {
-        provider.orphanCrCount = Math.min(crCount, provider.dev.CrCount);
+        context.orphanCrCount = Math.min(crCount, requiredCrCount);
         //commit data in range from last start position to current position-orphanCrCount
-        if (startPos < buf.length - provider.orphanCrCount) {
-          bufAry.push(buf.slice(startPos, buf.length - provider.orphanCrCount));
+        if (startPos < buf.length - context.orphanCrCount) {
+          bufAry.push(buf.slice(startPos, buf.length - context.orphanCrCount));
         }
         return bufAry;
       }
@@ -1000,9 +1138,9 @@ function __convertAdbNewLineSeqToLF(provider, buf) {
        * if found 2 or 2 CR followed by LF, then CR will be discarded.
        * and data before CR will be pushed to result.
        */
-      if (crCount >= provider.dev.CrCount && buf[i] === LF) {
-        //commit data in range from last start position to current position-provider.dev.CrCount
-        bufAry.push(buf.slice(startPos, i - provider.dev.CrCount));
+      if (crCount >= requiredCrCount && buf[i] === LF) {
+        //commit data in range from last start position to current position-requiredCrCount
+        bufAry.push(buf.slice(startPos, i - requiredCrCount));
         startPos = i;
       }
 
@@ -1012,28 +1150,7 @@ function __convertAdbNewLineSeqToLF(provider, buf) {
 
   bufAry.push(buf.slice(startPos));
   return bufAry;
-}//end of __convertAdbNewLineSeqToLF()
-
-function chkerrPublicAccess(q) {
-  if (conf.adminWeb.adminKey) { //if secure mode is on
-    if (chkerrRequired('device', q.device) || chkerrRequired('accessKey', q.accessKey)) {
-      return chkerr;
-    }
-    if (!devMgr[q.device] || devMgr[q.device].accessKey !== q.accessKey) {
-      return setchkerr('access denied');
-    }
-  }
-  return '';
-}
-
-function chkerrAdminAccess(q) {
-  if (conf.adminWeb.adminKey) { //if secure mode is on
-    if (q.adminKey !== conf.adminWeb.adminKey) {
-      return setchkerr('access denied');
-    }
-  }
-  return '';
-}
+}//end of convertCRLFToLF()
 
 function setDefaultHttpHeader(res) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, private, proxy-revalidate, s-maxage=0'); // HTTP 1.1.
@@ -1041,75 +1158,84 @@ function setDefaultHttpHeader(res) {
   res.setHeader('Expires', 0); // Proxies.
   res.setHeader('Vary', '*'); // Proxies.
   res.setHeader('Content-Type', 'text/plain');
-  if (conf.supportXmlHttpRequest) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET');
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 
 function startStreamWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.ip), smark = (conf.ssl.on ? 's' : '');
+  conf.ipForHtmlLink = (isAnyIp(conf.ip) ? '127.0.0.1' : conf.ip);
   if (conf.ssl.on) {
     log('load SSL server certificate and private key from PKCS12 file: ' + conf.ssl.certificateFilePath);
     var options = {pfx: fs.readFileSync(conf.ssl.certificateFilePath)};
-    httpServer = require('https').createServer(options, handler);
+    process.streamWeb = httpServer = require('https').createServer(options, handler);
   } else {
-    httpServer = require('http').createServer(handler);
+    process.streamWeb = httpServer = require('http').createServer(handler);
   }
   httpServer.logHead = '[StreamWebSrv]';
   httpServer.on('error', function (err) {
-    log(httpServer.logHead + beautifyErrMsg(err), {stderr: true});
+    log(httpServer.logHead + stringifyError(err), {stderr: true});
     process.exit(1);
   });
   log(httpServer.logHead + 'listen on ' + ( _isAnyIp ? '*' : conf.ip) + ':' + conf.port);
   httpServer.listen(conf.port, _isAnyIp ? undefined : conf.ip,
-      function/*on_ok*/() {
+      function/*on_complete*/() {
         log(httpServer.logHead + 'OK');
       });
 
   function handler(req, res) {
-    if (req.url === '/favicon.ico' || req.url.length > 1024 || req.method !== 'GET') {
-      return res.end();
-    }
-
-    res.logHead = '[HTTP' + smark.toUpperCase() + '#' + (res.seq = ++httpSeq) + ']';
-    log(res.logHead.slice(0, -1) + (conf.logHttpReqAddr ? ' ' + req.connection.remoteAddress + ':' + req.connection.remotePort : '') + ' ' + req.url + ' ]' + 'begin');
-
     // set stream error handler to prevent from crashing
     res.on('error', function (err) {
-      log(res.logHead + err);
+      log((res.logHead || '[HTTP' + smark.toUpperCase() + ' ' + res.req.url) + stringifyError(err));
     });
-
-    res.on('close', function () {
-      log(res.logHead + 'closed by peer');
-    });
-
-    setDefaultHttpHeader(res);
-
+    if (req.url.length > 1024 || req.method !== 'GET' || req.url === '/favicon.ico') {
+      return res.end();
+    }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
     if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-      q = {device: '', accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, recordOption: '', fileIndex: 0};
+      q = {device: '', accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, recordOption: '', fileIndex: ''};
     }
-    if (chkerrPublicAccess(q)) {
-      return end(res, chkerr);
+    if (chkerrRequired('device', q.device)) {
+      return res.end(chkerr);
     }
+    var _accessKey = devMgr[q.device] ? devMgr[q.device].accessKey : '';
+    if (_accessKey && _accessKey !== q.accessKey || !_accessKey && conf.adminWeb.adminKey) {
+      res.statusCode = 403; //access denied
+      return res.end('access denied');
+    }
+
+    switch (parsedUrl.pathname) {
+      case '/common.css':
+      case '/common.js':
+        res.setHeader('Content-Type', parsedUrl.pathname.match(/\.[^.]*$/)[0] === '.css' ? 'text/css' : 'text/javascript');
+        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
+      default :
+        res.logHead = '[HTTP' + smark.toUpperCase() + '#' + (res.seq = ++httpSeq) + ']';
+        log(res.logHead.slice(0, -1) + (conf.logHttpReqAddr ? ' ' + req.connection.remoteAddress + ':' + req.connection.remotePort : '') + ' ' + req.url + ' ]' + 'begin');
+        res.on('close', function () { //closed without normal end(res,...)
+          res.__isClosed = true;
+          log(res.logHead + 'closed by peer');
+        });
+    }
+
+    setDefaultHttpHeader(res);
 
     switch (parsedUrl.pathname) {
       case '/capture': //---------------------------send capture result to browser & optionally save to file------------
         if (chkerrCaptureParameter(q) ||
-            q.type === 'webm' && chkerrOptional('recordOption', q.recordOption, ['sync', 'async'])) {
+            q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
           return end(res, chkerr);
         }
         if (q.type === 'webm' && q.recordOption) { //need record webm video at same time
           startRecording(q,
-              function/*on_prepared*/(err, wfile) {
+              function/*on_complete*/(err, wfile) {
                 if (err) {
                   end(res, err);
                 } else {
                   if (q.recordOption === 'sync') {
-                    res.childConsumerId = wfile.consumerId; //remember the file so that close it with res together
+                    res.childConsumerId = wfile.consumerId; //remember the file so that end it with res together
                   } //else 'async'
                   capture(res, q); //also send capture result to browser
                 }
@@ -1120,61 +1246,87 @@ function startStreamWeb() {
         }
         break;
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
-        if (chkerrRecordedFileParameter(q, false/*forPlay*/)) {
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
+            q.type === 'apng' && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
-        playRecordedFile(res, q, false/*forPlay*/);
+        playOrDownloadRecordedFile(res, q, false/*forPlay*/);
         break;
       case '/downloadRecordedFile': //---------------------download recorded file---------------------------------------
-        if (chkerrRecordedFileParameter(q, true/*forDownload*/)) {
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap))) {
           return end(res, chkerr);
         }
-        playRecordedFile(res, q, true/*forDownload*/);
+        playOrDownloadRecordedFile(res, q, true/*forDownload*/);
         break;
-      case '/sampleHtmlToViewLiveCapture':  //------------------------show live capture (Just as a sample) -------------
-        if (chkerrCaptureParameter(q)) {
+      case '/liveViewer':  //------------------------------show live capture (Just as a sample) ------------------------
+        if (chkerrCaptureParameter(q) ||
+            q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
           return end(res, chkerr);
         }
-        uploadFile(q.device,
-            function /*on_ok*/() {
+        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+              if (err) {
+                return end(res, err);
+              }
               res.setHeader('Content-Type', 'text/html');
-              end(res, htmlCache[q.type + '.html'] //this html will in turn open URL /capture?....
+              return end(res, htmlCache[q.type + '_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
+                  .replace(/@device\b/g, querystring.escape(q.device))
                   .replace(/#device\b/g, htmlEncode(q.device))
-                  .replace(/@by\b/g, 'capture')
-                  .replace(/@q\b/g, stringifyCaptureParameter(q, 'querystring'))
-                  .replace(/#LiveOrStatic\b/g, 'Live Capture')
-                  .replace(/#show_ifLiveView\b/g, '')
-                  .replace(/#show_ifViewRecordedFile\b/g, 'none')
+                  .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
+                  .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
+                  .replace(/@type\b/g, q.type)
+                  .replace(/#typeDisp\b/g, htmlEncode(videoTypeMap[q.type].name))
+                  .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
+                  .replace(/@MIN_FPS\b/g, MIN_FPS)
+                  .replace(/@MAX_FPS\b/g, MAX_FPS)
+                  .replace(/@fps\b/g, q.fps)
+                  .replace(/@scale\b/g, q.scale)
+                  .replace(/@rotate\b/g, q.rotate)
+                  .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
+                  .replace(new RegExp('name="recordOption" value="' + (q.recordOption || '') + '"', 'g'), '$& checked') //set check mark
               );
-            },
-            function/*on_error*/(err) {
-              end(res, err);
             }
         );
         break;
-      case '/sampleHtmlToViewRecordedFile':  //----------------------show recorded file  (Just as a sample)-------------
-        if (chkerrRecordedFileParameter(q, false/*forPlay*/)) {
+      case '/fileViewer':  //---------------------------show recorded file  (Just as a sample)--------------------------
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
+            q.type === 'apng' && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
-        findRecordedFiles(q.device, q.type, function/*on_complete*/(err, filenameAry) {
-          if (!filenameAry || !filenameAry[q.fileIndex || 0]) {
-            return end(res, err ? 'file operation error' : 'file not found');
+        findFiles(q.device, q.type, function/*on_complete*/(err, filenameAry) {
+          var filename, absFileIndex, relFileIndex;
+          if (err || !(filename = filenameAry[q.fileIndex || 0])) {
+            return end(res, err || 'file not found');
           }
+          q.fileIndex = absFileIndex = filename.slice(-nowStr.LEN);
+          relFileIndex = filenameAry.indexOf(filename);
+
           res.setHeader('Content-Type', 'text/html');
-          return end(res, htmlCache[q.type + '.html'] //this html will in turn open URL /playRecordedFile?....
+          return end(res, htmlCache[q.type + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
+              .replace(/@device\b/g, querystring.escape(q.device))
               .replace(/#device\b/g, htmlEncode(q.device))
-              .replace(/@by\b/g, 'playRecordedFile')
-              .replace(/@q\b/g, stringifyRecordedFileParameter(q, 'querystring'))
-              .replace(/#LiveOrStatic\b/g, 'Recorded Video')
-              .replace(/#show_ifLiveView\b/g, 'none')
-              .replace(/#show_ifViewRecordedFile\b/g, '')
+              .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
+              .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
+              .replace(/@type\b/g, q.type)
+              .replace(/#typeDisp\b/g, htmlEncode(videoTypeMap[q.type].name))
+              .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
+              .replace(/@relFileIndex\b/g, relFileIndex)
+              .replace(/@absFileIndex\b/g, absFileIndex)
+              .replace(/@maxRelFileIndex\b/g, filenameAry.length - 1)
+              .replace(/@olderFileIndex\b/g, Math.min(relFileIndex + 1, filenameAry.length - 1))
+              .replace(/@newerFileIndex\b/g, Math.max(relFileIndex - 1, 0))
+              .replace(/@pathname\b/g, parsedUrl.pathname)
+              .replace(/@MIN_FPS\b/g, MIN_FPS)
+              .replace(/@MAX_FPS\b/g, MAX_FPS)
+              .replace(/@fps\b/g, q.fps)
           );
         });
+        break;
+      case '/saveImage': //--------------------------------save image from recorded file -------------------------------
         break;
       default:
         end(res, 'bad request');
     }
-    return null; //just for avoiding compiler warning
+    return ''; //just to avoid compiler warning
   }
 }
 
@@ -1189,291 +1341,444 @@ function startAdminWeb() {
   }
   httpServer.logHead = '[AdminWebSrv]';
   httpServer.on('error', function (err) {
-    log(httpServer.logHead + beautifyErrMsg(err), {stderr: true});
+    log(httpServer.logHead + stringifyError(err), {stderr: true});
     process.exit(1);
   });
   log(httpServer.logHead + 'listen on ' + ( _isAnyIp ? '*' : conf.adminWeb.ip) + ':' + conf.adminWeb.port);
   httpServer.listen(conf.adminWeb.port, _isAnyIp ? undefined : conf.adminWeb.ip,
-      function/*on_ok*/() {
-        log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? '127.0.0.1' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + (conf.adminWeb.adminKey ? '/?adminKey=' + conf.adminWeb.adminKey : ''), {stderr: true});
+      function/*on_complete*/() {
+        log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? '127.0.0.1' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + '/?adminKey=' + querystring.escape(conf.adminWeb.adminKey), {stderr: true});
       });
 
   function handler(req, res) {
-    if (req.url === '/favicon.ico' || req.url.length > 1024 || req.method !== 'GET') {
-      return res.end();
-    }
-
-    res.isAdminWeb = true;
-    res.logHead = '[AdminHTTP' + smark.toUpperCase() + '#' + (res.seq = ++httpSeq) + ']';
-    log(res.logHead.slice(0, -1) + ' ' + req.url + ' ]' + 'begin');
-
     // set stream error handler to prevent from crashing
     res.on('error', function (err) {
-      log(res.logHead + err);
+      log((res.logHead || '[AdminHTTP' + smark.toUpperCase() + ' ' + res.req.url) + stringifyError(err));
     });
-
-    res.on('close', function () {
-      log(res.logHead + 'closed by peer');
-    });
-
-    setDefaultHttpHeader(res);
-
+    if (req.url.length > 4096 || req.method !== 'GET' || req.url === '/favicon.ico') {
+      return res.end();
+    }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
     if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-      q = {adminKey: '', device: [], accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, action: ''};
+      q = {adminKey: '', device: [], accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, action: '', logDate: '', logDownload: '', logStart: '', logEnd: ''};
     }
-    if (chkerrAdminAccess(q)) {
-      return end(res, chkerr);
+    if (conf.adminWeb.adminKey && q.adminKey !== conf.adminWeb.adminKey) {
+      res.statusCode = 403; //access denied
+      return res.end('access denied');
     }
 
     switch (parsedUrl.pathname) {
-      case '/deviceControl':  //---------------------------------------access management-------------------------------
+      case '/common.css':
+      case '/common.js':
+      case '/jquery-2.0.3.js':
+        res.setHeader('Content-Type', parsedUrl.pathname.match(/\.[^.]*$/)[0] === '.css' ? 'text/css' : 'text/javascript');
+        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
+      case '/status':
+      case '/getLog':
+        break;
+      default :
+        res.logHead = '[AdminHTTP' + smark.toUpperCase() + '#' + (res.seq = ++httpSeq) + ']';
+        log(res.logHead.slice(0, -1) + ' ' + req.url + ' ]' + 'begin');
+
+        res.on('close', function () { //closed without normal end(res,...)
+          res.__isClosed = true;
+          log(res.logHead + 'closed by peer');
+        });
+    }
+
+    setDefaultHttpHeader(res);
+
+    switch (parsedUrl.pathname) {
+      case '/deviceControl': //----------------------------control multiple devices-------------------------------------
+        if (chkerrRequired('device[]', q.device)) {
+          return end(res, chkerr);
+        }
         switch (q.action) {
-          case 'setAccessKey':
-          case 'unsetAccessKey':
-            if (!conf.adminWeb.adminKey) {
-              return end(res, 'not in secure mode. Please set adminKey by configuration file and restart');
-            }
-            if (q.action === 'setAccessKey' && chkerrRequired('accessKey', q.accessKey) || chkerrRequired('device[]', q.device)) {
+          case 'setAccessKey': //----------------------------set access key for multiple devices------------------------
+          case 'unsetAccessKey': //--------------------------unset access key for multiple devices----------------------
+            if (q.action === 'setAccessKey' && chkerrRequired('accessKey', q.accessKey)) {
               return end(res, chkerr);
             }
-            //set/unset access key for single or multiple devices
-            (Array.isArray(q.device) ? uniqueNonEmptyArray(q.device) : [q.device]).forEach(function (device) {
-              (devMgr[device] || (devMgr[device] = {})).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
+            uniqueNonEmptyArray(q.device).forEach(function (device) {
+              getOrCreateDevCtx(device).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
             });
+            status.appVer = nowStr();
+            setTimeout(pushStatusForAppVer, 50);
+            if (req.headers.referer) {
+              res.writeHead(302, {Location: req.headers.referer});
+            }
             end(res, 'OK');
             break;
-          case 'startRecording': //----------------------------------start recording file-------------------------------
-            if (chkerrRequired('device[]', q.device)) {
-              return end(res, chkerr);
-            }
-            var deviceAryOr1 = q.device;
-            q.device = 'any'; //just for using chkerrCaptureParameter
-            if (chkerrCaptureParameter(q)) {
+          case 'startRecording': //---------------------------start recording file for multiple devices-----------------
+            if (chkerrCaptureParameter(q)) { //type, fps, scale, rotate
               return end(res, chkerr);
             }
             var okAry = [], errAry = [];
-            (Array.isArray(deviceAryOr1) ? uniqueNonEmptyArray(deviceAryOr1) : [deviceAryOr1]).forEach(
-                function (device, i, devAry) {
-                  var _q = {};
-                  Object.keys(q).forEach(function (k) {
-                    _q[k] = q[k];
-                  });
-                  _q.device = device;
-                  startRecording(_q,
-                      function/*on_prepared*/(err, wfile) {
-                        if (err) {
-                          errAry.push(devAry.length > 1 ? device + ': ' + err : err);
-                        } else {
-                          okAry.push((devAry.length > 1 ? device + ' OK: ' : 'OK: ') + wfile.filename.slice(-nowStr.LEN));
-                        }
-                        if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
-                          end(res, okAry.concat(errAry).join('\n'));
-                        }
-                      }
-                  );
-                });
+            uniqueNonEmptyArray(q.device).forEach(function (device, i, devAry) {
+              var _q = {};
+              Object.keys(q).forEach(function (k) {
+                _q[k] = q[k];
+              });
+              _q.device = device;
+              startRecording(_q,
+                  function/*on_complete*/(err, wfile) {
+                    if (err) {
+                      errAry.push(devAry.length > 1 ? device + ': ' + err : err);
+                    } else {
+                      okAry.push((devAry.length > 1 ? device + ' OK: ' : 'OK: ') + wfile.filename.slice(-nowStr.LEN));
+                    }
+                    if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
+                      end(res, okAry.concat(errAry).join('\n'));
+                    }
+                  }
+              );
+            });
             break;
-          case 'stopRecording': //----------------------------------stop recording file---------------------------------
-            if (chkerrRequired('device[]', q.device)) {
+          case 'stopRecording': //----------------------------stop recording for multiple devices-----------------------
+            if (chkerrOptional('type(optional)', q.type, Object.keys(videoTypeMap))) {
               return end(res, chkerr);
             }
-            //stop recording on single or multiple devices
-            (Array.isArray(q.device) ? uniqueNonEmptyArray(q.device) : [q.device]).forEach(stopRecording);
+            uniqueNonEmptyArray(q.device).forEach(function (device) {
+              if (devMgr[device] && devMgr[device].liveStreamer) {
+                forEachValueIn(devMgr[device].liveStreamer.consumerMap, function (res) {
+                  if (res.filename && (!q.type || devMgr[device].liveStreamer.type === q.type)) {
+                    endCaptureConsumer(res, 'stop recording');
+                  }
+                });
+              }
+            });
             end(res, 'OK');
             break;
-          case 'deleteRecordedFiles'://-----------------------------delete recorded file---------------------------------
-            if (chkerrRequired('device[]', q.device)) {
+          case 'deleteRecordedFiles': //---------------------delete recorded files for multiple devices-----------------
+            if (chkerrRequired('type', q.type, Object.keys(videoTypeMap))) {
               return end(res, chkerr);
             }
-            //delete recorded file on single or multiple devices
-            (Array.isArray(q.device) ? uniqueNonEmptyArray(q.device) : [q.device]).forEach(deleteRecordedFiles);
+            deleteFiles(q.device, q.type, q.fileIndex);
+            end(res, 'OK');
+            break;
+          case 'deleteImages': //--------------------------delete image files for multiple devices----------------------
+            deleteFiles(q.device, Object.keys(imageTypeMap), q.fileIndex);
             end(res, 'OK');
             break;
           default :
             return end(res, 'bad request');
         }
         break;
-      case '/getInternalLog':  //--------------------------------get internal log file----------------------------------
+      case '/getDeviceLog':  //--------------------------------get internal log file----------------------------------
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        spawn('[getInternalLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_WORK_DIR + '/log'],
+        spawn('[GetDeviceLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_WORK_DIR + '/log'],
             function  /*on_close*/(ret, stdout, stderr) {
-              end(res, (stdout || beautifyStderr(stderr)).replace(/\0/g, '') || 'unknown error');
+              end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
             }, {noLogStdout: true});
         break;
-      case '/getDeviceCpuMemTop':  //--------------------------------get internal log file----------------------------------
+      case '/getDeviceCpuMemTop':  //--------------------------get device cpu memory usage -----------------------------
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        uploadFile(q.device,
-            function /*on_ok*/() {
-              spawn('[getDeviceCpuMemTop]', conf.adb, ['-s', q.device, 'shell', 'chmod', '755', ANDROID_WORK_DIR + '/busybox', '&&', ANDROID_WORK_DIR + '/busybox', 'top', '-b', '-n' , '1'],
+        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+              if (err) {
+                return end(res, err);
+              }
+              return spawn('[GetDeviceCpuMemTop]', conf.adb, ['-s', q.device, 'shell', ANDROID_WORK_DIR + '/busybox', 'top', '-b', '-n' , '1'],
                   function  /*on_close*/(ret, stdout, stderr) {
-                    end(res, (stdout || beautifyStderr(stderr)).replace(/\0/g, '') || 'unknown error');
+                    end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
                   }, {noLogStdout: true});
-            },
-            function/*on_error*/(err) {
-              end(res, err);
+            }
+        );
+        break;
+      case '/downloadRawScreenshot':  //----------------------------download android screen raw screenshot--------------
+        if (chkerrRequired('device', q.device)) {
+          return end(res, chkerr);
+        }
+        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+              if (err) {
+                end(res, err);
+                return;
+              }
+              res.setHeader('Content-Type', 'image/raw');
+              res.setHeader('Content-Disposition', 'attachment;filename=' + querystring.escape(q.device) + '~raw~' + nowStr());
+
+              var childProc = spawn('[RawCapture]', conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
+                'sh', ANDROID_WORK_DIR + '/capture_raw.sh',
+                (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
+
+              childProc.stdout.on('data', function (buf) {
+                convertCRLFToLF(childProc/*as context*/, devMgr[q.device].CrCount, buf).forEach(function (buf) {
+                  write(res, buf);
+                });
+              });
+              childProc.stderr.on('data', function (buf) {
+                log(buf, {noNewLine: true, head: childProc.logHead});
+                end(res, toErrSentence(buf.toString()));
+              });
+              childProc.on('error', function () {
+                end(res, childProc.__spawnErr);
+              });
+              childProc.on('close', function () {
+                end(res);
+              });
             }
         );
         break;
       case '/': //---------------------------------------show menu of all devices---------------------------------------
         q.fps = q.fps || 4;
-        q.type = 'webm';  //just for using chkerrCaptureParameter
-        q.device = 'any'; //just for using chkerrCaptureParameter
+        q.type = q.type || 'apng';
+        q.scale = (q.scale === undefined) ? '300x' : q.scale;
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
         getAllDevInfo(
             function /*on_complete*/(err, deviceList, infoList) {
-              if (!err && (!deviceList || !deviceList.length)) {
-                err = 'No any device connected';
-              }
-              else if (deviceList) {
-                //save serial number and info to devMgr
-                deviceList.forEach(function (device, i) {
-                  (devMgr[device] || (devMgr[device] = {})).info = infoList[i];
-                });
-              }
-
-              var html = htmlCache['menu.html'];
-
-              //replace something concerned with adminKey
-              if (!conf.adminWeb.adminKey) { //clear some unnecessary querystring
-                html = html.replace(/&accessKey=@accessKey\b/g, '')
-                    .replace(/&adminKey=@adminKey\b/g, '').replace(/\?adminKey=@adminKey&/g, '?').replace(/\?adminKey=@adminKey\b(?!&)/g, '');
-              } else {
-                html = html.replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey));
-              }
-              html = html.replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''));
-
-              //disable/check some buttons
-              dynamicConfKeyList.forEach(function (k) {
-                html = html.replace(new RegExp(k + '=' + (conf[k] ? 'true' : 'false') + '"><button', 'g'), '$& disabled');
+              (deviceList || []).forEach(function (device, i) {
+                getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
               });
-              html = html.replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked');
 
-              html = html
-                  .replace(/#dev_enum_err\b/g, htmlEncode(err))
-                  .replace(/[@#]MIN_FPS\b/g, String(MIN_FPS))
-                  .replace(/[@#]MAX_FPS\b/g, String(MAX_FPS))
-                  .replace(/[@#]fps\b/g, q.fps)
-                  .replace(/[@#]scale\b/g, q.scale)
-                  .replace(/[@#]rotate\b/g, q.rotate)
-                  .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + (isAnyIp(conf.ip) ? '127.0.0.1' : conf.ip) + ':' + conf.port)
-                  .replace(/#show_ifStreamWebLocal\b/g, conf.ip === 'localhost' || conf.ip === '127.0.0.1' ? '' : 'none')
-                  .replace(/#show_ifAdminWebLocal\b/g, conf.adminWeb.ip === 'localhost' || conf.adminWeb.ip === '127.0.0.1' ? '' : 'none')
-                  .replace(/#hide_ifStreamWebSSL\b/g, conf.ssl.on ? 'none' : '')
-                  .replace(/#hide_ifAdminWebSSL\b/g, conf.adminWeb.ssl.on ? 'none' : '')
-                  .replace(/#hide_ifAdminKey\b/g, conf.adminWeb.adminKey ? 'none' : '')
-                  .replace(/#show_ifAdminKey\b/g, conf.adminWeb.adminKey ? '' : 'none')
-              ;
-
-              //finally make html rows
-              html = html.replace(/<!--repeatBegin-->[^\0]*<!--repeatEnd-->/, createMultipleHtmlRows);
+              var html = htmlCache['menu.html']
+                      .replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey))
+                      .replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''))
+                      .replace(/@MIN_FPS\b/g, String(MIN_FPS))
+                      .replace(/@MAX_FPS\b/g, String(MAX_FPS))
+                      .replace(/@fps\b/g, q.fps)
+                      .replace(/@scale\b/g, q.scale)
+                      .replace(/@rotate\b/g, q.rotate)
+                      .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
+                      .replace(new RegExp('name="type" value="' + q.type + '"', 'g'), '$& checked')  //set check mark
+                      .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
+                      .replace(/@totalRecordedFileSize_disp\b/g, 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB')
+                      .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
+                      .replace(/@logStart\b/g, conf.logStart || -1000)
+                      .replace(/@logEnd\b/g, conf.logEnd || '')
+                      .replace(/@appVer\b/g, status.appVer)
+                  ;
+              //set enable or disable of some config buttons for /var? command
+              dynamicConfKeyList.forEach(function (k) {
+                html = html.replace('@' + k + '_negVal', (conf[k] ? 'false' : 'true')).replace('#' + k + '_negBtn', (conf[k] ? 'Disable' : 'Enable'));
+              });
 
               res.setHeader('Content-Type', 'text/html');
-              end(res, html);
+              end(res, html.replace(/<!--repeatBegin-->[^\0]*<!--repeatEnd-->/, createMultipleHtmlRows));
 
               function createMultipleHtmlRows(htmlRow) {
-                //combine with existing other device serial number(maybe not connected) in devMgr
-                if (deviceList && deviceList.length > 0) {
-                  deviceList = deviceList.concat(Object.keys(devMgr).filter(function (device) {
-                    return deviceList.indexOf(device) < 0;
-                  }));
-                } else {
-                  deviceList = Object.keys(devMgr);
-                }
-                return deviceList.reduce(
-                    function (joinedStr, device, i) {
-                      var accessKey = devMgr[device] ? devMgr[device].accessKey : '';
-                      return joinedStr + htmlRow //do some device concerned replace
-                          .replace(/#devinfo\b/g, htmlEncode(infoList[i] || 'Unknown'))
-                          .replace(/#devinfo_class\b/g, htmlEncode(infoList[i] ? '' : 'errorWithTip'))
-                          .replace(/#device\b/g, htmlEncode(device))
-                          .replace(/@device\b/g, querystring.escape(device))
-                          .replace(/@accessKey\b/g, querystring.escape(accessKey || ''))
-                          .replace(/#accessKey_disp\b/g, htmlEncode(accessKey || '<None> Please "Set Access Key" for this device'))
-                          .replace(/#styleName_AccessKey_disp\b/g, accessKey ? 'infoWithTip' : 'errorWithTip')
-                          .replace(/#isRecording_webm\b/g, getRecordingFileName(device, 'webm') ? 'YES' : 'NO')
-                          .replace(/#isRecording_apng\b/g, getRecordingFileName(device, 'apng') ? 'YES' : 'NO')
-                          .replace(/#streamingCount_webm\b/g, getLiveStreamConsumerCount(device, 'webm') + getStaticStreamerCount(device, 'webm'))
-                          .replace(/#streamingCount_apng\b/g, getLiveStreamConsumerCount(device, 'apng') + getStaticStreamerCount(device, 'apng'))
-                          ;
-                    }, ''/*initial joinedStr*/);
+                return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
+                  var dev = devMgr[device];
+                  return joinedStr + htmlRow //do some device concerned replace
+                      .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
+                      .replace(/#devinfo_class\b/g, htmlEncode(dev.info ? '' : 'errorWithTip'))
+                      .replace(/#device\b/g, htmlEncode(device))
+                      .replace(/@device\b/g, querystring.escape(device))
+                      .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))
+                      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey || ''))
+                      .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey ? dev.accessKey : conf.adminWeb.adminKey ? '<None> Please "Set Access Key" for this device' : '<None>'))
+                      .replace(/#styleName_AccessKey_disp\b/g, (dev.accessKey || !conf.adminWeb.adminKey) ? '' : 'errorWithTip')
+                      ;
+                }, ''/*initial joinedStr*/);
               }
             });
         break;
-      case '/jquery-2.0.3.js': //todo: delete
-        res.setHeader('Content-Type', 'text/javascript');
-        end(res, htmlCache['jquery-2.0.3.js']);
-        break;
       case '/stopServer':  //------------------------------------stop server management---------------------------------
         end(res, 'OK');
-        log(httpServer.logHead + 'stop on demand');
+        log('stop on demand');
+        httpServer.close();
+        process.streamWeb.close();
+        Object.keys(childProcPidMap).forEach(function (pid) {
+          log('kill child process pid_' + pid);
+          try {
+            process.kill(pid);
+          } catch (err) {
+            log('failed to kill process pid_' + pid + '. ' + stringifyError(err));
+          }
+        });
         setTimeout(function () {
-          process.exit(0);
+          if (Object.keys(recordingFileMap).length) {
+            log('there are ' + Object.keys(recordingFileMap).length + ' recording files have not been flushed. Wait...');
+            process.toBeExited = true; //let 'close' event handler of recording file to do the check
+          } else {
+            log('no problem. Now exit');
+            process.exit(0);
+          }
         }, 10);
         break;
       case '/restartAdb':  //------------------------------------restart ADB--------------------------------------------
-        end(res, 'OK');
         log(httpServer.logHead + 'restart ADB');
-        spawn('[stopAdb]', conf.adb, ['kill-server'],
+        spawn('[StopAdb]', conf.adb, ['kill-server'],
             function  /*on_close*/(/*ret, stdout, stderr*/) {
-              spawn('[startAdb]', conf.adb, ['start-server'],
+              spawn('[StartAdb]', conf.adb, ['start-server'],
                   function  /*on_close*/(/*ret, stdout, stderr*/) {
+                    end(res, 'OK');
                   });
             });
         break;
       case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
         loadResourceSync();
+        if (req.headers.referer) {
+          req.headers.referer = req.headers.referer || '/'; //just to avoid compiler warning
+          res.writeHead(302, {Location: req.headers.referer});
+        }
         end(res, 'OK');
         break;
-      case '/var':  //------------------------------change some config var----------------------------------
+      case '/var':  //------------------------------------------change some config var----------------------------------
         if (dynamicConfKeyList.some(function (k) {
-          return chkerrOptional(k, q[k], ['true', 'false']) ? true : false;
+          return chkerrOptional(k + '(optional)', q[k], ['true', 'false']);
         })) {
           return end(res, chkerr);
         }
+        var changed = false;
         dynamicConfKeyList.forEach(function (k) {
           if (q[k]) {
-            conf[k] = (q[k] === 'true');
+            var newVal = (q[k] === 'true');
+            if ((conf[k] ? true : false) !== newVal) {
+              conf[k] = newVal;
+              changed = true;
+            }
           }
         });
+        if (changed) {
+          status.appVer = nowStr();
+          setTimeout(pushStatusForAppVer, 50);
+        }
+        if (req.headers.referer) {
+          res.writeHead(302, {Location: req.headers.referer});
+        }
         end(res, 'OK');
+        break;
+      case '/useStreamWebIp':
+        if (chkerrRequired('ip', q.ip)) {
+          return end(res, chkerr);
+        }
+        if (conf.ipForHtmlLink !== q.ip) {
+          conf.ipForHtmlLink = isAnyIp(q.ip) ? '127.0.0.1' : q.ip;
+          status.appVer = nowStr();
+          setTimeout(pushStatusForAppVer, 50);
+        }
+        if (req.headers.referer) {
+          res.writeHead(302, {Location: req.headers.referer});
+        }
+        end(res, 'OK');
+        break;
+      case '/status':  //-----------------------------------push javascript to browser----------------------------------
+        res.setHeader('Content-Type', 'text/json');
+        res.previousVer = q.ver;
+        status.consumerMap[(res.consumerId = nowStr())] = res;
+        pushStatus();
+        res.on('close', function () { //closed without normal end(res,...)
+          delete status.consumerMap[res.consumerId];
+        });
+        break;
+      case '/getLog':  //----------------------------------------get log------------------------------------------------
+        var logFilePath = q.logDate === 'today' ? log.context.todayLogFilePath : log.context.yesterdayLogFilePath;
+        var size;
+        try {
+          size = fs.statSync(logFilePath).size;
+        } catch (err) {
+          return end(res, stringifyError(err));
+        }
+        q.logStart = Number(q.logStart) || 0;
+        q.logEnd = Number(q.logEnd) || size;
+        if (q.logStart < 0 && (q.logStart += size) < 0) {
+          q.logStart = 0;
+        }
+        if (q.logEnd < 0 && (q.logEnd += size) < 0) {
+          q.logEnd = 0;
+        }
+        if (q.logEnd < q.logStart) {
+          var tmp = q.logEnd;
+          q.logEnd = q.logStart;
+          q.logStart = tmp;
+        }
+        if (q.logStart > size) {
+          return end(res);
+        }
+        if (q.logEnd > size) {
+          q.logEnd = size;
+        }
+        if ((size = q.logEnd - q.logStart) === 0) {
+          return end(res);
+        }
+
+        conf.logStart = q.logStart;
+        conf.logEnd = q.logEnd;
+
+        if (q.logDownload === 'true') {
+          res.setHeader('Content-Disposition', 'attachment;filename=asc~' + require('path').basename(logFilePath)); //did contains extension name
+        }
+        res.setHeader('Content-Length', size);
+
+        fs.createReadStream(logFilePath, {start: q.logStart, end: q.logEnd})
+            .pipe(res)
+            .on('error', function (err) {
+              end(res, stringifyError(err));
+            });
+        break;
+      case '/prepareDeviceFile':  //--------------------------prepare device file forcibly -----------------------------
+        if (Object.keys(devMgr).length === 0) {
+          if (req.headers.referer) {
+            res.writeHead(302, {Location: req.headers.referer});
+          }
+          end(res, 'OK');
+        }
+        okAry = [];
+        errAry = [];
+        prepareDeviceFile.ver = getLocalToolFileHashSync();
+        Object.keys(devMgr).forEach(function (device, i, devAry) {
+          devMgr[device].didPrepare = false;
+          prepareDeviceFile(device, function /*on_complete*/(err) {
+                if (err) {
+                  errAry.push(devAry.length > 1 ? device + ': ' + err : err);
+                } else {
+                  okAry.push(devAry.length > 1 ? device + ' OK: ' : 'OK: ');
+                }
+                if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
+                  if (req.headers.referer) {
+                    res.writeHead(302, {Location: req.headers.referer});
+                  }
+                  if (okAry.length) {
+                    status.appVer = nowStr();
+                    setTimeout(pushStatusForAppVer, 50);
+                  }
+                  end(res, okAry.concat(errAry).join('\n'));
+                }
+              }
+          );
+        });
         break;
       default:
         end(res, 'bad request');
     }
-    return null; //just for avoiding compiler warning
+    return ''; //just to avoid compiler warning
   }
 }
 
-function loadResourceSync() {
-  uploadFile.ver = uploadFile.ver || fs.readdirSync(UPLOAD_LOCAL_DIR).reduce(function (joinedStr, filename) {
-    return joinedStr + fs.statSync(UPLOAD_LOCAL_DIR + '/' + filename).mtime.valueOf().toString(36) + '_';
+function getLocalToolFileHashSync() {
+  return fs.readdirSync(UPLOAD_LOCAL_DIR).reduce(function (joinedStr, filename) {
+    return joinedStr + require('crypto').createHash('sha1').update(fs.readFileSync(UPLOAD_LOCAL_DIR + '/' + filename)).digest('base64') + '_';
   }, ''/*initial joinedStr*/);
+}
+
+function loadResourceSync() {
+  prepareDeviceFile.ver = getLocalToolFileHashSync();
 
   fs.readdirSync('./html').forEach(function (filename) {
     htmlCache[filename] = fs.readFileSync('./html/' + filename).toString();
   });
 
+  overallCounterMap.recorded.bytes = 0;
   //scan recorded files to get device serial numbers ever used
   fs.readdirSync(conf.outputDir).forEach(function (filename) {
-    var match = filename.match(/^([^~]+)~/);
-    if (match) {
-      var device = querystring.unescape(match[1]);
-      if (!devMgr[device]) {
-        devMgr[device] = {};
-      }
+    var parts = filename.split('~');
+    if (parts.length === 4) {
+      getOrCreateDevCtx(querystring.unescape(parts[0])/*device serial number*/);
+      overallCounterMap.recorded.bytes += fs.statSync(conf.outputDir + '/' + filename).size;
     }
   });
+
+  status.appVer = nowStr();
+  pushStatusForAppVer();
 }
 
 checkAdb(
-    function/*on_ok*/() {
+    function/*on_complete*/() {
       startAdminWeb();
       startStreamWeb();
       loadResourceSync();
@@ -1498,25 +1803,52 @@ checkAdb(
 //done: sort recorded file by time
 //done: memory leak test on repeatedly view recorded file and view live capture
 //done: Fixed: Force firefox/safari refresh page when history back
-//done: check device existence for sampleHtmlToViewLiveCapture request
+//done: check device existence for liveViewer request
 //done: stress test live capture (animated PNG)
 //done: stress test live capture (webm)
 //done: test close http stream when downloading or playing
 //done: do not show recording file, only show latest recorded file
-//done: check device availability first in /sampleHtmlToViewRecordedFile or /sampleHtmlToViewLiveCapture
-//done: show streaming counter in menu page
+//done: check device availability first in /fileViewer or /liveViewer
+//done: show streamer in menu page
 //done: resize and rotate locally by html css3
 //done: add conf.maxRecordedFileSize limitation
 //done: support replay specified recorded file by fileIndex querystring( in number format or string format like 20140110_153928_704_000)
+//done: support view android cpu and memory usage
 
-//todo: test big file recording
+//done: push status to browser
+//done: main: show download log file link
+//done: recorded file viewer: show previous, next recorded file link
+//done: recorded file viewer: show absolute fileIndex (timestamp)
+//done: recorded file viewer: show download link
+//done: test: wait until all files have been flushed when exit
+//done: enable use different stream web ip for all concerned links in menu page. (From AdminTool)
+//done: close all children processes when exit
+//done: prevent multiple recording on same device
+//done: comparing file hash to check whether need upload to android
+//done: jsonFile: remove tail comment
+//done: local scale and rotate work together
+//done: push notification to admin browsers when server restart or internal configuration changes
+//done: AdminTool: provide a link button to forcibly upload files to all connected devices.
+//done: menu page should mask UI when server is not reachable
+
+//todo: should use busybox to compute file hash
+//todo: ffmpeg log enhance
+//todo: ffmpeg pipe seems only accept max 8359936 bytes. 01/28 18:54:39.022983[pid_16484][get-raw-image]write result:8359936 < requested 8847360. Continue writing rest data
+//todo: close existing ffmpeg processes in android by busybox
+//todo: get-raw-image write error: no such file or directory. Maybe need split write to multiple times.
+//todo: create shell script to start this application, download ffmpeg bin
+//todo: use "for ever" tool to start this server
+//todo: some device screen capture color confused
+//todo: show saved image in apng viewer
+//todo: enable save some image on server when in live viewing or recording
 //todo: apng stream split logic  (Firefox failed to play recorded file some times)
-//todo: test: on Windows OS, IE
+//todo: recording should not write partial png out
+//todo: IE does not support <button> inside <a>
+//todo: test: on Windows OS, IE again
 //todo: convert apng to mp4 so can control progress by viewer
 //todo: safari: multipart/x-mixed-replace
-//todo: kill orphan process
 //todo: join two webm file
-//todo: send webm video to browser and file at same time. Completely remove recordOption when sampleHtmlToViewLiveCapture
+//todo: enable webm live viewing and recording at same time. Completely remove recordOption when liveViewer
 //todo: adapt fps change without interrupting viewer
 //todo: use error image or video to show error
 //todo: water mark

@@ -1,0 +1,83 @@
+table {border-collapse: collapse}
+th {background-color: #e8e8e8}
+button {font-size: 1em}
+a {margin-left: 2px; margin-right: 2px; display: inline-block}
+form {margin-bottom: 2px}
+.errorWithTip {color: red}
+.infoWithTip {color: #0000C0}
+div.expandable {background-color: ghostwhite; border: 1px solid lightgray; border-bottom: 1px solid darkgray; z-index: 98}
+.expandable > * {display: none}
+.expandable > *:first-child {display:inline-block}
+span.expandable > *:first-child {text-decoration: underline}
+div.expandable > *:first-child {background-color: #ececec; height: 24px}
+div.expandable:hover {z-index: 99}
+.expandable:hover > * {display: inline-block}
+.expandable:hover > *:first-child {display: none}
+a.button {
+    font-size: 1em;
+    height: 20px;
+    text-decoration: none;
+    background-color: #EEEEEE;
+    color: #333333;
+    padding: 1px 6px 2px 6px;
+    border-top: 1px solid #CCCCCC;
+    border-right: 1px solid #333333;
+    border-bottom: 1px solid #333333;
+    border-left: 1px solid #CCCCCC;
+}
+.code {background-color: #f5f5f5; font-size: smaller}
+
+h4 {margin: 2px}
+td ul {margin: 0; padding: 0}
+td ul li {list-style-position: inside}
+a.internal {/*color: lightskyblue*/}
+a.confused {color: lightgray}
+a.caution {/*color: cadetblue*/}
+.toolbar {background-color: ghostwhite; z-index: 97;}
+label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: center}
+
+.viewer {
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+.rotate90 {
+    transform:rotate(90deg);
+    -webkit-transform:rotate(90deg);
+    -ms-transform:rotate(90deg);
+}
+.rotate270 {
+    transform:rotate(270deg);
+    -webkit-transform:rotate(270deg);
+    -ms-transform:rotate(270deg);
+}
+.scale50 {
+    transform:scale(0.5, 0.5);
+    -webkit-transform:scale(0.5, 0.5);
+    -ms-transform:scale(0.5, 0.5);
+}
+.scale25 {
+    transform:scale(0.25, 0.25);
+    -webkit-transform:scale(0.25, 0.25);
+    -ms-transform:scale(0.25, 0.25);
+}
+
+#darkMask {
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: rgba(128, 128, 128, 0.5);
+    pointer-events: auto; /*not transparent*/
+}
+
+#darkMask > div {
+    background-color: white;
+    color: red;
+    font-size: large;
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+}
