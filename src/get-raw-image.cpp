@@ -60,7 +60,7 @@ void _LOG(const char* format, ...) {
 
 #define LOG(fmt, arg...)      _LOG("[get-raw-image]" fmt "\n", ##arg)
 #define LOGERR(fmt, arg...)   _LOG("[get-raw-image][Error%d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
-#define ABORT(fmt, arg...)  ({_LOG("[get-raw-image][Error%d(%s)]" fmt "\nNow exit\n", errno, strerror(errno), ##arg); exit(1);})
+#define ABORT(fmt, arg...)  ({_LOG("[get-raw-image][Error%d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(1);})
 
 static int64_t microSecondOfNow() {
     struct timeval t;
@@ -305,9 +305,9 @@ int main(int argc, char** argv) {
             if (callCount > 0 ||request < rest) LOG("data is too big so try to write %d of rest %d", request, rest);
             int bytesWritten = write(STDOUT_FILENO, rawImageData+(rawImageSize-rest), request);
             if (bytesWritten < 0) {
-                ABORT("write result:%d but requested %d", bytesWritten, request);
+                ABORT("write() result:%d but requested %d", bytesWritten, request);
             } else if (bytesWritten < request) {
-                LOG("write result:%d < requested %d. errno %d(%s). Continue writing rest data", bytesWritten, request, errno, strerror(errno));
+                LOG("write() result:%d < requested %d. errno %d(%s). Continue writing rest data", bytesWritten, request, errno, strerror(errno));
             } else {
 //                if (callCount > 0) LOG("write %d OK", request);
             }

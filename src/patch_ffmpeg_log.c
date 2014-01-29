@@ -265,7 +265,7 @@ void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl)
     if (!didLog) {
         didLog = 1;
         atexit(on_exit);
-        fprintf(stderr, "%02d/%02d %02d:%02d:%02d.%06d[ffmpeg]started. pid %d",
+        fprintf(stderr, "%02d/%02d %02d:%02d:%02d.%06d[ffmpeg]started. pid %d\n",
             st->tm_mon+1,
             st->tm_mday,
             st->tm_hour,

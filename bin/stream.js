@@ -635,12 +635,9 @@ function capture(outputStream, q) {
                 }
               });
             });
-            childProc.stdout.on('end', function () {
-              forEachValueIn(provider.consumerMap, endCaptureConsumer, '');
-            });
             childProc.stderr.on('data', function (buf) {
               log(buf, {noNewLine: true, head: childProc.logHead});
-              forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'unexpected stderr output');
+              forEachValueIn(provider.consumerMap, endCaptureConsumer, toErrSentence(buf.toString()));
             });
           }
 
@@ -649,12 +646,7 @@ function capture(outputStream, q) {
               log(provider.logHead + 'detach live streamer');
               dev.liveStreamer = null;
             }
-            if (Object.keys(provider.consumerMap).length) { //this should not happen
-              log(provider.logHead + 'capture process exited but ' + (childProc.__didGetStdoutData ? 'consumers have not got "read end" notification' : 'consumers have not received any data') + '. Wait a bit...');
-              setTimeout(function () { //wait for completion of receiving stdout data
-                forEachValueIn(provider.consumerMap, endCaptureConsumer, 'capture process exited');
-              }, 250);
-            }
+            forEachValueIn(provider.consumerMap, endCaptureConsumer, res.__bytesWritten ? '' : 'capture process had internal error, exited without any output');
           });
         }
     ); //end of prepareDeviceFile
@@ -1831,6 +1823,9 @@ checkAdb(
 //done: AdminTool: provide a link button to forcibly upload files to all connected devices.
 //done: menu page should mask UI when server is not reachable
 
+//todo: some device crashes if live view full image
+//todo: sometimes ScreenshotClient::update just failed
+//todo: remove zero size file
 //todo: should use busybox to compute file hash
 //todo: ffmpeg log enhance
 //todo: ffmpeg pipe seems only accept max 8359936 bytes. 01/28 18:54:39.022983[pid_16484][get-raw-image]write result:8359936 < requested 8847360. Continue writing rest data
