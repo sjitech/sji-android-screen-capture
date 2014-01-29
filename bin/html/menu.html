@@ -1,0 +1,295 @@
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>SJI-ASC Management</title>
+  <style>
+    ul {padding: 0; margin: 2px;}
+    li {list-style-position: inside}
+    p {margin: 0}
+    table {width: 100%; border-collapse: collapse}
+    label.fillParent {display: inline-block; width: 100%; height: 100%}
+    .note {width: 100%; background-color: lightcyan}
+    th {background-color: lightgrey}
+    button {font-size: 1em; text-align: left}
+    .errorWithTip {color: red; font-weight: bold}
+    .infoWithTip {color: blue}
+    .midButton {width: 12em}
+    .expandable > li {display: none}
+    .expandable:hover > li {display: list-item}
+  </style>
+</head>
+<body onunload="">
+  <form action="/deviceControl" style="width: 100%; xborder: 1px solid blue">
+    <input type="hidden" name="adminKey" value="#adminKey"/>
+    <ul>Device Management (<b>for following checked devices</b>)
+      <li style="display: #show_ifAdminKey">
+        <button type="submit" name="action" value="setAccessKey" class="midButton">Set Access Key</button>
+        <label title="Access Key is used as querystring accessKey=theKey of URL when access device's live capture or recorded files">
+          <input type="text" name="accessKey" size="36" value=""/>
+          <span class="infoWithTip">?</span>
+        </label>
+        <button type="submit" name="action" value="unsetAccessKey" class="midButton" style="float:right">Unset Access Key</button>
+      </li>
+      <li>
+        <button type="submit" name="action" value="startRecording" class="midButton">Start Recording</button>
+        <label>
+          <label class="infoWithTip" title="Use multipart/x-mixed-replace response. Supported by Chrome, Firefox, IE10+">
+            <input type="radio" name="type" value="apng" checked/>Animated PNG Image
+          </label>
+          <label class="infoWithTip" title="Use google VP8 video format. Supported by Chrome(Fast), Firefox(but slow)">
+            <input type="radio" name="type" value="webm"/>WebM Video
+          </label>
+          <input type="hidden" name="fps" value="#fps"/><!--only used for "Start Recording"-->
+          <input type="hidden" name="scale" value="#scale"/><!--only used for "Start Recording"-->
+          <input type="hidden" name="rotate" value="#rotate"/><!--only used for "Start Recording"-->
+        </label>
+        <span style="float: right">
+          <button type="submit" name="action" value="stopRecording" class="midButton">Stop Recording</button>
+          <button type="submit" name="action" value="deleteRecordedFiles" class="midButton">Delete Recorded File</button>
+        </span>
+      </li>
+    </ul>
+    <p class="errorWithTip" title="Please confirm that Android Device is connected to this machine by USB or adb connect ip:port. But anyway, it will list any device serial number from ever recorded files">
+      #dev_enum_err
+    </p>
+    <table border="1" id="device_tbl">
+      <tr>
+        <th><label class="fillParent"><input type="checkbox" id="device_chkAll" checked/></label></th>
+        <th>
+          <span class="infoWithTip" title="Android device connected actually or scanned from recorded files">Device</span>
+        </th>
+        <th>Animated PNG Image</th>
+        <th>WebM Video</th>
+      </tr>
+      <!--repeatBegin-->
+      <tr>
+        <td align="center" valign="middle">
+          <label class="fillParent"><input type="checkbox" name="device" value="#device" class="device_chk" checked/></label>
+        </td>
+        <td align="left" valign="top">
+          <p class="note" title="SN is the Device Serial Number. You can confirm it by &quot;adb devices&quot; command">
+            <span class="infoWithTip">SN</span>:
+            #device
+          </p>
+          <p class="note" title="Access Key is used as querystring accessKey=theKey of URL when access device's live capture or recorded files" style="display: #show_ifAdminKey">
+            <span class="infoWithTip">Key</span>:
+            <span class="#styleName_AccessKey_disp">#accessKey_disp</span>
+          </p>
+          <p class="#devinfo_class" title="&quot;Unknown&quot; means timeout or device is offline or not authenticated or invalid serial number">
+            #devinfo
+          </p>
+          <ul>
+            <li><a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=png&scale=@scale&rotate=@rotate" target="screenshot #device">Screenshot (PNG)</a></li>
+            <li><a href="/getInternalLog?adminKey=@adminKey&device=@device" target="asc_log_#device" style="font-size: smaller">Android-Side Utility Log</a></li>
+            <li><a href="/getDeviceCpuMemTop?adminKey=@adminKey&device=@device" target="asc_top_#device" style="font-size: smaller">Android-Side CPU Memory Top</a></li>
+          </ul>
+        </td>
+        <td align="left" valign="top" nowrap>
+          <p class="note">Is Recording ? #isRecording_apng</p>
+          <p class="note">Streaming Count: #streamingCount_apng</p>
+          <ul>
+            <li><a href="@stream_web/sampleHtmlToViewLiveCapture?device=@device&accessKey=@accessKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device">Live View</a></li>
+            <li>Recorded File:
+              <a href="@stream_web/sampleHtmlToViewRecordedFile?device=@device&accessKey=@accessKey&type=apng&fileIndex=&fps=@fps" target="replay #device">View</a>
+              <a href="@stream_web/downloadRecordedFile?device=@device&accessKey=@accessKey&type=apng&fileIndex=" target="asc download">Download</a>
+            </li>
+          </ul>
+        </td>
+        <td align="left" valign="top" nowrap>
+          <p class="note">Is Recording ? #isRecording_webm</p>
+          <p class="note">Streaming Count: #streamingCount_webm</p>
+          <ul>
+            <li><a href="@stream_web/sampleHtmlToViewLiveCapture?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device">Live View (Stop Recording)</a></li>
+            <li><a href="@stream_web/sampleHtmlToViewLiveCapture?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate&recordOption=sync" target="live view #device">Live View & Record until close view</a></li>
+            <li><a href="@stream_web/sampleHtmlToViewLiveCapture?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate&recordOption=async" target="live view #device">Live View & Record in background</a></li>
+            <li>Recorded File:
+              <a href="@stream_web/sampleHtmlToViewRecordedFile?device=@device&accessKey=@accessKey&type=webm&fileIndex=" target="replay #device">View</a>
+              <a href="@stream_web/downloadRecordedFile?device=@device&accessKey=@accessKey&type=webm&fileIndex=" target="asc download">Download</a>
+            </li>
+          </ul>
+        </td>
+      </tr>
+      <!--repeatEnd-->
+      <tr style="display: #show_ifAdminKey">
+        <td></td>
+        <td align="left" valign="top" colspan="3">
+          <label title="SN is the Device Serial Number. You can confirm it by &quot;adb devices&quot; command">
+            <span class="infoWithTip">SN</span>:
+            <input type="text" name="device" size="28" value=""/>
+            You can manually add device SN to use "Set Access Key"
+          </label>
+        </td>
+      </tr>
+    </table>
+  </form>
+  <ul>Parameter Adjustment for links and buttons
+    <li>
+      <form action="/" style="display: inline">
+        <input type="hidden" name="adminKey" value="#adminKey"/>
+        <button type="submit">Use</button>
+        <label title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
+          <span class="infoWithTip">Fps(Rate)</span>:
+          <input type="text" name="fps" size="2" value="#fps"/>,
+        </label>
+        <label title="Example: 0.5 or 800x400 or 800x or x400">
+          <span class="infoWithTip">Scale</span>:
+          <input type="text" name="scale" size="10" value="#scale"/>,
+        </label>
+        <label>Rotate:
+          <label><input type="radio" name="rotate" value=""/>0°</label>
+          <label><input type="radio" name="rotate" value="90"/>90°</label>
+          <label><input type="radio" name="rotate" value="270"/>270°</label>
+        </label>
+      </form>
+    </li>
+  </ul>
+  <hr/>
+  <p>
+    For more information, please move mouse to <span class="infoWithTip" style="font-size: larger; font-weight: bold">blue</span>
+    or <span class="errorWithTip" style="font-size: larger; font-weight: bold">red</span>
+    keyword text(not link) and stay a second then you can see tip.
+  </p>
+  <ul class="expandable" style="position: fixed; bottom: 0; left: 0; background-color: white">
+    <span class="infoWithTip note">How to ...</span>
+    <li style="display: #hide_ifAdminKey">
+      <span class="note infoWithTip">To Enable Authentication on Stream Web...</span>
+      <ul>
+        <li>
+          Set <b style="color:blue">adminKey</b> in stream.json file to any string you like. Example: "adminKey": "xxxx"
+        </li>
+        <li>
+          Restart this application.
+        </li>
+        <li>
+          Open this menu page by the URL appended with adminKey=yourAdminKey querystring. Example: https://127.0.0.1/?adminKey=xxxx
+        </li>
+        <li>
+          Use "Set Access Key" to attach access key to selected devices.
+          (The Access Key is used as querystring accessKey=theKey of URL when access device's live capture or recorded files)
+        </li>
+      </ul>
+    </li>
+    <li style="display: #show_ifStreamWebLocal">
+      <span class="note infoWithTip">To Enable Remote Access to Stream Web...</span>
+      <ul>
+        <li>
+          Set ip = "*" or some explicit IP address in stream.json file.
+        </li>
+        <li>
+          Optionally, set ssl.on = true to Enable SSL on Stream Web.
+        </li>
+        <li>
+          Restart this application.
+        </li>
+      </ul>
+    </li>
+    <li style="display: #hide_ifStreamWebSSL">
+      <span class="note infoWithTip" >To Enable SSL on Stream Web...</span>
+      <ul>
+        <li>
+          Set ssl.on = true in stream.json file.
+        </li>
+        <li>
+          Optionally, configure certificateFilePath or replace PKCS12 file ./ssl/StreamWeb.pfx with yours.
+        </li>
+        <li>
+          Restart this application.
+        </li>
+      </ul>
+    </li>
+    <li style="display: #show_ifAdminWebLocal">
+      <span class="note infoWithTip">To Enable Remote Access to Admin Web...</span>
+      <ul>
+        <li>
+          Set adminWeb.ip = "*" or some explicit IP address in stream.json file.
+        </li>
+        <li>
+          Optionally, set adminWeb.ssl.on = true to Enable SSL on Admin Web.
+        </li>
+        <li>
+          Restart this application.
+        </li>
+      </ul>
+    </li>
+    <li style="display: #hide_ifAdminWebSSL">
+      <span class="note infoWithTip" >To Enable SSL on Admin Web...</span>
+      <ul>
+        <li>
+          Set adminWeb.ssl.on = true in stream.json file.
+        </li>
+        <li>
+          Optionally, configure adminWeb.certificateFilePath or replace PKCS12 file ./ssl/AdminWeb.pfx with yours.
+        </li>
+        <li>
+          Restart this application.
+        </li>
+      </ul>
+    </li>
+  </ul>
+  <ul class="expandable" style="position: fixed; bottom: 0; right: 0; background-color: white">
+    <span class="infoWithTip note">Advanced Server Management...</span>
+    <li style="margin-bottom: 8px">
+      <a href="/stopServer?adminKey=@adminKey"><button style="color: red" class="midButton">Stop Server</button></a>
+      <a href="/restartAdb?adminKey=@adminKey"><button style="color: red" class="midButton">Restart ADB</button></a>
+    </li>
+    <li>
+      <a href="/reloadResource?adminKey=@adminKey"><button>Reload/Rescan Resource...</button></a>
+      <span class="infoWithTip" title="Reload Html template, JavaScript, Rescan device SN from recorded files...">?</span>
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&ffmpegStatistics=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&ffmpegStatistics=false"><button>Disable</button></a>
+      Android-Side Utility Statistics Log
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&remoteLogAppend=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&remoteLogAppend=false"><button>Disable</button></a>
+      Android-Side Utility Append Mode Log
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&logHttpReqAddr=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&logHttpReqAddr=false"><button>Disable</button></a>
+      Log HTTP Request IP And Port
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&reloadDevInfo=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&reloadDevInfo=false"><button>Disable</button></a>
+      Reload Device Info Forcibly On Menu
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&logAPNGProgress=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&logAPNGProgress=false"><button>Disable</button></a>
+      Log Animated PNG Progress
+    </li>
+    <li>
+      <a href="/var?adminKey=@adminKey&logStreamWrite=true"><button>Enable</button></a>
+      <a href="/var?adminKey=@adminKey&logStreamWrite=false"><button>Disable</button></a>
+      Log Stream Write Bytes
+    </li>
+  </ul>
+  <script src="./jquery-2.0.3.js?adminKey=@adminKey" type="text/javascript"></script>
+  <script>
+    setTimeout(function(){
+      var $device_chk = $('.device_chk'), count = $device_chk.length, chkSum = 0;
+      var $device_chkAll = $('#device_chkAll');
+
+      $device_chk.each(function(){
+        chkSum += $.prop(this, 'checked') ? 1 : 0;
+      });
+      $device_chkAll.prop('checked', chkSum===count && count);
+      $device_chkAll.prop('indeterminate', chkSum!==count &&chkSum!==0);
+
+      $device_chkAll.click(function(){
+        $device_chk.prop('checked', $.prop(this, 'checked'));
+        chkSum = count;
+      });
+
+      $device_chk.click(function(){
+        chkSum += $.prop(this, 'checked') ? 1 : -1;
+        $device_chkAll.prop('checked', chkSum===count);
+        $device_chkAll.prop('indeterminate', chkSum!==count &&chkSum!==0);
+      });
+    });
+  </script>
+</body>
+</html>

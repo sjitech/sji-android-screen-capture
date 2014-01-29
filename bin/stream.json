@@ -1,0 +1,68 @@
+//NOTE: this file support //comment from LINE HEAD.
+
+{
+  //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
+  "adb": "adb",
+
+  //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege.
+  "port": 33333,
+
+  //Stream Web public IP. Empty string, "*", "0.0.0.0" both means listen all network interfaces
+  "ip": "127.0.0.1",
+
+  //Stream Web SSL
+  "ssl": {
+    //true means use HTTPS (TLSv2), false means HTTP.
+    "on": false,
+
+    //when ssl.on is true, this setting indicate path of the PKCS12 file which contains server private key and certification.
+    //Currently there a test file there, please replace it with yours.
+    "certificateFilePath": "./ssl/stream_server.pfx"
+  },
+
+  //Admin Web. By this web you can set access key of device, so stream web can check querystring "accessKey"
+  "adminWeb": {
+    //************access key of admin web server************************
+    "adminKey": "",
+
+    //Admin Web public port (must < 65536). For port < 1024, your need to have root privilege.
+    "port": 3000,
+
+    //Admin Web public IP. Empty string, "*", "0.0.0.0" both means listen all network interfaces
+    "ip": "127.0.0.1",
+
+    //Admin Web SSL
+    "ssl": {
+      //true means use HTTPS (TLSv2), false means HTTP.
+      "on": false,
+
+      //when ssl.on is true, this setting indicate path of the PKCS12 file which contains server private key and certification.
+      //Currently there a test file there, please replace it with yours.
+      "certificateFilePath": "./ssl/admin_server.pfx"
+    }
+  },
+
+  //recorded files dir
+  "outputDir": "./output",
+
+  //max recorded file size
+  "maxRecordedFileSize": 4096000000,
+
+  //accept request from XmlHttpRequest of Browser
+  "supportXmlHttpRequest": true,
+
+  "android": {
+    "ffmpeg": {
+      //output statistics to log
+      "logStatistics": false
+    }
+  },
+
+  "log": {
+    //Deleting this option or set to null or empty string both means log to stderr(usually means console)
+    "filePath": "./log/log.txt",
+
+    //only valid if filePath is not empty. Should be >= 1
+    "backupDays": 7
+  }
+}
