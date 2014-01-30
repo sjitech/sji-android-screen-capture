@@ -22,6 +22,10 @@
 
 #define FRAME_BUFFER_DEV "/dev/graphics/fb0"
 
+#define LOG(fmt, arg...)      _LOG("[get-raw-image]" fmt "\n", ##arg)
+#define LOGERR(fmt, arg...)   _LOG("[get-raw-image][Error%d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
+#define ABORT(fmt, arg...)  ({_LOG("[get-raw-image][Error%d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(1);})
+
 void _LOG(const char* format, ...) {
     char buf[4096];
     int cnt;
@@ -58,10 +62,6 @@ void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
-#define LOG(fmt, arg...)      _LOG("[get-raw-image]" fmt "\n", ##arg)
-#define LOGERR(fmt, arg...)   _LOG("[get-raw-image][Error%d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
-#define ABORT(fmt, arg...)  ({_LOG("[get-raw-image][Error%d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(1);})
-
 static int64_t microSecondOfNow() {
     struct timeval t;
     gettimeofday(&t, NULL);
@@ -82,7 +82,7 @@ template <typename T> class sp {
 public:
     union{
         T* m_ptr;
-        char data[32];
+        char data[64];
     };
 };
 
@@ -95,7 +95,7 @@ class ScreenshotClient {
     uint32_t mHeight;
     PixelFormat mFormat;
     */
-    char data[64];
+    char data[1024];
 public:
     ScreenshotClient();
 
@@ -143,7 +143,12 @@ int main(int argc, char** argv) {
     bool isGetFormat = false;
     bool forceUseFbFormat = false;
     const char* tmps;
-    int width, height;
+    int width, height, bytesPerPixel;
+
+    //for fb0
+    int fb = -1;
+    char* mapbase = NULL;
+    size_t lastMapSize = 0;
 
     if (argc>1) {
         double fps = atof(argv[1]);
@@ -163,9 +168,6 @@ int main(int argc, char** argv) {
         forceUseFbFormat = true;
     }
 
-    int fb = -1;
-    char* mapbase = NULL;
-
 #if defined(TARGET_JB) || defined(TARGET_ICS)
     LOG("call ScreenshotClient init");
     ScreenshotClient screenshot;
@@ -178,7 +180,6 @@ int main(int argc, char** argv) {
         LOGERR("failed to getBuiltInDisplay. So use fb0");
 #endif
 
-    int errcount = 0;
     //LOG(isGetFormat ? "capture once" : "start capture");
     int64_t count_start_mms = microSecondOfNow();
     int64_t until_mms = count_start_mms + interval_mms;
@@ -190,22 +191,27 @@ int main(int argc, char** argv) {
 
 #if defined(TARGET_JB) || defined(TARGET_ICS)
         bool surfaceOK = false;
+        uint32_t status;
 #endif
 
 #if defined(TARGET_JB)
         if (!forceUseFbFormat) {
             if (display.m_ptr != NULL) {
-                if (count==1) LOG("call ScreenshotClient.update(display)");
-                surfaceOK = (screenshot.update(display) == 0);
-                if (!surfaceOK) if (++errcount<10||errcount%100==0) LOGERR("failed to ScreenshotClient.update(display). So use fb0");
+                if (count==1) LOG("call ScreenshotClient.update(mainDisplay)");
+                status = screenshot.update(display);
+                surfaceOK = (status == 0);
+                if (!surfaceOK)
+                    LOG("Error: failed to ScreenshotClient.update(mainDisplay). Result:%d. So use fb0 alternatively, maybe not useful", status);
             }
         }
 #endif
 #if defined(TARGET_ICS)
         if (!forceUseFbFormat) {
             if (count==1) LOG("call ScreenshotClient.update()");
-            surfaceOK = (screenshot.update() == 0);
-            if (!surfaceOK) if (++errcount<10||errcount%100==0) LOGERR("failed to ScreenshotClient.update(). So use fb0");
+            status = screenshot.update();
+            surfaceOK = (status == 0);
+            if (!surfaceOK)
+                LOG("Error: failed to ScreenshotClient.update(). Result:%d. So use fb0 alternatively, maybe not useful", status);
         }
 #endif
 #if defined(TARGET_JB) || defined(TARGET_ICS)
@@ -214,10 +220,14 @@ int main(int argc, char** argv) {
             rawImageSize = screenshot.getSize();
             width = screenshot.getWidth();
             height = screenshot.getHeight();
+            bytesPerPixel = rawImageSize/width/height;
+            int fmt = screenshot.getFormat();
+            if (count==1) {
+                LOG("ScreenshotClient.update result: imageSize:%d w:%d h:%d bytesPerPixel:%d fmt:%d",
+                 rawImageSize, width, height, bytesPerPixel, fmt);
+            }
 
             if (isGetFormat) {
-                int fmt = screenshot.getFormat();
-                int bytesPerPixel = rawImageSize/width/height;
                 printf("-s %dx%d -pix_fmt %s\n", width, height,
                     (bytesPerPixel==4) ? "rgb0" :
                     (bytesPerPixel==3) ? "rgb24" :
@@ -225,7 +235,7 @@ int main(int argc, char** argv) {
                     (bytesPerPixel==5) ? "rgb48le" :
                     (bytesPerPixel==6) ? "rgba64le" :
                     (LOG("strange bytesPerPixel:%d", bytesPerPixel),"unknown"));
-                LOG("end. w:%d h:%d fmt:%d bytesPerPixel:%d", width, height, fmt, bytesPerPixel);
+                LOG("end");
                 return 0;
             }
         } else
@@ -233,22 +243,39 @@ int main(int argc, char** argv) {
         {
             if (fb < 0) {
                 fb = open(FRAME_BUFFER_DEV, O_RDONLY);
-                if (fb < 0) {
-                    if (++errcount<10) ABORT("open fb0");
-                    if (errcount%100==0) errcount=0;
-                }
+                if (fb < 0)
+                    ABORT("open fb0");
             }
 
             struct fb_var_screeninfo vinfo;
-            if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-                if (++errcount<10) ABORT("ioctl fb0");
-                if (errcount%100==0) errcount=0;
-            }
+            if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0)
+                ABORT("ioctl fb0");
+
             width = vinfo.xres;
             height = vinfo.yres;
+            bytesPerPixel = vinfo.bits_per_pixel/8;
+            rawImageSize = (width*height) * bytesPerPixel;
+
+            if (count==1) {
+                LOG("FBIOGET_VSCREENINFO result: imageSize:%d w:%d h:%d bytesPerPixel:%d virtualW:%d virtualH:%d"
+                    " bits:%d"
+                    " R:(offset:%d length:%d msb_right:%d)"
+                    " G:(offset:%d length:%d msb_right:%d)"
+                    " B:(offset:%d length:%d msb_right:%d)"
+                    " A:(offset:%d length:%d msb_right:%d)"
+                    " grayscale:%d nonstd:%d rotate:%d",
+                    rawImageSize, width, height, bytesPerPixel, vinfo.xres_virtual, vinfo.yres_virtual
+                    ,vinfo.bits_per_pixel
+                    ,vinfo.red.offset, vinfo.red.length, vinfo.red.msb_right
+                    ,vinfo.green.offset, vinfo.green.length, vinfo.green.msb_right
+                    ,vinfo.blue.offset, vinfo.blue.length, vinfo.blue.msb_right
+                    ,vinfo.transp.offset, vinfo.transp.length, vinfo.transp.msb_right
+                    ,vinfo.grayscale, vinfo.nonstd, vinfo.rotate
+                    );
+            }
 
             if (isGetFormat) {
-                printf("-s %dx%d -pix_fmt %s\n", vinfo.xres, vinfo.yres,
+                printf("-s %dx%d -pix_fmt %s\n", width, height,
                     (vinfo.bits_per_pixel==32&&vinfo.red.offset==0) ? "rgb0" :
                     (vinfo.bits_per_pixel==32&&vinfo.red.offset!=0) ? "bgr0" :
                     (vinfo.bits_per_pixel==24&&vinfo.red.offset==0) ? "rgb24" :
@@ -260,44 +287,44 @@ int main(int argc, char** argv) {
                     (vinfo.bits_per_pixel==64&&vinfo.red.offset==0) ? "rgba64le" :
                     (vinfo.bits_per_pixel==64&&vinfo.red.offset!=0) ? "bgra64le" :
                     (LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"));
-                LOG("end. fbinfo: bits:%d"
-                    " R:(offset:%d length:%d msb_right:%d)"
-                    " G:(offset:%d length:%d msb_right:%d)"
-                    " B:(offset:%d length:%d msb_right:%d)"
-                    " A:(offset:%d length:%d msb_right:%d)"
-                    " grayscale:%d nonstd:%d rotate:%d"
-                    ,vinfo.bits_per_pixel
-                    ,vinfo.red.offset, vinfo.red.length, vinfo.red.msb_right
-                    ,vinfo.green.offset, vinfo.green.length, vinfo.green.msb_right
-                    ,vinfo.blue.offset, vinfo.blue.length, vinfo.blue.msb_right
-                    ,vinfo.transp.offset, vinfo.transp.length, vinfo.transp.msb_right
-                    ,vinfo.grayscale, vinfo.nonstd, vinfo.rotate
-                    );
+                LOG("end");
                 return 0;
             }
             else {
-                int bytesPerPixel = vinfo.bits_per_pixel/8;
-
-                if (mapbase==NULL) {
-                    int virtualSize = vinfo.xres_virtual*vinfo.yres_virtual*bytesPerPixel;
-                    mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, fb, 0);
-                    if (mapbase==NULL) {
-                        if (++errcount<10) ABORT("mmap %d", virtualSize);
-                        if (errcount%100==0) errcount=0;
-                    }
+                uint32_t offset =  (vinfo.xoffset + vinfo.yoffset*width) *bytesPerPixel;
+                int virtualSize = vinfo.xres_virtual*vinfo.yres_virtual*bytesPerPixel;
+                if (offset+rawImageSize > virtualSize) {
+                    LOG("Strange! offset:%d+rawImageSize:%d > virtualSize:%d", offset, rawImageSize, virtualSize);
+                    virtualSize = offset+rawImageSize;
                 }
 
-                uint32_t offset =  (vinfo.xoffset + vinfo.yoffset*vinfo.xres) *bytesPerPixel;
+                if (virtualSize > lastMapSize) {
+                    if (mapbase) {
+                        LOG("remap due to virtualSize %d is bigger than previous %d", virtualSize, lastMapSize);
+                        munmap(mapbase, lastMapSize);
+                        mapbase = NULL;
+                    }
+                    lastMapSize = virtualSize;
+                }
+
+                if (mapbase==NULL) {
+                    mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, fb, 0);
+                    if (mapbase==NULL)
+                        ABORT("mmap %d", virtualSize);
+                }
+
+
                 rawImageData = mapbase + offset;
-                rawImageSize = (vinfo.xres*vinfo.yres) * bytesPerPixel;
             }
         }
 
         if (count==1) { //when first time, set SIGPIPE handler to default (terminate)
-            signal(SIGPIPE, on_SIGPIPE);
+            signal(SIGPIPE, on_SIGPIPE); //this is very important!!! If not set, write will be very slow if data is too big
+            LOG("rawImageSize:%d", rawImageSize);
         }
 
         #define MAX_WRITE_SIZE (32*1024*1024)
+//        #define MAX_WRITE_SIZE (4*1024*1024)
         int rest = rawImageSize;
         int callCount = 0;
         while (rest > 0) {
@@ -305,16 +332,16 @@ int main(int argc, char** argv) {
             if (callCount > 0 ||request < rest) LOG("data is too big so try to write %d of rest %d", request, rest);
             int bytesWritten = write(STDOUT_FILENO, rawImageData+(rawImageSize-rest), request);
             if (bytesWritten < 0) {
-                ABORT("write() result:%d but requested %d", bytesWritten, request);
+                ABORT("write() requested:%d", request);
             } else if (bytesWritten < request) {
-                LOG("write() result:%d < requested %d. errno %d(%s). Continue writing rest data", bytesWritten, request, errno, strerror(errno));
+                LOGERR("write() result:%d < requested:%d. Continue writing rest data", bytesWritten, request);
             } else {
 //                if (callCount > 0) LOG("write %d OK", request);
             }
             rest -= bytesWritten;
             callCount++;
         }
-        if (callCount > 1) LOG("write %d finished", rawImageSize);
+        if (callCount > 1) LOG("write() finished. total:%d", rawImageSize);
 
         if (interval_mms==-1) {
             LOG("stop due to fps argument is 0");
