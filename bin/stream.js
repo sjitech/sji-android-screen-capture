@@ -136,7 +136,7 @@ function toErrSentence(s) {
   return 'error: ' + s;
 }
 function removeNullChar(s) {
-  return !s ? '' : s.replace(/\0/, '');
+  return !s ? '' : s.replace(/\0/g, '');
 }
 
 function htmlEncode(text) {
