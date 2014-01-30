@@ -379,9 +379,8 @@ function prepareDeviceFile(device, on_complete) {
     return;
   }
   spawn('[CheckDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat(
-      'echo', '-n', '====;',
-      'cat', ANDROID_WORK_DIR + '/version',
-      (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log', '`'),
+      'echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null',
+      '`'),
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr || !stdout) {
           on_complete(toErrSentence(stderr) || 'unknown error: failed to check device');
@@ -1666,6 +1665,8 @@ function startAdminWeb() {
         } catch (err) {
           return end(res, stringifyError(err));
         }
+        var haveLogStart = q.logStart !== undefined;
+        var haveLogEnd = q.logEnd !== undefined;
         q.logStart = Number(q.logStart) || 0;
         q.logEnd = Number(q.logEnd) || size;
         if (q.logStart < 0 && (q.logStart += size) < 0) {
@@ -1689,8 +1690,12 @@ function startAdminWeb() {
           return end(res);
         }
 
-        conf.logStart = q.logStart;
-        conf.logEnd = q.logEnd;
+        if (haveLogStart) {
+          conf.logStart = q.logStart;
+        }
+        if (haveLogEnd) {
+          conf.logEnd = q.logEnd;
+        }
 
         if (q.logDownload === 'true') {
           res.setHeader('Content-Disposition', 'attachment;filename=asc~' + require('path').basename(logFilePath)); //did contains extension name
