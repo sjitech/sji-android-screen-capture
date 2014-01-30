@@ -1556,7 +1556,7 @@ function startAdminWeb() {
                   var dev = devMgr[device];
                   return joinedStr + htmlRow //do some device concerned replace
                       .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
-                      .replace(/#devinfo_class\b/g, htmlEncode(dev.info ? '' : 'errorWithTip'))
+                      .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (deviceList.indexOf(device) >= 0 ? '' : ' disconnected'))
                       .replace(/#device\b/g, htmlEncode(device))
                       .replace(/@device\b/g, querystring.escape(device))
                       .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))

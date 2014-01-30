@@ -15,6 +15,7 @@
     .streamingIndicator {background-color: blue; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
     .recordingIndicator {background-color: #0000A0; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
     #totalRecordedFileSize.highlight {color: blue; font-weight: bold}
+    .disconnected {background-color: ghostwhite}
   </style>
 </head>
 <body onunload="">
@@ -114,7 +115,7 @@
       </tr>
       <tr>
         <td rowspan="2" colspan="2" style="text-align: left; vertical-align: middle; border-top: 1px dashed lightgray">
-          <div class="#devinfo_class" title="If it is &quot;Unknown&quot; it means timeout or device is offline or not authenticated(Please check whether there is a popup displaying in android) or just an invalid serial number">
+          <div class="#devinfo_class" title="Gray means disconnected device. &quot;Unknown&quot; means timeout or device is offline or not authenticated(Please check whether there is a popup displaying in android) or just an invalid serial number">
             #devinfo
           </div>
           <a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=png&scale=@scale&rotate=@rotate" target="screenshot #device" class="caution" title="This action is slow! Do NOT use this frequently when Recording or Live Viewing! You can use &quot;Save&quot; button in in Live View page">
