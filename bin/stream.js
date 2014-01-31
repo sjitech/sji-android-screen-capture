@@ -283,10 +283,10 @@ function end(res, dataStrOfBuf) {
       res.removeHeader('Content-Length');
       res.removeHeader('Content-Disposition');
     }
-  }
-  if (res.logHead) {
-    var s = dataStrOfBuf === undefined ? '' : String(dataStrOfBuf).replace(/\n[ \t]*/g, ' ');
-    log(res.logHead + 'end' + (s ? (' with data: ' + (s.length > 50 ? s.slice(0, 50) + '...' : s)) : ''));
+    if (res.logHead) {
+      var s = dataStrOfBuf === undefined ? '' : String(dataStrOfBuf).replace(/\n[ \t]*/g, ' ');
+      log(res.logHead + 'end' + (s ? (' with data: ' + (s.length > 50 ? s.slice(0, 50) + '...' : s)) : ''));
+    }
   }
 
   res.end(dataStrOfBuf);
@@ -633,7 +633,7 @@ function capture(outputStream, q) {
             provider.logHead = provider.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
 
             if (aimgVideoTypeSet[provider.type]) { //for apng, ajpg
-              provider.aimgDecoder = aimgCreateContext(provider.type);
+              provider.aimgDecoder = aimgCreateContext(q.device, provider.type);
             }
 
             childProc.stdout.on('data', function (buf) {
@@ -782,7 +782,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
           res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + q.type);
           res.setHeader('Content-Length', stats.size);
         } else if (aimgVideoTypeSet[q.type]) {
-          rfile.aimgDecoder = aimgCreateContext(q.type);
+          rfile.aimgDecoder = aimgCreateContext(q.device, q.type);
           rfile.startTimeMs = Date.now();
         }
         updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
@@ -990,12 +990,11 @@ function pushStatusForAppVer() {
 }
 
 var AIMG_STATE_SIMPLE_READ = 0, AIMG_STATE_FIND_PATTERN = 1;
-function aimgCreateContext(type) {
+function aimgCreateContext(device, type) {
   var context = {};
   //public area
-  context.wholeImageBuf = null;
   context.frameIndex = 0;
-  context.id = type + 'Decoder' + nowStr();
+  context.id = querystring.escape(device) + '@' + type + 'Decoder' + nowStr();
 
   //private area
   context.type = type;
@@ -1090,7 +1089,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
   }
 
   function writeWholeImage() {
-    context.wholeImageBuf = Buffer.concat(context.bufAry);
+    var wholeImageBuf = Buffer.concat(context.bufAry);
     context.bufAry = [];
     aimgInitState(context);
 
@@ -1102,7 +1101,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
       }
 
-      write(res, context.wholeImageBuf); //do not clear wholeImageBuf. Let it be used later for "Save Current Image" functionality
+      write(res, wholeImageBuf);
 
       if (isLastFrame) {
         end(res);
@@ -1116,13 +1115,14 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
     try {
       if (conf.logImageDecoderDetail) {
-        log('dump ' + filename);
+        log('dump ' + filename + ' length:' + wholeImageBuf.length);
       }
-      fs.writeFileSync(conf.outputDir + '/' + filename, context.wholeImageBuf);
+      fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
     } catch (err) {
-      log('[' + context.id + '_frame_' + context.frameIndex + ']' + 'failed to write file. ' + stringifyError(err));
+      log('failed to write ' + filename + ' ' + stringifyError(err));
     }
 
+    wholeImageBuf = null;
     context.frameIndex++;
   }
 } //end of aimgDecode()
@@ -1157,7 +1157,7 @@ function cleanOldImageFile() {
       log('[cleanOldImageFile]readdir ' + stringifyError(err));
     } else {
       filenameAry.forEach(function (filename) {
-        var match = filename.match(/^\w+Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/);
+        var match = filename.match(/^[^~]+Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/);
         if (match) {
           if (match[1] < maxTimestamp) {
             if (conf.logImageDecoderDetail) {
@@ -1176,9 +1176,9 @@ function cleanOldImageFile() {
   });
 }
 
-function saveImage(res, device, fileIndex) {
-  var goodName = querystring.escape(device) + '~' + fileIndex;
-  log('[saveImage]rename ' + fileIndex + ' to ' + goodName);
+function saveImage(res, fileIndex) {
+  var goodName = fileIndex.replace('@', '~'); //replace first @ to ~ to prevent from being deleted
+  log('[saveImage]rename ' + fileIndex + ' to replace(@,~)');
   try {
     fs.renameSync(conf.outputDir + '/' + fileIndex, conf.outputDir + '/' + goodName);
     end(res, 'OK: ' + goodName);
@@ -1421,26 +1421,63 @@ function startStreamWeb() {
         });
         break;
       case '/saveImage': //-----------------------save image from live view or recorded file ---------------------------
-        var fileIndex = ((req.headers.cookie || '').match(/aimgDecoderImageIndex=(\w+\.\w+)/) || [])[1];
-        if (chkerrRequired('aimgDecoderImageIndex cookie', fileIndex)) {
-          return end(res, chkerr);
+        if (!req.headers.cookie || req.headers.cookie.indexOf('aimgDecoderImageIndex=') < 0) {
+          return end(res, '`aimgDecoderImageIndex` cookie must be specified');
         }
-        saveImage(res, q.device, fileIndex);
+        q.fileIndex = (req.headers.cookie.match(/aimgDecoderImageIndex=([^.]+\.\w+)/) || [])[1];
+        if (!q.fileIndex || q.fileIndex.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '@') {
+          return end(res, '`aimgDecoderImageIndex` cookie is not valid');
+        }
+        saveImage(res, q.fileIndex);
         break;
       case '/showImage': //--------------------------show saved image --------------------------------------------------
         if (chkerrRequired('fileIndex', q.fileIndex)) {
           return end(res, chkerr);
         }
+        //todo: support integer index, means history
+        if (q.fileIndex.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '~') {
+          return end(res, '`fileIndex` is not valid');
+        }
         var type = (q.fileIndex.match(/\.(\w+)$/) || [])[1];
         if (!imageTypeMap[type]) {
-          return end(res, 'bad fileIndex');
+          return end(res, '`fileIndex` is not valid');
         }
         res.setHeader('Content-Type', 'image/' + type);
-        fs.createReadStream(conf.outputDir + '/' + querystring.escape(q.device) + '~' + q.fileIndex)
+        fs.createReadStream(conf.outputDir + '/' + q.fileIndex)
             .pipe(res)
             .on('error', function (err) {
               end(res, stringifyError(err));
             });
+        break;
+      case '/listSavedImages': //--------------------list all saved images-----------------------------------------------
+        fs.readdir(conf.outputDir, function (err, filenameAry) {
+          if (err) {
+            log('[listSavedImage]readdir ' + stringifyError(err));
+            return end(res, err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
+          }
+
+          filenameAry = filenameAry.filter(function (filename) {
+            if (filename.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '~') {
+              return false;
+            }
+            return filename.match(/Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/) ? true : false;
+          });
+
+          //sort by time (newer first)
+          filenameAry.sort(function (a, b) {
+            a = a.slice(-nowStr.LEN - 4/*extName*/);
+            b = b.slice(-nowStr.LEN - 4);
+            return (a < b) ? 1 : (a > b) ? -1 : 0;
+          });
+
+          var html = '';
+          filenameAry.forEach(function (filename) {
+            html += '<img src="/showImage?device=' + querystring.escape(q.device) + '&accessKey=' + querystring.escape(q.accessKey) + '&fileIndex=' + filename + '"/><br/>';
+          });
+
+          res.setHeader('Content-Type', 'text/html');
+          return end(res, html);
+        });
         break;
       default:
         end(res, 'bad request');

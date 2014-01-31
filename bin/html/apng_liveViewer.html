@@ -31,7 +31,7 @@
       <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&type=@type&scale=@scale&rotate=@rotate" target="resultIFrame" title="Save current image (on server side)">
         Save
       </a>
-      <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images" title="List All Saved Images">List Saved</a>
+      <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved</a>
     </div>
     <div ondblclick="scaleLocally(this)">
       <img class="viewer" onclick="rotateLocally(this)"
