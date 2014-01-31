@@ -611,7 +611,7 @@ function capture(outputStream, q) {
           } else if (q.type === 'png') {    //single png image
             FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
           } else if (q.type === 'jpg') {    //single jpg image
-            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1';
+            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1 -q:v 1';
           } else {
             log('unknown type');
           }
@@ -1015,6 +1015,7 @@ function aimgInitState(context) {
     context.state = AIMG_STATE_FIND_PATTERN;
     context.requiredLen = 1;
     context.patternBufAry = null;
+    context.maybeMark = false;
   }
 }
 
