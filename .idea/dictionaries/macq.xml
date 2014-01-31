@@ -7,6 +7,8 @@
       <w>&amp;key</w>
       <w>acapess</w>
       <w>addr</w>
+      <w>aimg</w>
+      <w>ajpg</w>
       <w>apng</w>
       <w>armv</w>
       <w>busybox</w>
@@ -20,6 +22,7 @@
       <w>ffmpeg</w>
       <w>fstat</w>
       <w>getprop</w>
+      <w>hhmmss</w>
       <w>libvpx</w>
       <w>lightcyan</w>
       <w>logpipe</w>
@@ -46,6 +49,7 @@
       <w>screenshot</w>
       <w>setchkerr</w>
       <w>sigkill</w>
+      <w>sjiasc</w>
       <w>smark</w>
       <w>stdin</w>
       <w>stty</w>

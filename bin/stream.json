@@ -21,6 +21,7 @@
   "outputDir": "./output", //dir to store recorded file
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
+  "tempImageLifeMilliseconds": 5000,
 
   "log": {
     "filePath": "./log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)

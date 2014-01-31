@@ -69,13 +69,16 @@
         <th colspan="2" title="Android device connected actually or scanned from recorded files">
           Device
         </th>
-        <th colspan="4">Video</th>
+        <th colspan="6">Video</th>
       </tr>
       <tr>
         <th title="SN is the Device Serial Number. You can confirm it by &quot;adb devices&quot; command" class="infoWithTip">SN</th>
         <th title="Access Key is used as querystring accessKey=theKey of URL when access device's live capture or recorded files" class="infoWithTip">Key</th>
         <th colspan="2" title="Use multipart/x-mixed-replace response. Supported by Chrome, Firefox, IE10+">
           <label><input type="radio" name="type" value="apng"/>AnimatedPNG</label>
+        </th>
+        <th colspan="2" title="Use multipart/x-mixed-replace response. Supported by Chrome, Firefox, IE10+">
+          <label><input type="radio" name="type" value="ajpg"/>AnimatedJPG</label>
         </th>
         <th colspan="2" title="Use google VP8 video format. Supported by Chrome(Fast), Firefox(but slow)">
           <label><input type="radio" name="type" value="webm"/>WebM</label>
@@ -97,6 +100,14 @@
         </td>
         <td rowspan="2" style="text-align: center; vertical-align: middle; border-left: 1px dashed lightgray; border-bottom: 1px dashed lightgray">
           <span class="streamingIndicator" id="streamingStatus_apng_@device"></span>
+        </td>
+        <td style="text-align: left; vertical-align: top; white-space: nowrap">
+          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device">
+            Live View
+          </a>
+        </td>
+        <td rowspan="2" style="text-align: center; vertical-align: middle; border-left: 1px dashed lightgray; border-bottom: 1px dashed lightgray">
+          <span class="streamingIndicator" id="streamingStatus_ajpg_@device"></span>
         </td>
         <td style="text-align: left; vertical-align: top; white-space: nowrap">
           <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device" class="caution" title="These action will interrupt any recording or live viewing on this device due to technique reason(on working)">
@@ -144,6 +155,11 @@
           </a>
         </td>
         <td style="text-align: left; vertical-align: top; white-space: nowrap; border-top: 1px dashed lightgray; border-bottom: 1px dashed lightgray">
+          <a href="@stream_web/fileViewer?device=@device&accessKey=@accessKey&type=ajpg&fileIndex=0&fps=@fps" target="recorded #device">
+            Recorded Videos
+          </a>
+        </td>
+        <td style="text-align: left; vertical-align: top; white-space: nowrap; border-top: 1px dashed lightgray; border-bottom: 1px dashed lightgray">
           <a href="@stream_web/fileViewer?device=@device&accessKey=@accessKey&type=webm&fileIndex=0" target="recorded #device">
             Recorded Videos
           </a>
@@ -156,6 +172,13 @@
             Record/Stop
           </a>
           <span class="recordingIndicator" id="recordingStatus_apng_@device"></span>
+        </td>
+        <td colspan="2" style="text-align: left; vertical-align: middle; white-space: nowrap">
+          <a href="/deviceControl?action=toggleRecording&device=@device&adminKey=@adminKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
+             class="button toggleRecording_@device" id="toggleRecording_ajpg_@device" style="visibility: hidden">
+            Record/Stop
+          </a>
+          <span class="recordingIndicator" id="recordingStatus_ajpg_@device"></span>
         </td>
         <td colspan="2" style="text-align: left; vertical-align: middle; white-space: nowrap">
           <a href="/deviceControl?action=toggleRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
@@ -312,8 +335,8 @@
         Reload Device Info Forcibly On Menu
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&logAPNGProgress=@logAPNGProgress_negVal" target="_self">#logAPNGProgress_negBtn</a>
-        Log Animated PNG Progress
+        <a class="button" href="/var?adminKey=@adminKey&logImageDecoderDetail=@logImageDecoderDetail_negVal" target="_self">#logImageDecoderDetail_negBtn</a>
+        Log Animated PNG/JPG Decoder
       </div>
       <div>
         <a class="button" href="/var?adminKey=@adminKey&forceUseFbFormat=@forceUseFbFormat_negVal" target="_self">#forceUseFbFormat_negBtn</a>
@@ -325,6 +348,14 @@
         <button type="submit">Using</button>
         <label class="infoWithTip" title="You can use this to change the ip address of all public links such as &quot;Live View&quot; concerned with Stream Web">
           StreamWeb IP<input type="input" name="ip" value="@streamWebIP"/>
+        </label>
+      </form>
+      <form action="/setTempImageFileLife" target="_self">
+        <input type="hidden" name="adminKey" value="#adminKey"/>
+
+        <button type="submit">Set</button>
+        <label class="infoWithTip" title="When Live View or Playback Recorded File, Temporary Image File will be produced. This is for you use &quot;Save&quot; functionality so that it will be renamed to normal file for you download or view">
+          Temporary Image File Life<input type="input" name="tempImageLifeMilliseconds" value="@tempImageLifeMilliseconds"/>ms
         </label>
       </form>
     </div>

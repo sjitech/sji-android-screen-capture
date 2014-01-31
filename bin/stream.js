@@ -11,7 +11,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logAPNGProgress: false, forceUseFbFormat: false, ffmpegOption: {}};
+  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -24,7 +24,6 @@ log('use configuration: ' + JSON.stringify(conf, null, '  '));
 //************************global var  ****************************************************
 var MIN_FPS = 0.1, MAX_FPS = 30;
 var UPLOAD_LOCAL_DIR = './android', ANDROID_WORK_DIR = '/data/local/tmp/sji-asc';
-var PNG_TAIL_LEN = 8, APNG_CACHE_LEN = 6 * 1024 * 1024 + PNG_TAIL_LEN - 1; //still need be adjusted
 var MULTIPART_BOUNDARY = 'MULTIPART_BOUNDARY', MULTIPART_MIXED_REPLACE = 'multipart/x-mixed-replace;boundary=' + MULTIPART_BOUNDARY;
 var CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = BUF_CR2.slice(0, 1);
 var re_adbNewLineSeq = /\r?\r?\n$/; // CR LF or CR CR LF
@@ -35,10 +34,12 @@ var status = { consumerMap: {}};
 var overallCounterMap = {streaming: null, recording: null, recorded: {bytes: 0}};
 var recordingFileMap = {}; //key:filename
 var childProcPidMap = {}; //key: pid
-var videoTypeMap = {apng: {name: 'Animated PNG'}, webm: {name: 'WebM Video'}};
-var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPEG'}};
+var videoTypeMap = {apng: {name: 'Animated PNG'}, ajpg: {name: 'Animated JPG'}, webm: {name: 'WebM Video'}};
+var aimgVideoTypeSet = {apng: 1, ajpg: 1}; //animated PNG or JPG
+var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPG'}};
 var videoAndImageTypeAry = Object.keys(videoTypeMap).concat(Object.keys(imageTypeMap));
-var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logAPNGProgress', 'forceUseFbFormat'];
+var imageFileCleanerTimer;
+var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logImageDecoderDetail', 'forceUseFbFormat'];
 
 //************************common *********************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
@@ -109,8 +110,8 @@ function spawn(logHead, _path, args, on_close, opt) {
   }
   else {
     childProc.stdout.on('data', function (buf) {
-      if (!childProc.__didGetStdoutData) {
-        childProc.__didGetStdoutData = true;
+      if (!childProc.didGetStdoutData) {
+        childProc.didGetStdoutData = true;
         log(childProc.logHead + 'got stdout data first time. ' + buf.length + ' bytes');
       }
     });
@@ -178,6 +179,10 @@ function dpad4(d) {
   return (d < 10) ? '000' + d : (d < 100) ? '00' + d : (d < 1000) ? '0' + d : d.toString();
 }
 
+function yyyymmdd_hhmmss_mmm(dt) {
+  return dpad4(dt.getFullYear()) + dpad2(dt.getMonth() + 1) + dpad2(dt.getDate()) + '_' + dpad2(dt.getHours()) + dpad2(dt.getMinutes()) + dpad2(dt.getSeconds()) + '_' + dpad3(dt.getMilliseconds());
+}
+
 function nowStr() {
   var dt = new Date();
   if (dt.valueOf() === nowStr.dtMs) {
@@ -186,7 +191,7 @@ function nowStr() {
     nowStr.seq = 0;
     nowStr.dtMs = dt.valueOf();
   }
-  return dpad4(dt.getFullYear()) + dpad2(dt.getMonth() + 1) + dpad2(dt.getDate()) + '_' + dpad2(dt.getHours()) + dpad2(dt.getMinutes()) + dpad2(dt.getSeconds()) + '_' + dpad3(dt.getMilliseconds()) + '_' + dpad3(nowStr.seq);
+  return yyyymmdd_hhmmss_mmm(dt) + '_' + dpad3(nowStr.seq);
 }
 nowStr.LEN = nowStr().length;
 
@@ -481,8 +486,8 @@ function stringifyCaptureParameter(q, format /*undefined, 'filename'*/) {
  * @param q option, Must have been checked by !chkerrCaptureParameter(q)
  *  {
       device : device serial number
-      type:    'apng' or 'webm' or 'png' or 'jpg'
-      fps:     [optional] rate for webm and apng. must be in range MIN_FPS~MAX_FPS
+      type:    'apng', 'ajpg', 'webm', 'png', 'jpg'
+      fps:     [optional] rate for apng, ajpg, webm. Must be in range MIN_FPS~MAX_FPS
       scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999x or x9999
       rotate:  [optional] 0, 90, 270
     }
@@ -524,7 +529,7 @@ function capture(outputStream, q) {
           provider = dev.liveStreamer;
         }
       } else {
-        //Animated PNG image stream can be broadcast to multiple client if fps is same
+        //Animated PNG,JPG stream can be broadcast to multiple client if fps is same
         provider = dev.liveStreamer;
       }
     } else { //there is no existing capture running or preparing
@@ -543,7 +548,7 @@ function capture(outputStream, q) {
   updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
 
   if (res.setHeader) {
-    res.setHeader('Content-Type', q.type === 'apng' ? MULTIPART_MIXED_REPLACE : imageTypeMap[q.type] ? 'image/' + q.type : 'video/' + q.type);
+    res.setHeader('Content-Type', aimgVideoTypeSet[q.type] ? MULTIPART_MIXED_REPLACE : imageTypeMap[q.type] ? 'image/' + q.type : 'video/' + q.type);
   }
   res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
     endCaptureConsumer(res, 'closed'/*do not change this string*/);
@@ -601,6 +606,8 @@ function capture(outputStream, q) {
             FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0 -qmin 0 -qmax 20 -b:v 1000k';
           } else if (q.type === 'apng') { //animated png image
             FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
+          } else if (q.type === 'ajpg') { //animated jpg image
+            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -update 1 -q:v 1';
           } else if (q.type === 'png') {    //single png image
             FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
           } else if (q.type === 'jpg') {    //single jpg image
@@ -625,10 +632,14 @@ function capture(outputStream, q) {
             });
             provider.logHead = provider.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
 
+            if (aimgVideoTypeSet[provider.type]) { //for apng, ajpg
+              provider.aimgDecoder = aimgCreateContext(provider.type);
+            }
+
             childProc.stdout.on('data', function (buf) {
               convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
-                if (provider.type === 'apng') { //broadcast animated png image to multiple client
-                  playANPGBuffer(provider/*context*/, provider.consumerMap, buf, 0, buf.length);
+                if (aimgVideoTypeSet[provider.type]) { //broadcast animated image to multiple client
+                  aimgDecode(provider.aimgDecoder, provider.consumerMap, buf, 0, buf.length);
                 } else {
                   forEachValueIn(provider.consumerMap, write, buf);
                 }
@@ -645,7 +656,7 @@ function capture(outputStream, q) {
               log(provider.logHead + 'detach live streamer');
               dev.liveStreamer = null;
             }
-            forEachValueIn(provider.consumerMap, endCaptureConsumer, res.__bytesWritten ? '' : 'capture process had internal error, exited without any output');
+            forEachValueIn(provider.consumerMap, endCaptureConsumer, childProc.didGetStdoutData ? '' : 'capture process had internal error, exited without any output');
           });
         }
     ); //end of prepareDeviceFile
@@ -663,6 +674,9 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   updateCounter(provider.dev.device, provider.type, -1, res/*ownerOutputStream*/);
 
   end(res, reason);
+  if (res.filename) {
+    res.close();
+  }
 
   endCaptureConsumer(provider.consumerMap[res.childConsumerId], 'parent consumer is closed');
 
@@ -730,10 +744,10 @@ function startRecording(q/*same as capture*/, on_complete) {
  * @param q option
  *  {
  *    device:  device serial number
-      type:    'apng' or 'webm'
+      type:    'apng', 'ajpg', 'webm'
       fileIndex: [optional] number or timestamp like 20140110_153928_704_000.
                 Bigger number means older file. E.g. 1 means 1 generation older file.
-      fps:     [optional] rate for apng only. must be in range MIN_FPS~MAX_FPS
+      fps:     [optional] rate for apng, ajpg only. Must be in range MIN_FPS~MAX_FPS
     }
  * @param forDownload  true/false
  */
@@ -763,12 +777,12 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
           rfile.close(); //stop reading more
           return;
         }
-        res.setHeader('Content-Type', (q.type === 'apng' && !forDownload) ? MULTIPART_MIXED_REPLACE : 'video/' + q.type);
+        res.setHeader('Content-Type', (!forDownload && aimgVideoTypeSet[q.type]) ? MULTIPART_MIXED_REPLACE : 'video/' + q.type);
         if (forDownload) {
           res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + q.type);
           res.setHeader('Content-Length', stats.size);
-        } else if (q.type === 'apng') {
-          rfile.frameIndex = 0;
+        } else if (aimgVideoTypeSet[q.type]) {
+          rfile.aimgDecoder = aimgCreateContext(q.type);
           rfile.startTimeMs = Date.now();
         }
         updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
@@ -776,41 +790,22 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
         rfile.on('data', function (buf) {
           if (forDownload) {
             write(res, buf);
-          } else if (q.type === 'apng') { //play apng specially, translate it to multipart output
-            playANPGBuffer(rfile/*context*/, [res], buf, 0, buf.length, on_complete1Png);
+          } else if (aimgVideoTypeSet[q.type]) { //play apng, ajpg specially, translate it to multipart output
+            rfile.aimgDecoder.isLastBuffer = (stats.size -= buf.length) === 0;
+            aimgDecode(rfile.aimgDecoder, [res], buf, 0, buf.length, fnDecodeRest);
           } else { //for normal video, just write content
             write(res, buf);
           }
 
-          function on_complete1Png(pos/*next png start position*/) {
-            if (conf.logAPNGProgress) {
-              log(rfile.logHead + 'frame ' + rfile.frameIndex + ' completed' + ((rfile.noMoreData && pos >= buf.length) ? '(last)' : ''));
-            }
-            if (pos < buf.length || !rfile.noMoreData) { //if have rest data
-              //write next content-type early to force Chrome draw previous image immediately.
-              //For last image, do not write next content-type head because it cause last image view invalidated.
-              write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
-              rfile.frameIndex++;
-              rfile.pause();
-              rfile.timer = setTimeout(function () {
-                rfile.resume();
-                rfile.timer = null;
-                playANPGBuffer(rfile/*context*/, [res], buf, pos, buf.length, on_complete1Png);
-                if (!rfile.timer && rfile.noMoreData) {
-                  end(res);
-                }
-              }, Math.max(1, (rfile.startTimeMs + rfile.frameIndex * 1000 / q.fps) - Date.now()));
-            }
+          function fnDecodeRest(pos/*rest data start position*/) {
+            rfile.pause();
+            rfile.timer = setTimeout(function () {
+              rfile.resume();
+              rfile.timer = null;
+              aimgDecode(rfile.aimgDecoder, [res], buf, pos, buf.length, fnDecodeRest);
+            }, Math.max(1, (rfile.startTimeMs + rfile.aimgDecoder.frameIndex * 1000 / q.fps) - Date.now()));
           }
         }); //end of 'data' event handler
-
-        rfile.on('end', function () {
-          log(rfile.logHead + 'read end');
-          if (!rfile.timer) {
-            end(res);
-          }
-          rfile.noMoreData = true;
-        });
       }); //end of on_complete of fstat
     }); //end of 'open' event handler
 
@@ -918,9 +913,12 @@ function updateCounter(device, type, delta, res/*ownerOutputStream*/) {
     res.counter = dev.counterMapRoot[type][counterType] = {count: 0, bytes: 0, startTimeMs: Date.now()};
   }
   if ((res.counter.count += delta) <= 0) { //destroy counter if count is 0
-    res.counter = dev.counterMapRoot[type][counterType] = null;
+    res.counter = null;
+    delete dev.counterMapRoot[type][counterType];
   }
   setTimeout(pushStatus, 0);
+
+  startImageFileCleanerIfNecessary();
 }
 
 function pushStatus() {
@@ -991,94 +989,203 @@ function pushStatusForAppVer() {
   status.consumerMap = {};
 }
 
+var AIMG_STATE_SIMPLE_READ = 0, AIMG_STATE_FIND_PATTERN = 1;
+function aimgCreateContext(type) {
+  var context = {};
+  //public area
+  context.wholeImageBuf = null;
+  context.frameIndex = 0;
+  context.id = type + 'Decoder' + nowStr();
+
+  //private area
+  context.type = type;
+  context.imageType = type.slice(1);
+
+  context.bufAry = [];
+  aimgInitState(context);
+  return context;
+}
+
+function aimgInitState(context) {
+  if (context.type === 'apng') {
+    context.state = AIMG_STATE_SIMPLE_READ;
+    context.requiredLen = 8;
+    context.patternBufAry = null;
+  } else { // ajpg
+    context.state = AIMG_STATE_FIND_PATTERN;
+    context.requiredLen = 1;
+    context.patternBufAry = null;
+  }
+}
+
 /*
- * write animated png stream to all consumers
+ * write animated png, jpg stream to all consumers
  */
-function playANPGBuffer(context, consumerMap, buf, pos, endPos, on_complete1Png /*optional*/) {
-  if (pos >= endPos) {
-    return;
-  }
-  if (!context.pngCacheLength) {
-    //mark each consumer's start flag
-    forEachValueIn(consumerMap, __startPNG);
+function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optional*/) {
+  var isLastFrame, nextPos, decodeStart = pos;
+  for (; pos < endPos; pos = nextPos) {
+    nextPos = Math.min(pos + context.requiredLen, endPos);
+    isLastFrame = context.isLastBuffer && (nextPos === endPos);
 
-    context.pngCacheLength = 0;
-    if (!context.pngCache) {
-      context.pngCache = new Buffer(APNG_CACHE_LEN);
-      if (conf.logAPNGProgress) {
-        context.pngIndex = context.pngIndex === undefined ? 0 : context.pngIndex + 1;
-      }
+    if (context.patternBufAry) {
+      context.patternBufAry.push(buf.slice(pos, nextPos));
     }
-  }
-
-  for (; pos < endPos; pos++) {
-    context.pngCache[context.pngCacheLength++] = buf[pos];
-    /*
-     * find tail
-     */
-    if (__isPngTail(context.pngCache, context.pngCacheLength - PNG_TAIL_LEN)) {
-      //ok, png complete, write last part
-      forEachValueIn(consumerMap, __writeCache);
-
-      //reset parser
-      context.pngCacheLength = 0;
-      pos++;
-
-      if (on_complete1Png) {
-        on_complete1Png(pos);
-      } else {
-        forEachValueIn(consumerMap, __complete1Png);
-        playANPGBuffer(context, consumerMap, buf, pos, endPos);
-      }
-
+    if (endPos - pos < context.requiredLen) {
+      context.requiredLen -= (endPos - pos);
       break;
     }
-    /*
-     * find body
-     */
-    else if (context.pngCacheLength === APNG_CACHE_LEN) {
-      if (conf.logAPNGProgress) {
-        log('png cache full');
+
+    switch (context.state) {
+      case AIMG_STATE_FIND_PATTERN:
+        var foundTail = false;
+        if (context.type === 'apng') { //------------------------png----------------------------------------------------
+          var headBuf = Buffer.concat(context.patternBufAry);
+          context.patternBufAry = null;
+          var size = headBuf.readInt32BE(0);
+          if (size === 0 && headBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
+            foundTail = true;
+          } else {                                                   //not found tail
+            context.requiredLen = size;
+            context.state = AIMG_STATE_SIMPLE_READ;
+          }
+        } else { //---------------------------------------------jpg-----------------------------------------------------
+          if (context.maybeMark && buf[pos] === 0xD9) {              //ok, found jpg tail
+            foundTail = true;
+          } else {                                                   //not found tail
+            context.maybeMark = buf[pos] === 0xff;
+          }
+        }
+
+        if (foundTail) {
+          context.bufAry.push(buf.slice(decodeStart, nextPos));
+          decodeStart = nextPos;
+
+          writeWholeImage();
+
+          if (!isLastFrame && fnDecodeRest) {
+            fnDecodeRest(nextPos);
+            return;
+          }
+        }
+        break;
+      default: //jpg will not come here
+        context.state = AIMG_STATE_FIND_PATTERN;
+        context.requiredLen = 12;
+        context.patternBufAry = [];
+        break;
+    }//end of switch
+  } //end of for (;;)
+
+  //no more data in the buffer
+
+  if (decodeStart < endPos) {
+    context.bufAry.push(buf.slice(decodeStart, endPos));
+
+    if (context.isLastBuffer) { //found incomplete image
+      log('[' + context.id + '_frame_' + context.frameIndex + ']' + 'Warning: incomplete');
+      isLastFrame = true;
+      writeWholeImage();
+    }
+  }
+
+  function writeWholeImage() {
+    context.wholeImageBuf = Buffer.concat(context.bufAry);
+    context.bufAry = [];
+    aimgInitState(context);
+
+    var filename = context.id + '_frame' + context.frameIndex + '_' + nowStr() + '.' + context.imageType;
+    var setCookie = 'Set-Cookie: aimgDecoderImageIndex=' + filename;
+
+    forEachValueIn(consumerMap, function (res) {
+      if (res.setHeader && !res.__bytesWritten) {
+        write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
       }
-      //move some pngCache data to output stream if big enough
-      context.pngCacheLength = APNG_CACHE_LEN - (PNG_TAIL_LEN - 1);
-      forEachValueIn(consumerMap, __writeCache);
-      //copy last PNG_TAIL_LEN-1 byte to head
-      context.pngCache.copy(context.pngCache, 0, APNG_CACHE_LEN - (PNG_TAIL_LEN - 1));
-      context.pngCacheLength = PNG_TAIL_LEN - 1;
-    }
-  }
 
-  function __writeCache(res) {
-    if (res.isAPNGStarted) {
-      write(res, context.pngCache.slice(0, context.pngCacheLength));
+      write(res, context.wholeImageBuf); //do not clear wholeImageBuf. Let it be used later for "Save Current Image" functionality
 
-      if (conf.logAPNGProgress) {
-        var filename = (res.filename ? res.filename + '_write' : context.filename ? context.filename + '_read' : 'http_write') + '_png_' + context.pngIndex + '.png';
-        log(filename + ' length ' + context.pngCacheLength);
-        fs.createWriteStream(conf.outputDir + '/' + filename).end(context.pngCache.slice(0, context.pngCacheLength));
+      if (isLastFrame) {
+        end(res);
+      } else {
+        if (res.setHeader) {
+          //write next content-type early to force Chrome draw image immediately.
+          write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
+        }
       }
+    });
+
+    try {
+      if (conf.logImageDecoderDetail) {
+        log('dump ' + filename);
+      }
+      fs.writeFileSync(conf.outputDir + '/' + filename, context.wholeImageBuf);
+    } catch (err) {
+      log('[' + context.id + '_frame_' + context.frameIndex + ']' + 'failed to write file. ' + stringifyError(err));
+    }
+
+    context.frameIndex++;
+  }
+} //end of aimgDecode()
+
+function startImageFileCleanerIfNecessary() {
+  var needImageFileCleaner = 0;
+  forEachValueIn(devMgr, function (dev) {
+    Object.keys(aimgVideoTypeSet).forEach(function (type) {
+      needImageFileCleaner += Object.keys(dev.counterMapRoot[type]).length;
+    });
+  });
+  if (needImageFileCleaner) {
+    if (!imageFileCleanerTimer) {
+      if (conf.logImageDecoderDetail) {
+        log('[ImageFileCleaner]setTimer');
+      }
+      imageFileCleanerTimer = setTimeout(cleanOldImageFile, conf.tempImageLifeMilliseconds);
+    }
+  } else {
+    clearTimeout(imageFileCleanerTimer);
+    imageFileCleanerTimer = null;
+    if (conf.logImageDecoderDetail) {
+      log('[ImageFileCleaner]clearTimer');
     }
   }
+}
 
-  function __isPngTail(buf, i/*position*/) {
-    return (buf[i++] === 0x49 && buf[i++] === 0x45 && buf[i++] === 0x4E && buf[i++] === 0x44 && buf[i++] === 0xAE && buf[i++] === 0x42 && buf[i++] === 0x60 && buf[i] === 0x82);
-  }
-
-  function __startPNG(res) {
-    if (!res.isAPNGStarted && res.setHeader) { //animated png
-      write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
+function cleanOldImageFile() {
+  var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - (conf.tempImageLifeMilliseconds))) + '_000';
+  fs.readdir(conf.outputDir, function (err, filenameAry) {
+    if (err) {
+      log('[cleanOldImageFile]readdir ' + stringifyError(err));
+    } else {
+      filenameAry.forEach(function (filename) {
+        var match = filename.match(/^\w+Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/);
+        if (match) {
+          if (match[1] < maxTimestamp) {
+            if (conf.logImageDecoderDetail) {
+              log('[cleanOldImageFile]remove ' + filename);
+            }
+            try {
+              fs.unlinkSync(conf.outputDir + '/' + filename);
+            } catch (err) {
+              log('[cleanOldImageFile]rm ' + filename + ' ' + stringifyError(err));
+            }
+          }
+        }
+      });
     }
-    res.isAPNGStarted = true;
-  }
+    setTimeout(cleanOldImageFile, (conf.tempImageLifeMilliseconds));
+  });
+}
 
-  function __complete1Png(res) {
-    if (res.isAPNGStarted && res.setHeader) {
-      //write next content-type early to force Chrome draw previous image immediately.
-      write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/png\n\n');
-    }
+function saveImage(res, device, fileIndex) {
+  var goodName = querystring.escape(device) + '~' + fileIndex;
+  log('[saveImage]rename ' + fileIndex + ' to ' + goodName);
+  try {
+    fs.renameSync(conf.outputDir + '/' + fileIndex, conf.outputDir + '/' + goodName);
+    end(res, 'OK: ' + goodName);
+  } catch (err) {
+    log('[saveImage]failed to rename ' + fileIndex + ' ' + stringifyError(err));
+    end(res, 'error: failed to rename temporary image file. ' + err.code);
   }
-} //end of playANPGBuffer()
+}
 
 /*
  * convert CRLF or CRCRLF to LF, return array of converted buf. Currently, this function only have effect on Windows OS
@@ -1238,7 +1345,7 @@ function startStreamWeb() {
         break;
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
         if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
-            q.type === 'apng' && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
+            aimgVideoTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
         playOrDownloadRecordedFile(res, q, false/*forPlay*/);
@@ -1280,7 +1387,7 @@ function startStreamWeb() {
         break;
       case '/fileViewer':  //---------------------------show recorded file  (Just as a sample)--------------------------
         if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
-            q.type === 'apng' && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
+            aimgVideoTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
         findFiles(q.device, q.type, function/*on_complete*/(err, filenameAry) {
@@ -1312,7 +1419,27 @@ function startStreamWeb() {
           );
         });
         break;
-      case '/saveImage': //--------------------------------save image from recorded file -------------------------------
+      case '/saveImage': //-----------------------save image from live view or recorded file ---------------------------
+        var fileIndex = ((req.headers.cookie || '').match(/aimgDecoderImageIndex=(\w+\.\w+)/) || [])[1];
+        if (chkerrRequired('aimgDecoderImageIndex cookie', fileIndex)) {
+          return end(res, chkerr);
+        }
+        saveImage(res, q.device, fileIndex);
+        break;
+      case '/showImage': //--------------------------show saved image --------------------------------------------------
+        if (chkerrRequired('fileIndex', q.fileIndex)) {
+          return end(res, chkerr);
+        }
+        var type = (q.fileIndex.match(/\.(\w+)$/) || [])[1];
+        if (!imageTypeMap[type]) {
+          return end(res, 'bad fileIndex');
+        }
+        res.setHeader('Content-Type', 'image/' + type);
+        fs.createReadStream(conf.outputDir + '/' + querystring.escape(q.device) + '~' + q.fileIndex)
+            .pipe(res)
+            .on('error', function (err) {
+              end(res, stringifyError(err));
+            });
         break;
       default:
         end(res, 'bad request');
@@ -1351,7 +1478,7 @@ function startAdminWeb() {
     }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
     if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-      q = {adminKey: '', device: [], accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, action: '', logDate: '', logDownload: '', logStart: '', logEnd: ''};
+      q = {adminKey: '', device: [], accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, action: '', logDate: '', logDownload: '', logStart: '', logEnd: '', tempImageLifeMilliseconds: ''};
     }
     if (conf.adminWeb.adminKey && q.adminKey !== conf.adminWeb.adminKey) {
       res.statusCode = 403; //access denied
@@ -1542,6 +1669,7 @@ function startAdminWeb() {
                       .replace(/@logStart\b/g, conf.logStart || -1000)
                       .replace(/@logEnd\b/g, conf.logEnd || '')
                       .replace(/@appVer\b/g, status.appVer)
+                      .replace(/@tempImageLifeMilliseconds\b/g, conf.tempImageLifeMilliseconds)
                   ;
               //set enable or disable of some config buttons for /var? command
               dynamicConfKeyList.forEach(function (k) {
@@ -1648,6 +1776,24 @@ function startAdminWeb() {
         }
         end(res, 'OK');
         break;
+      case '/setTempImageFileLife' :
+        if (chkerrRequired('tempImageLifeMilliseconds', (q.tempImageLifeMilliseconds = Number(q.tempImageLifeMilliseconds)), 1000, 24 * 60 * 60 * 1000)) {
+          return end(res, chkerr);
+        }
+        if (conf.tempImageLifeMilliseconds !== q.tempImageLifeMilliseconds) {
+          conf.tempImageLifeMilliseconds = q.tempImageLifeMilliseconds;
+          clearTimeout(imageFileCleanerTimer);
+          imageFileCleanerTimer = null;
+          startImageFileCleanerIfNecessary();
+
+          status.appVer = nowStr();
+          setTimeout(pushStatusForAppVer, 50);
+        }
+        if (req.headers.referer) {
+          res.writeHead(302, {Location: req.headers.referer});
+        }
+        end(res, 'OK');
+        break;
       case '/status':  //-----------------------------------push javascript to browser----------------------------------
         res.setHeader('Content-Type', 'text/json');
         res.previousVer = q.ver;
@@ -1727,12 +1873,12 @@ function startAdminWeb() {
                   okAry.push(devAry.length > 1 ? device + ' OK: ' : 'OK: ');
                 }
                 if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
-                  if (req.headers.referer) {
-                    res.writeHead(302, {Location: req.headers.referer});
-                  }
                   if (okAry.length) {
                     status.appVer = nowStr();
                     setTimeout(pushStatusForAppVer, 50);
+                  }
+                  if (req.headers.referer) {
+                    res.writeHead(302, {Location: req.headers.referer});
                   }
                   end(res, okAry.concat(errAry).join('\n'));
                 }
@@ -1774,11 +1920,12 @@ function loadResourceSync() {
   pushStatusForAppVer();
 }
 
+loadResourceSync();
+
 checkAdb(
     function/*on_complete*/() {
       startAdminWeb();
       startStreamWeb();
-      loadResourceSync();
     });
 
 //done: refactor source
@@ -1828,6 +1975,7 @@ checkAdb(
 //done: AdminTool: provide a link button to forcibly upload files to all connected devices.
 //done: menu page should mask UI when server is not reachable
 
+//todo: add logServerDetail option
 //todo: some device crashes if live view full image
 //todo: sometimes ScreenshotClient::update just failed
 //todo: remove zero size file
