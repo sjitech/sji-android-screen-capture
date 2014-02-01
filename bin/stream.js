@@ -1039,107 +1039,97 @@ function aimgCreateContext(device, type) {
   //private area
   context.type = type;
   context.imageType = type.slice(1);
+  context.is_apng = type === 'apng';
 
   context.bufAry = [];
-  aimgInitState(context);
-  return context;
-}
 
-function aimgInitState(context) {
-  if (context.type === 'apng') {
+  if (context.is_apng) {
+    context.tailBuf = new Buffer(12); //min chunk
     context.state = AIMG_STATE_SIMPLE_READ;
-    context.requiredLen = 8;
-    context.patternBufAry = null;
+    context.requiredLen = 8; //head size
   } else { // ajpg
-    context.state = AIMG_STATE_FIND_PATTERN;
-    context.requiredLen = 1;
-    context.patternBufAry = null;
-    context.maybeMark = false;
+    context.isMark = false;
   }
+
+  return context;
 }
 
 /*
  * write animated png, jpg stream to all consumers
  */
 function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optional*/) {
-  var isLastFrame, nextPos, decodeStart = pos;
-  for (; pos < endPos; pos = nextPos) {
-    nextPos = Math.min(pos + context.requiredLen, endPos);
-    isLastFrame = context.isLastBuffer && (nextPos === endPos);
-
-    if (context.patternBufAry) {
-      context.patternBufAry.push(buf.slice(pos, nextPos));
-    }
-    context.requiredLen -= (nextPos - pos);
-    if (context.requiredLen) {
-      break;
-    }
-
-    switch (context.state) {
-      case AIMG_STATE_FIND_PATTERN:
-        var foundTail = false;
-        if (context.type === 'apng') { //------------------------png----------------------------------------------------
-          var headBuf = Buffer.concat(context.patternBufAry);
-          context.patternBufAry = null;
-          if (headBuf.length < 12) {
-            log('strange');
-          }
-          var size = headBuf.readInt32BE(0); //todo: some times error
-          if (size === 0 && headBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
-            foundTail = true;
-          } else {                                                   //not found tail
-            context.state = AIMG_STATE_SIMPLE_READ;
-            context.requiredLen = size;
-          }
-        } else { //---------------------------------------------jpg-----------------------------------------------------
-          if (context.maybeMark && buf[pos] === 0xD9) {              //ok, found jpg tail
-            foundTail = true;
-          } else {                                                   //not found tail
-            context.maybeMark = buf[pos] === 0xff;
-            context.requiredLen = 1;
-          }
-        }
-
-        if (foundTail) {
-          context.bufAry.push(buf.slice(decodeStart, nextPos));
-          decodeStart = nextPos;
-
-          writeWholeImage();
-
-          if (!isLastFrame && fnDecodeRest) {
-            fnDecodeRest(nextPos);
-            return;
-          }
-        }
+  var nextPos = pos, decodeStart = pos;
+  if (context.is_apng) {//---------------------------------------------png----------------------------------------------
+    for (; pos < endPos; pos = nextPos) {
+      nextPos = Math.min(pos + context.requiredLen, endPos);
+      if (context.state === AIMG_STATE_FIND_PATTERN) {
+        buf.copy(context.tailBuf, context.tailBuf.length - context.requiredLen, pos, nextPos);
+      }
+      context.requiredLen -= (nextPos - pos);
+      if (context.requiredLen) {
         break;
-      case AIMG_STATE_SIMPLE_READ: //jpg will not come here
-        context.state = AIMG_STATE_FIND_PATTERN;
-        context.requiredLen = 12;
-        context.patternBufAry = [];
-        break;
-    }//end of switch
-  } //end of for (;;)
+      }
 
-  //no more data in the buffer
+      switch (context.state) {
+        case AIMG_STATE_FIND_PATTERN:
+          var size = context.tailBuf.readUInt32BE(0); //todo: caution
+          if (size === 0 && context.tailBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
+            writeWholeImage();
+            if (fnDecodeRest) {
+              return;
+            }
+          } else {                                                          //not found tail
+            if (size==0) {
+              context.state = AIMG_STATE_FIND_PATTERN;
+              context.requiredLen = 12; //min chunk size
+            } else {
+              context.state = AIMG_STATE_SIMPLE_READ;
+              context.requiredLen = size;
+            }
+          }
+          break;
+        case AIMG_STATE_SIMPLE_READ:
+          context.state = AIMG_STATE_FIND_PATTERN;
+          context.requiredLen = 12; //min chunk size
+          break;
+      }//end of switch
+    } //end of for (;;)
+  } else { //---------------------------------------------------jpg-----------------------------------------------------
+    for (; pos < endPos; pos = nextPos) {
+      nextPos = pos + 1;
+      if (context.isMark && buf[pos] === 0xD9) {
+        writeWholeImage();
+        if (fnDecodeRest) {
+          return;
+        }
+      } else {
+        context.isMark = buf[pos] === 0xff;
+      }
+    } //end of for (;;)  }
+  }
+
+  //----------------------------------now, no more data in the buffer---------------------------------------------------
 
   if (decodeStart < endPos) {
-    context.bufAry.push(buf.slice(decodeStart, endPos));
-
     if (context.isLastBuffer) { //found incomplete image
       log('[' + context.id + '_frame_' + context.frameIndex + ']' + 'Warning: incomplete');
-      isLastFrame = true;
       writeWholeImage();
+    } else {
+      context.bufAry.push(buf.slice(decodeStart, endPos));
     }
   }
 
   function writeWholeImage() {
+    context.bufAry.push(buf.slice(decodeStart, nextPos));
+    decodeStart = nextPos;
+
     var wholeImageBuf = Buffer.concat(context.bufAry);
     context.bufAry = [];
-    aimgInitState(context);
 
     var filename = context.id + '_frame' + context.frameIndex + '_' + nowStr() + '.' + context.imageType;
     var fileIndex = filename.slice(context.qdevice.length + 1);
     var setCookie = 'Set-Cookie: aimgDecoderImageIndex=' + fileIndex;
+    var isLastFrame = context.isLastBuffer && (nextPos === endPos);
 
     forEachValueIn(consumerMap, function (res) {
       if (res.setHeader && !res.__bytesWritten) {
@@ -1169,6 +1159,16 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
     wholeImageBuf = null;
     context.frameIndex++;
+    if (context.is_apng) {
+      context.state = AIMG_STATE_SIMPLE_READ;
+      context.requiredLen = 8; //head size
+    } else {
+      context.isMark = false;
+    }
+
+    if (fnDecodeRest && !isLastFrame) {
+      fnDecodeRest(nextPos);
+    }
   }
 } //end of aimgDecode()
 
@@ -1187,10 +1187,12 @@ function startImageFileCleanerIfNecessary() {
       imageFileCleanerTimer = setTimeout(cleanOldImageFile, conf.tempImageLifeMilliseconds);
     }
   } else {
-    clearTimeout(imageFileCleanerTimer);
-    imageFileCleanerTimer = null;
-    if (conf.logImageDecoderDetail) {
-      log('[ImageFileCleaner]clearTimer');
+    if (imageFileCleanerTimer) {
+      clearTimeout(imageFileCleanerTimer);
+      imageFileCleanerTimer = null;
+      if (conf.logImageDecoderDetail) {
+        log('[ImageFileCleaner]clearTimer');
+      }
     }
   }
 }
@@ -1843,8 +1845,13 @@ function startAdminWeb() {
         }
         if (conf.tempImageLifeMilliseconds !== q.tempImageLifeMilliseconds) {
           conf.tempImageLifeMilliseconds = q.tempImageLifeMilliseconds;
-          clearTimeout(imageFileCleanerTimer);
-          imageFileCleanerTimer = null;
+          if (imageFileCleanerTimer) {
+            clearTimeout(imageFileCleanerTimer);
+            imageFileCleanerTimer = null;
+            if (conf.logImageDecoderDetail) {
+              log('[ImageFileCleaner]clearTimer');
+            }
+          }
           startImageFileCleanerIfNecessary();
 
           status.appVer = nowStr();
