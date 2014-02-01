@@ -43,10 +43,11 @@
     </div>
     <div class="toolbar">
       <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClick=<b title="scale locally">Scale</b></span>
-      <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="resultIFrame" title="Save current image (on server side)">
+      <a class="button" href="/saveImage?device=@device&accessKey=@accessKey" target="resultIFrame" title="Save Current Image (on server side)">
         Save
       </a>
       <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved</a>
+      <iframe name="resultIFrame" style="width: 100%; height: 28px; border: 1px solid lightgray" title="Saved Image FileIndex"></iframe>
     </div>
     <div ondblclick="scaleLocally(this)">
       <img class="viewer" onclick="rotateLocally(this)"
@@ -55,7 +56,6 @@
     <div>You can embed following source into your HTML:</div>
     <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&quot;/&gt;</div>
   </div>
-  <iframe name="resultIFrame" style="display: none"></iframe>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>
 </html>

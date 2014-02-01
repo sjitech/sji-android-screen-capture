@@ -833,49 +833,88 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
   });
 }
 
-function findFiles(device/*optional*/, type/*optional*/, on_complete) {
-  var devAry = !device ? null : Array.isArray(device) ? device : [device];
-  var typeAry = !type ? null : Array.isArray(type) ? type : [type];
+function findFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, on_complete) {
+  var devAry = !deviceOrAry ? null : Array.isArray(deviceOrAry) ? deviceOrAry : [deviceOrAry];
+  var typeAry = !typeOrAry ? null : Array.isArray(typeOrAry) ? typeOrAry : [typeOrAry];
+  var findVideo, findImage;
+  if (typeAry) {
+    findVideo = videoTypeMap[typeAry[0]];
+    findImage = !findVideo;
+  }
 
   fs.readdir(conf.outputDir, function (err, filenameAry) {
     if (err) {
-      log('[FindFiles]readdir ' + stringifyError(err));
+      log('readdir ' + stringifyError(err));
       return on_complete(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code, []);
     }
 
     filenameAry = filenameAry.filter(function (filename) {
-      var parts = filename.split('~');
-      if (parts.length !== 4) {
+      var parts, device, type;
+      if (findVideo) {
+        parts = filename.split('~');
+        if (parts.length !== 4) {
+          return false;
+        }
+        if (recordingFileMap[filename]) {
+          return false;
+        }
+        device = querystring.unescape(parts[0]);
+        type = parts[1];
+      }
+      else if (findImage) {
+        var match = filename.match(/^([^~]+)~\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_\d{8}_\d{6}_\d{3}_\d{3}\.(\w{3})$/);
+        if (!match) {
+          return false;
+        }
+        device = match[1];
+        type = match[2];
+      }
+      else {
+        parts = filename.split('~');
+        if (parts.length < 1) {
+          return false;
+        }
+        device = querystring.unescape(parts[0]);
+      }
+      if (devAry && devAry.indexOf(device) < 0 || typeAry && typeAry.indexOf(type) < 0) {
         return false;
       }
-      if (recordingFileMap[filename]) {
-        return false;
-      }
-      return (!devAry || devAry.indexOf(querystring.unescape(parts[0])) >= 0) && (!typeAry || typeAry.indexOf(parts[1]) >= 0);
-    });
-
-    //sort by time (newer first)
-    filenameAry.sort(function (a, b) {
-      a = a.slice(-nowStr.LEN);
-      b = b.slice(-nowStr.LEN);
-      return (a < b) ? 1 : (a > b) ? -1 : 0;
-    });
-
-    //make it searchable by fileIndex (timestamp)
-    filenameAry.forEach(function (filename) {
-      filenameAry[filename.slice(-nowStr.LEN)] = filename;
-    });
-
-    if (filenameAry.length) {
       getOrCreateDevCtx(device); //ensure having created device context
+      return true;
+    });
+
+    if (findVideo) {
+      //sort by time (newer first)
+      filenameAry.sort(function (a, b) {
+        a = a.slice(-nowStr.LEN);
+        b = b.slice(-nowStr.LEN);
+        return (a < b) ? 1 : (a > b) ? -1 : 0;
+      });
+
+      //make it searchable by fileIndex (timestamp)
+      filenameAry.forEach(function (filename) {
+        filenameAry[filename.slice(-nowStr.LEN)] = filename;
+      });
     }
+    else if (findImage) {
+      //sort by time (newer first)
+      filenameAry.sort(function (a, b) {
+        a = a.slice(-nowStr.LEN - 4);
+        b = b.slice(-nowStr.LEN - 4);
+        return (a < b) ? 1 : (a > b) ? -1 : 0;
+      });
+    }
+
     return on_complete('', filenameAry);
   });
 }
 
 //if fileIndex querystring is specified(can be empty string) then delete single file, otherwise delete all files of the type
-function deleteFiles(device/*optional*/, type/*optional*/, fileIndex/*optional*/) {
-  findFiles(device, type, function /*on_complete*/(err, filenameAry) {
+function deleteFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, fileIndex/*optional*/) {
+  findFiles(deviceOrAry, typeOrAry, function /*on_complete*/(err, filenameAry) {
+    if (err) {
+      return;
+    }
     (fileIndex === undefined ? filenameAry : [filenameAry[fileIndex]]).forEach(function (filename) {
       try {
         fs.unlinkSync(conf.outputDir + '/' + filename);
@@ -994,7 +1033,8 @@ function aimgCreateContext(device, type) {
   var context = {};
   //public area
   context.frameIndex = 0;
-  context.id = querystring.escape(device) + '@' + type + 'Decoder' + nowStr();
+  context.qdevice = querystring.escape(device);
+  context.id = context.qdevice + '@' + type + 'Decoder' + nowStr();
 
   //private area
   context.type = type;
@@ -1030,8 +1070,8 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     if (context.patternBufAry) {
       context.patternBufAry.push(buf.slice(pos, nextPos));
     }
-    if (endPos - pos < context.requiredLen) {
-      context.requiredLen -= (endPos - pos);
+    context.requiredLen -= (nextPos - pos);
+    if (context.requiredLen) {
       break;
     }
 
@@ -1045,14 +1085,15 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
           if (size === 0 && headBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
             foundTail = true;
           } else {                                                   //not found tail
-            context.requiredLen = size;
             context.state = AIMG_STATE_SIMPLE_READ;
+            context.requiredLen = size;
           }
         } else { //---------------------------------------------jpg-----------------------------------------------------
           if (context.maybeMark && buf[pos] === 0xD9) {              //ok, found jpg tail
             foundTail = true;
           } else {                                                   //not found tail
             context.maybeMark = buf[pos] === 0xff;
+            context.requiredLen = 1;
           }
         }
 
@@ -1068,7 +1109,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
           }
         }
         break;
-      default: //jpg will not come here
+      case AIMG_STATE_SIMPLE_READ: //jpg will not come here
         context.state = AIMG_STATE_FIND_PATTERN;
         context.requiredLen = 12;
         context.patternBufAry = [];
@@ -1094,7 +1135,8 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     aimgInitState(context);
 
     var filename = context.id + '_frame' + context.frameIndex + '_' + nowStr() + '.' + context.imageType;
-    var setCookie = 'Set-Cookie: aimgDecoderImageIndex=' + filename;
+    var fileIndex = filename.slice(context.qdevice.length + 1);
+    var setCookie = 'Set-Cookie: aimgDecoderImageIndex=' + fileIndex;
 
     forEachValueIn(consumerMap, function (res) {
       if (res.setHeader && !res.__bytesWritten) {
@@ -1119,7 +1161,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
       }
       fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
     } catch (err) {
-      log('failed to write ' + filename + ' ' + stringifyError(err));
+      log('write ' + filename + ' ' + stringifyError(err));
     }
 
     wholeImageBuf = null;
@@ -1151,22 +1193,22 @@ function startImageFileCleanerIfNecessary() {
 }
 
 function cleanOldImageFile() {
-  var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - (conf.tempImageLifeMilliseconds))) + '_000';
+  var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - (conf.tempImageLifeMilliseconds)));
   fs.readdir(conf.outputDir, function (err, filenameAry) {
     if (err) {
-      log('[cleanOldImageFile]readdir ' + stringifyError(err));
+      log('readdir ' + stringifyError(err));
     } else {
       filenameAry.forEach(function (filename) {
-        var match = filename.match(/^[^~]+Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/);
+        var match = filename.match(/@\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_(\d{8}_\d{6}_\d{3})_\d{3}\.\w{3}$/);
         if (match) {
           if (match[1] < maxTimestamp) {
             if (conf.logImageDecoderDetail) {
-              log('[cleanOldImageFile]remove ' + filename);
+              log('delete ' + filename);
             }
             try {
               fs.unlinkSync(conf.outputDir + '/' + filename);
             } catch (err) {
-              log('[cleanOldImageFile]rm ' + filename + ' ' + stringifyError(err));
+              log('delete ' + filename + ' ' + stringifyError(err));
             }
           }
         }
@@ -1176,15 +1218,16 @@ function cleanOldImageFile() {
   });
 }
 
-function saveImage(res, fileIndex) {
-  var goodName = fileIndex.replace('@', '~'); //replace first @ to ~ to prevent from being deleted
-  log('[saveImage]rename ' + fileIndex + ' to replace(@,~)');
+function saveImage(res, device, fileIndex) {
+  var oldName = querystring.escape(device) + '@' + fileIndex;
+  var newName = querystring.escape(device) + '~' + fileIndex;
+  log('rename ' + fileIndex);
   try {
-    fs.renameSync(conf.outputDir + '/' + fileIndex, conf.outputDir + '/' + goodName);
-    end(res, 'OK: ' + goodName);
+    fs.renameSync(conf.outputDir + '/' + oldName, conf.outputDir + '/' + newName);
+    end(res, 'OK: ' + fileIndex);
   } catch (err) {
-    log('[saveImage]failed to rename ' + fileIndex + ' ' + stringifyError(err));
-    end(res, 'error: failed to rename temporary image file. ' + err.code);
+    log('rename ' + oldName + ' ' + stringifyError(err));
+    end(res, err.code === 'ENOENT' ? '' : 'file operation error ' + err.code);
   }
 }
 
@@ -1367,7 +1410,7 @@ function startStreamWeb() {
                 return end(res, err);
               }
               res.setHeader('Content-Type', 'text/html');
-              return end(res, htmlCache[q.type + '_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
+              return end(res, htmlCache[(aimgVideoTypeSet[q.type] ? 'aimg' : q.type) + '_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
                   .replace(/@device\b/g, querystring.escape(q.device))
                   .replace(/#device\b/g, htmlEncode(q.device))
                   .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
@@ -1400,7 +1443,7 @@ function startStreamWeb() {
           relFileIndex = filenameAry.indexOf(filename);
 
           res.setHeader('Content-Type', 'text/html');
-          return end(res, htmlCache[q.type + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
+          return end(res, htmlCache[(aimgVideoTypeSet[q.type] ? 'aimg' : q.type) + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
               .replace(/@device\b/g, querystring.escape(q.device))
               .replace(/#device\b/g, htmlEncode(q.device))
               .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
@@ -1424,57 +1467,39 @@ function startStreamWeb() {
         if (!req.headers.cookie || req.headers.cookie.indexOf('aimgDecoderImageIndex=') < 0) {
           return end(res, '`aimgDecoderImageIndex` cookie must be specified');
         }
-        q.fileIndex = (req.headers.cookie.match(/aimgDecoderImageIndex=([^.]+\.\w+)/) || [])[1];
-        if (!q.fileIndex || q.fileIndex.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '@') {
+        var match = req.headers.cookie.match(/aimgDecoderImageIndex=(\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_\d{8}_\d{6}_\d{3}_\d{3}\.\w{3})\b/);
+        if (!match) {
           return end(res, '`aimgDecoderImageIndex` cookie is not valid');
         }
-        saveImage(res, q.fileIndex);
+        saveImage(res, q.device, match[1]);
         break;
       case '/showImage': //--------------------------show saved image --------------------------------------------------
         if (chkerrRequired('fileIndex', q.fileIndex)) {
           return end(res, chkerr);
         }
-        //todo: support integer index, means history
-        if (q.fileIndex.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '~') {
+        match = q.fileIndex.match(/^\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_\d{8}_\d{6}_\d{3}_\d{3}\.(\w{3})$/);
+        if (!match || !imageTypeMap[match[1]]) {
           return end(res, '`fileIndex` is not valid');
         }
-        var type = (q.fileIndex.match(/\.(\w+)$/) || [])[1];
-        if (!imageTypeMap[type]) {
-          return end(res, '`fileIndex` is not valid');
-        }
-        res.setHeader('Content-Type', 'image/' + type);
-        fs.createReadStream(conf.outputDir + '/' + q.fileIndex)
+        res.setHeader('Content-Type', 'image/' + match[1]);
+        fs.createReadStream(conf.outputDir + '/' + querystring.escape(q.device) + '~' + q.fileIndex)
             .pipe(res)
             .on('error', function (err) {
               end(res, stringifyError(err));
             });
         break;
-      case '/listSavedImages': //--------------------list all saved images-----------------------------------------------
-        fs.readdir(conf.outputDir, function (err, filenameAry) {
-          if (err) {
-            log('[listSavedImage]readdir ' + stringifyError(err));
-            return end(res, err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
+      case '/listSavedImages': //--------------------list all saved images----------------------------------------------
+        var qdevice = querystring.escape(q.device);
+        findFiles(q.device, Object.keys(imageTypeMap), function/*on_complete*/(err, filenameAry) {
+          if (err || !filenameAry || !filenameAry.length) {
+            return end(res, err || '');
           }
-
-          filenameAry = filenameAry.filter(function (filename) {
-            if (filename.slice(0, querystring.escape(q.device).length + 1) !== querystring.escape(q.device) + '~') {
-              return false;
-            }
-            return filename.match(/Decoder\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3}_frame\d+_(\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}_\d{3}_\d{3})\.\w+$/) ? true : false;
-          });
-
-          //sort by time (newer first)
-          filenameAry.sort(function (a, b) {
-            a = a.slice(-nowStr.LEN - 4/*extName*/);
-            b = b.slice(-nowStr.LEN - 4);
-            return (a < b) ? 1 : (a > b) ? -1 : 0;
-          });
-
-          var html = '';
+          var html = '<div style="width: 100%; text-align: center">';
           filenameAry.forEach(function (filename) {
-            html += '<img src="/showImage?device=' + querystring.escape(q.device) + '&accessKey=' + querystring.escape(q.accessKey) + '&fileIndex=' + filename + '"/><br/>';
+            var fileIndex = filename.slice(qdevice.length + 1);
+            html += '<img src="/showImage?device=' + querystring.escape(q.device) + '&accessKey=' + querystring.escape(q.accessKey) + '&fileIndex=' + fileIndex + '"/>';
           });
-
+          html += '</div>';
           res.setHeader('Content-Type', 'text/html');
           return end(res, html);
         });
@@ -1549,13 +1574,14 @@ function startAdminWeb() {
         if (chkerrRequired('device[]', q.device)) {
           return end(res, chkerr);
         }
+        q.device = uniqueNonEmptyArray(q.device);
         switch (q.action) {
           case 'setAccessKey': //----------------------------set access key for multiple devices------------------------
           case 'unsetAccessKey': //--------------------------unset access key for multiple devices----------------------
             if (q.action === 'setAccessKey' && chkerrRequired('accessKey', q.accessKey)) {
               return end(res, chkerr);
             }
-            uniqueNonEmptyArray(q.device).forEach(function (device) {
+            q.device.forEach(function (device) {
               getOrCreateDevCtx(device).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
             });
             status.appVer = nowStr();
@@ -1570,7 +1596,7 @@ function startAdminWeb() {
               return end(res, chkerr);
             }
             var okAry = [], errAry = [];
-            uniqueNonEmptyArray(q.device).forEach(function (device, i, devAry) {
+            q.device.forEach(function (device, i, devAry) {
               var _q = {};
               Object.keys(q).forEach(function (k) {
                 _q[k] = q[k];
@@ -1594,7 +1620,7 @@ function startAdminWeb() {
             if (chkerrOptional('type(optional)', q.type, Object.keys(videoTypeMap))) {
               return end(res, chkerr);
             }
-            uniqueNonEmptyArray(q.device).forEach(function (device) {
+            q.device.forEach(function (device) {
               if (devMgr[device] && devMgr[device].liveStreamer) {
                 forEachValueIn(devMgr[device].liveStreamer.consumerMap, function (res) {
                   if (res.filename && (!q.type || devMgr[device].liveStreamer.type === q.type)) {
@@ -1948,7 +1974,7 @@ function loadResourceSync() {
   //scan recorded files to get device serial numbers ever used
   fs.readdirSync(conf.outputDir).forEach(function (filename) {
     var parts = filename.split('~');
-    if (parts.length === 4) {
+    if (parts.length > 1) {
       getOrCreateDevCtx(querystring.unescape(parts[0])/*device serial number*/);
       overallCounterMap.recorded.bytes += fs.statSync(conf.outputDir + '/' + filename).size;
     }
@@ -1966,74 +1992,16 @@ checkAdb(
       startStreamWeb();
     });
 
-//done: refactor source
-//done: use configuration file (stream.json)
-//done: support SSL
-//done: use pfx format for server certificate and private key
-//done: support browser's javascript XMLHttpRequest
-//done: disable ffmpeg statistics log by default
-//done: admin web site
-//done: session management
-//done: test: stop recording
-//done: do not call getRemoteVer every time
-//done: resize in android
-//done: rotate in android
-//done: play recorded file( webm )
-//done: play recorded file( apng )
-//done: test: record webm video and record at same time
-//done: stress test replay apng
-//done: sort recorded file by time
-//done: memory leak test on repeatedly view recorded file and view live capture
-//done: Fixed: Force firefox/safari refresh page when history back
-//done: check device existence for liveViewer request
-//done: stress test live capture (animated PNG)
-//done: stress test live capture (webm)
-//done: test close http stream when downloading or playing
-//done: do not show recording file, only show latest recorded file
-//done: check device availability first in /fileViewer or /liveViewer
-//done: show streamer in menu page
-//done: resize and rotate locally by html css3
-//done: add conf.maxRecordedFileSize limitation
-//done: support replay specified recorded file by fileIndex querystring( in number format or string format like 20140110_153928_704_000)
-//done: support view android cpu and memory usage
-
-//done: push status to browser
-//done: main: show download log file link
-//done: recorded file viewer: show previous, next recorded file link
-//done: recorded file viewer: show absolute fileIndex (timestamp)
-//done: recorded file viewer: show download link
-//done: test: wait until all files have been flushed when exit
-//done: enable use different stream web ip for all concerned links in menu page. (From AdminTool)
-//done: close all children processes when exit
-//done: prevent multiple recording on same device
-//done: comparing file hash to check whether need upload to android
-//done: jsonFile: remove tail comment
-//done: local scale and rotate work together
-//done: push notification to admin browsers when server restart or internal configuration changes
-//done: AdminTool: provide a link button to forcibly upload files to all connected devices.
-//done: menu page should mask UI when server is not reachable
-
-//todo: add logServerDetail option
+//todo: does /saveImage works with cross domain cookie of /capture or /playOrDownloadRecordedFile
 //todo: some device crashes if live view full image
 //todo: sometimes ScreenshotClient::update just failed
-//todo: remove zero size file
+//todo: screenshot buffer changed frequently, should lock
 //todo: should use busybox to compute file hash
-//todo: ffmpeg log enhance
-//todo: ffmpeg pipe seems only accept max 8359936 bytes. 01/28 18:54:39.022983[pid_16484][get-raw-image]write result:8359936 < requested 8847360. Continue writing rest data
-//todo: close existing ffmpeg processes in android by busybox
-//todo: get-raw-image write error: no such file or directory. Maybe need split write to multiple times.
+//todo: close existing ffmpeg processes in android by busybox -> seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit
 //todo: create shell script to start this application, download ffmpeg bin
 //todo: use "for ever" tool to start this server
-//todo: some device screen capture color confused
-//todo: show saved image in apng viewer
-//todo: enable save some image on server when in live viewing or recording
-//todo: apng stream split logic  (Firefox failed to play recorded file some times)
-//todo: recording should not write partial png out
-//todo: IE does not support <button> inside <a>
-//todo: test: on Windows OS, IE again
 //todo: convert apng to mp4 so can control progress by viewer
-//todo: safari: multipart/x-mixed-replace
-//todo: join two webm file
+//todo: safari: multipart/x-mixed-replace still does not work
 //todo: enable webm live viewing and recording at same time. Completely remove recordOption when liveViewer
 //todo: adapt fps change without interrupting viewer
 //todo: use error image or video to show error

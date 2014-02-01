@@ -39,6 +39,7 @@
       <w>pkcs</w>
       <w>preload</w>
       <w>proc</w>
+      <w>qdevice</w>
       <w>qmax</w>
       <w>qmin</w>
       <w>rawvideo</w>
@@ -49,6 +50,7 @@
       <w>screenshot</w>
       <w>setchkerr</w>
       <w>sigkill</w>
+      <w>sigpipe</w>
       <w>sjiasc</w>
       <w>smark</w>
       <w>stdin</w>
