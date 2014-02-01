@@ -23,6 +23,8 @@
   "maxRecordedFileSize": 4096000000, //max recorded file size
   "tempImageLifeMilliseconds": 5000,
 
+//  "restartADB" : true, //restart Android Debug Bridge to ensure all orhpan process exit. (ADB seems ignore SIGPIPE so can not exit if the caller(this app) exit.
+
   "log": {
     "filePath": "./log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)
     "backupDays": 7 //Should be >= 1

@@ -11,7 +11,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
+  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0, restartADB: false};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -1081,7 +1081,10 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         if (context.type === 'apng') { //------------------------png----------------------------------------------------
           var headBuf = Buffer.concat(context.patternBufAry);
           context.patternBufAry = null;
-          var size = headBuf.readInt32BE(0);
+          if (headBuf.length < 12) {
+            log('strange');
+          }
+          var size = headBuf.readInt32BE(0); //todo: some times error
           if (size === 0 && headBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
             foundTail = true;
           } else {                                                   //not found tail
@@ -1785,13 +1788,7 @@ function startAdminWeb() {
         break;
       case '/restartAdb':  //------------------------------------restart ADB--------------------------------------------
         log(httpServer.logHead + 'restart ADB');
-        spawn('[StopAdb]', conf.adb, ['kill-server'],
-            function  /*on_close*/(/*ret, stdout, stderr*/) {
-              spawn('[StartAdb]', conf.adb, ['start-server'],
-                  function  /*on_close*/(/*ret, stdout, stderr*/) {
-                    end(res, 'OK');
-                  });
-            });
+        restartADB(res);
         break;
       case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
         loadResourceSync();
@@ -1957,6 +1954,18 @@ function startAdminWeb() {
   }
 }
 
+function restartADB(res) {
+  spawn('[StopAdb]', conf.adb, ['kill-server'],
+      function  /*on_close*/(/*ret, stdout, stderr*/) {
+        spawn('[StartAdb]', conf.adb, ['start-server'],
+            function  /*on_close*/(/*ret, stdout, stderr*/) {
+              if (res) {
+                end(res, 'OK');
+              }
+            });
+      });
+}
+
 function getLocalToolFileHashSync() {
   return fs.readdirSync(UPLOAD_LOCAL_DIR).reduce(function (joinedStr, filename) {
     return joinedStr + require('crypto').createHash('sha1').update(fs.readFileSync(UPLOAD_LOCAL_DIR + '/' + filename)).digest('base64') + '_';
@@ -1990,6 +1999,10 @@ checkAdb(
     function/*on_complete*/() {
       startAdminWeb();
       startStreamWeb();
+
+      if (conf.restartADB) {
+        restartADB(null);
+      }
     });
 
 //todo: does /saveImage works with cross domain cookie of /capture or /playOrDownloadRecordedFile
