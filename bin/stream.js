@@ -1079,7 +1079,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
               return;
             }
           } else {                                                          //not found tail
-            if (size==0) {
+            if (size === 0) {
               context.state = AIMG_STATE_FIND_PATTERN;
               context.requiredLen = 12; //min chunk size
             } else {
