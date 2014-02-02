@@ -124,8 +124,17 @@ function spawn(logHead, _path, args, on_close, opt) {
 }
 
 function stringifyError(err) {
-  return err.toString().replace('EACCES', 'EACCES(access denied)').replace('ENOENT', 'ENOENT(not found)').replace('EADDRINUSE', 'EADDRINUSE(IP or port already in use)').replace(/\r*\n$/, '');
+  if (err.code === 'ENOENT') {
+    return 'Error: ENOENT(not found)';
+  } else if (err.code === 'EACCES') {
+    return 'Error: EACCES(access denied)';
+  } else if (err.code === 'EADDRINUSE') {
+    return 'Error: EADDRINUSE(IP or port already in use)';
+  } else {
+    return err.toString().replace(/\r*\n$/, '');
+  }
 }
+
 function toErrSentence(s) {
   if (!s) {
     return '';
@@ -919,7 +928,7 @@ function deleteFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, fileIndex/*
       try {
         fs.unlinkSync(conf.outputDir + '/' + filename);
       } catch (err) {
-        log('failed to delete file ' + conf.outputDir + '/' + filename + '. ' + stringifyError(err));
+        log('failed to delete file "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
       }
     });
     loadResourceSync();
@@ -1028,7 +1037,9 @@ function pushStatusForAppVer() {
   status.consumerMap = {};
 }
 
-var AIMG_STATE_SIMPLE_READ = 0, AIMG_STATE_FIND_PATTERN = 1;
+var APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
+var PNG_HEAD_HEX_STR = new Buffer([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).toString('hex');
+
 function aimgCreateContext(device, type) {
   var context = {};
   //public area
@@ -1044,9 +1055,9 @@ function aimgCreateContext(device, type) {
   context.bufAry = [];
 
   if (context.is_apng) {
-    context.tailBuf = new Buffer(12); //min chunk
-    context.state = AIMG_STATE_SIMPLE_READ;
-    context.requiredLen = 8; //head size
+    context.tmpBuf = new Buffer(12); //min chunk
+    context.state = APNG_STATE_READ_HEAD;
+    context.requiredSize = 8; //head size
   } else { // ajpg
     context.isMark = false;
   }
@@ -1061,36 +1072,54 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
   var nextPos = pos, decodeStart = pos;
   if (context.is_apng) {//---------------------------------------------png----------------------------------------------
     for (; pos < endPos; pos = nextPos) {
-      nextPos = Math.min(pos + context.requiredLen, endPos);
-      if (context.state === AIMG_STATE_FIND_PATTERN) {
-        buf.copy(context.tailBuf, context.tailBuf.length - context.requiredLen, pos, nextPos);
+      nextPos = Math.min(pos + context.requiredSize, endPos);
+      if (context.state === APNG_STATE_FIND_TAIL || conf.logImageDecoderDetail && context.state === APNG_STATE_READ_HEAD) {
+        buf.copy(context.tmpBuf, context.tmpBuf.length - context.requiredSize, pos, nextPos);
       }
-      context.requiredLen -= (nextPos - pos);
-      if (context.requiredLen) {
+      context.requiredSize -= (nextPos - pos);
+      if (context.requiredSize) {
         break;
       }
 
       switch (context.state) {
-        case AIMG_STATE_FIND_PATTERN:
-          var size = context.tailBuf.readUInt32BE(0); //todo: caution
-          if (size === 0 && context.tailBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
+        case APNG_STATE_FIND_TAIL:
+          context.chunkDataSize = context.tmpBuf.readUInt32BE(0); //todo: caution
+          if (conf.logImageDecoderDetail) {
+            log(context.id + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + context.chunkDataSize);
+          }
+          if (context.chunkDataSize === 0 && context.tmpBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
             writeWholeImage();
             if (fnDecodeRest) {
               return;
             }
           } else {                                                          //not found tail
-            if (size === 0) {
-              context.state = AIMG_STATE_FIND_PATTERN;
-              context.requiredLen = 12; //min chunk size
+            if (context.chunkDataSize === 0) {
+              log(context.id + ' ********************** chunkSize 0 *************************');
+              context.state = APNG_STATE_FIND_TAIL;
+              context.requiredSize = 12; //min chunk size
             } else {
-              context.state = AIMG_STATE_SIMPLE_READ;
-              context.requiredLen = size;
+              context.state = APNG_STATE_READ_DATA;
+              context.requiredSize = context.chunkDataSize;
             }
           }
           break;
-        case AIMG_STATE_SIMPLE_READ:
-          context.state = AIMG_STATE_FIND_PATTERN;
-          context.requiredLen = 12; //min chunk size
+        case APNG_STATE_READ_HEAD:
+          if (conf.logImageDecoderDetail) {
+            var headHexStr = context.tmpBuf.slice(0, 8).toString('hex');
+            log(context.id + ' head ' + headHexStr);
+            if (headHexStr !== PNG_HEAD_HEX_STR) {
+              log(context.id + ' ************************* wrong head*************************');
+            }
+          }
+          context.state = APNG_STATE_FIND_TAIL;
+          context.requiredSize = 12; //min chunk size
+          break;
+        case APNG_STATE_READ_DATA:
+          if (conf.logImageDecoderDetail) {
+            log(context.id + ' chunkData ' + context.chunkDataSize);
+          }
+          context.state = APNG_STATE_FIND_TAIL;
+          context.requiredSize = 12; //min chunk size
           break;
       }//end of switch
     } //end of for (;;)
@@ -1154,14 +1183,14 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
       }
       fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
     } catch (err) {
-      log('write ' + filename + ' ' + stringifyError(err));
+      log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
     }
 
     wholeImageBuf = null;
     context.frameIndex++;
     if (context.is_apng) {
-      context.state = AIMG_STATE_SIMPLE_READ;
-      context.requiredLen = 8; //head size
+      context.state = APNG_STATE_READ_HEAD;
+      context.requiredSize = 8; //head size
     } else {
       context.isMark = false;
     }
@@ -1201,37 +1230,38 @@ function cleanOldImageFile() {
   var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - (conf.tempImageLifeMilliseconds)));
   fs.readdir(conf.outputDir, function (err, filenameAry) {
     if (err) {
-      log('readdir ' + stringifyError(err));
+      log('failed to readdir "' + conf.outputDir + '". ' + stringifyError(err));
     } else {
       filenameAry.forEach(function (filename) {
         var match = filename.match(/@\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_(\d{8}_\d{6}_\d{3})_\d{3}\.\w{3}$/);
         if (match) {
           if (match[1] < maxTimestamp) {
             if (conf.logImageDecoderDetail) {
-              log('delete ' + filename);
+              log('delete "' + conf.outputDir + '/' + filename + '"');
             }
             try {
               fs.unlinkSync(conf.outputDir + '/' + filename);
             } catch (err) {
-              log('delete ' + filename + ' ' + stringifyError(err));
+              log('failed to delete "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
             }
           }
         }
       });
     }
-    setTimeout(cleanOldImageFile, (conf.tempImageLifeMilliseconds));
+
+    startImageFileCleanerIfNecessary();
   });
 }
 
 function saveImage(res, device, fileIndex) {
-  var oldName = querystring.escape(device) + '@' + fileIndex;
-  var newName = querystring.escape(device) + '~' + fileIndex;
-  log('rename ' + fileIndex);
+  var oldName = conf.outputDir + '/' + querystring.escape(device) + '@' + fileIndex;
+  var newName = conf.outputDir + '/' + querystring.escape(device) + '~' + fileIndex;
+  log('rename "' + oldName + '" to replace(@ by ~)');
   try {
-    fs.renameSync(conf.outputDir + '/' + oldName, conf.outputDir + '/' + newName);
+    fs.renameSync(oldName, newName);
     end(res, 'OK: ' + fileIndex);
   } catch (err) {
-    log('rename ' + oldName + ' ' + stringifyError(err));
+    log('failed to rename "' + oldName + '" to replace(@ by ~). ' + stringifyError(err));
     end(res, err.code === 'ENOENT' ? '' : 'file operation error ' + err.code);
   }
 }
