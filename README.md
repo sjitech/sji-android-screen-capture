@@ -7,8 +7,15 @@ Yes, real time, low bandwidth.  This product will do encoding in android by <a h
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
   
 [Screenshot]
-<img src="doc/screenshot-menu.png" />
-<img src="doc/screenshot-png.png" />
+
+Menu<br/>
+<img src="doc/screenshot-menu.png" /><br/>
+Live View<br/>
+<img src="doc/screenshot-png.png" /><br/>
+Recorded Videos<br/>
+<img src="doc/recorded.png" /><br/>
+Grabbed Images:<br/>
+<img src="doc/listSaved.png" /><br/>
 
 [How to use]  
   
@@ -95,49 +102,3 @@ For webm format, just change apng to webm and img tag to video tag in above step
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.  
     bin/android/run.sh_/busybox is download from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.  
-  
-[Todo]  
-    enhance performance!  
-    many many...  
-
-<pre>
-//done: refactor source
-//done: use configuration file (stream.json)
-//done: support SSL
-//done: use pfx format for server certificate and private key
-//done: support browser's javascript XMLHttpRequest
-//done: disable ffmpeg statistics log by default
-//done: admin web site
-//done: session management
-//done: test: stop recording
-//done: do not call getRemoteVer every time
-//done: resize in android
-//done: rotate in android
-//done: play recorded file( webm )
-//done: play recorded file( apng )
-//done: test: record webm video and record at same time
-//done: stress test replay apng
-//done: sort recorded file by time
-//done: memory leak test on repeatedly view recorded file and view live capture
-//done: Fixed: Force firefox/safari refresh page when history back
-//done: check device existence for viewLiveCapture request
-//done: stress test live capture (animated PNG)
-//done: stress test live capture (webm)
-//done: test close http stream when downloading or playing
-//done: do not show recording file, only show latest recorded file
-//done: check device availability first in /viewRecordedFile or /viewLiveCapture
-//done: show streaming counter in menu page
-
-//todo: test: on Windows OS, IE
-//todo: convert apng to mp4 so can control progress by viewer
-//todo: safari: multipart/x-mixed-replace
-//todo: kill orphan process
-//todo: join two webm file
-//todo: send webm video to browser and file at same time. Completely remove recordOption when viewLiveCapture
-//todo: adapt fps change without interrupting viewer
-//todo: use error image or video to show error
-//todo: water mark
-//todo: add audio
-//todo: make touchable: forward motion event to android
-//todo: remove dependence of adb
-</pre>
