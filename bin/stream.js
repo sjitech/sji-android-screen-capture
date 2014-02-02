@@ -1037,8 +1037,7 @@ function pushStatusForAppVer() {
   status.consumerMap = {};
 }
 
-var APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
-var PNG_HEAD_HEX_STR = new Buffer([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).toString('hex');
+var PNG_HEAD_HEX_STR = '89504e470d0a1a0a', APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
 
 function aimgCreateContext(device, type) {
   var context = {};
@@ -1058,6 +1057,7 @@ function aimgCreateContext(device, type) {
     context.tmpBuf = new Buffer(12); //min chunk
     context.state = APNG_STATE_READ_HEAD;
     context.requiredSize = 8; //head size
+    context.scanedSize = 0;
   } else { // ajpg
     context.isMark = false;
   }
@@ -1073,9 +1073,10 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
   if (context.is_apng) {//---------------------------------------------png----------------------------------------------
     for (; pos < endPos; pos = nextPos) {
       nextPos = Math.min(pos + context.requiredSize, endPos);
-      if (context.state === APNG_STATE_FIND_TAIL || conf.logImageDecoderDetail && context.state === APNG_STATE_READ_HEAD) {
-        buf.copy(context.tmpBuf, context.tmpBuf.length - context.requiredSize, pos, nextPos);
+      if (context.state === APNG_STATE_FIND_TAIL || context.state === APNG_STATE_READ_HEAD) {
+        buf.copy(context.tmpBuf, context.scanedSize, pos, nextPos);
       }
+      context.scanedSize += (nextPos - pos);
       context.requiredSize -= (nextPos - pos);
       if (context.requiredSize) {
         break;
@@ -1083,43 +1084,47 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
       switch (context.state) {
         case APNG_STATE_FIND_TAIL:
-          context.chunkDataSize = context.tmpBuf.readUInt32BE(0); //todo: caution
+          var chunkDataSize = context.tmpBuf.readUInt32BE(0); //todo: caution
           if (conf.logImageDecoderDetail) {
-            log(context.id + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + context.chunkDataSize);
+            log(context.id + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + chunkDataSize);
           }
-          if (context.chunkDataSize === 0 && context.tmpBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
+          if (chunkDataSize === 0 && context.tmpBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
             writeWholeImage();
             if (fnDecodeRest) {
               return;
             }
           } else {                                                          //not found tail
-            if (context.chunkDataSize === 0) {
+            if (chunkDataSize === 0) {
               log(context.id + ' ********************** chunkSize 0 *************************');
               context.state = APNG_STATE_FIND_TAIL;
               context.requiredSize = 12; //min chunk size
+              context.scanedSize = 0;
             } else {
               context.state = APNG_STATE_READ_DATA;
-              context.requiredSize = context.chunkDataSize;
+              context.requiredSize = chunkDataSize;
+              context.scanedSize = 0;
             }
           }
           break;
         case APNG_STATE_READ_HEAD:
+          var headHexStr = context.tmpBuf.slice(0, 8).toString('hex');
           if (conf.logImageDecoderDetail) {
-            var headHexStr = context.tmpBuf.slice(0, 8).toString('hex');
             log(context.id + ' head ' + headHexStr);
-            if (headHexStr !== PNG_HEAD_HEX_STR) {
-              log(context.id + ' ************************* wrong head*************************');
-            }
+          }
+          if (headHexStr !== PNG_HEAD_HEX_STR) {
+            log(context.id + ' ************************* wrong head*************************');
           }
           context.state = APNG_STATE_FIND_TAIL;
           context.requiredSize = 12; //min chunk size
+          context.scanedSize = 0;
           break;
         case APNG_STATE_READ_DATA:
           if (conf.logImageDecoderDetail) {
-            log(context.id + ' chunkData ' + context.chunkDataSize);
+            log(context.id + ' chunkData ' + context.scanedSize);
           }
           context.state = APNG_STATE_FIND_TAIL;
           context.requiredSize = 12; //min chunk size
+          context.scanedSize = 0;
           break;
       }//end of switch
     } //end of for (;;)
@@ -1191,6 +1196,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     if (context.is_apng) {
       context.state = APNG_STATE_READ_HEAD;
       context.requiredSize = 8; //head size
+      context.scanedSize = 0;
     } else {
       context.isMark = false;
     }
@@ -1532,7 +1538,7 @@ function startStreamWeb() {
           var html = '<div style="width: 100%; text-align: center">';
           filenameAry.forEach(function (filename) {
             var fileIndex = filename.slice(qdevice.length + 1);
-            html += '<img src="/showImage?device=' + querystring.escape(q.device) + '&accessKey=' + querystring.escape(q.accessKey) + '&fileIndex=' + fileIndex + '"/>';
+            html += '<img src=' + '"/' + 'showImage?device=' + querystring.escape(q.device) + '&accessKey=' + querystring.escape(q.accessKey) + '&fileIndex=' + fileIndex + '"/>';
           });
           html += '</div>';
           res.setHeader('Content-Type', 'text/html');
