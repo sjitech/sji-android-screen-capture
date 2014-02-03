@@ -11,7 +11,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0, restartADB: false};
+  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -39,7 +39,7 @@ var aimgVideoTypeSet = {apng: 1, ajpg: 1}; //animated PNG or JPG
 var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPG'}};
 var videoAndImageTypeAry = Object.keys(videoTypeMap).concat(Object.keys(imageTypeMap));
 var imageFileCleanerTimer;
-var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logImageDecoderDetail', 'forceUseFbFormat'];
+var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logImageDumpFile', 'logImageDecoderDetail', 'forceUseFbFormat'];
 
 //************************common *********************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
@@ -1045,6 +1045,7 @@ function aimgCreateContext(device, type) {
   context.frameIndex = 0;
   context.qdevice = querystring.escape(device);
   context.id = context.qdevice + '@' + type + 'Decoder' + nowStr();
+  context.totalOffset = 0;
 
   //private area
   context.type = type;
@@ -1183,14 +1184,15 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     });
 
     try {
-      if (conf.logImageDecoderDetail) {
-        log('dump ' + filename + ' length:' + wholeImageBuf.length);
+      if (conf.logImageDumpFile) {
+        log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
       }
       fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
     } catch (err) {
       log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
     }
 
+    context.totalOffset += wholeImageBuf.length;
     wholeImageBuf = null;
     context.frameIndex++;
     if (context.is_apng) {
@@ -1216,7 +1218,7 @@ function startImageFileCleanerIfNecessary() {
   });
   if (needImageFileCleaner) {
     if (!imageFileCleanerTimer) {
-      if (conf.logImageDecoderDetail) {
+      if (conf.logImageDumpFile) {
         log('[ImageFileCleaner]setTimer');
       }
       imageFileCleanerTimer = setTimeout(cleanOldImageFile, conf.tempImageLifeMilliseconds);
@@ -1225,7 +1227,7 @@ function startImageFileCleanerIfNecessary() {
     if (imageFileCleanerTimer) {
       clearTimeout(imageFileCleanerTimer);
       imageFileCleanerTimer = null;
-      if (conf.logImageDecoderDetail) {
+      if (conf.logImageDumpFile) {
         log('[ImageFileCleaner]clearTimer');
       }
     }
@@ -1242,7 +1244,7 @@ function cleanOldImageFile() {
         var match = filename.match(/@\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_(\d{8}_\d{6}_\d{3})_\d{3}\.\w{3}$/);
         if (match) {
           if (match[1] < maxTimestamp) {
-            if (conf.logImageDecoderDetail) {
+            if (conf.logImageDumpFile) {
               log('delete "' + conf.outputDir + '/' + filename + '"');
             }
             try {
@@ -1658,13 +1660,10 @@ function startAdminWeb() {
             });
             break;
           case 'stopRecording': //----------------------------stop recording for multiple devices-----------------------
-            if (chkerrOptional('type(optional)', q.type, Object.keys(videoTypeMap))) {
-              return end(res, chkerr);
-            }
             q.device.forEach(function (device) {
               if (devMgr[device] && devMgr[device].liveStreamer) {
                 forEachValueIn(devMgr[device].liveStreamer.consumerMap, function (res) {
-                  if (res.filename && (!q.type || devMgr[device].liveStreamer.type === q.type)) {
+                  if (res.filename) {
                     endCaptureConsumer(res, 'stop recording');
                   }
                 });
@@ -1826,7 +1825,13 @@ function startAdminWeb() {
         break;
       case '/restartAdb':  //------------------------------------restart ADB--------------------------------------------
         log(httpServer.logHead + 'restart ADB');
-        restartADB(res);
+        spawn('[StopAdb]', conf.adb, ['kill-server'],
+            function  /*on_close*/(/*ret, stdout, stderr*/) {
+              spawn('[StartAdb]', conf.adb, ['start-server'],
+                  function  /*on_close*/(/*ret, stdout, stderr*/) {
+                    end(res, 'OK');
+                  });
+            });
         break;
       case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
         loadResourceSync();
@@ -1884,7 +1889,7 @@ function startAdminWeb() {
           if (imageFileCleanerTimer) {
             clearTimeout(imageFileCleanerTimer);
             imageFileCleanerTimer = null;
-            if (conf.logImageDecoderDetail) {
+            if (conf.logImageDumpFile) {
               log('[ImageFileCleaner]clearTimer');
             }
           }
@@ -1997,18 +2002,6 @@ function startAdminWeb() {
   }
 }
 
-function restartADB(res) {
-  spawn('[StopAdb]', conf.adb, ['kill-server'],
-      function  /*on_close*/(/*ret, stdout, stderr*/) {
-        spawn('[StartAdb]', conf.adb, ['start-server'],
-            function  /*on_close*/(/*ret, stdout, stderr*/) {
-              if (res) {
-                end(res, 'OK');
-              }
-            });
-      });
-}
-
 function getLocalToolFileHashSync() {
   return fs.readdirSync(UPLOAD_LOCAL_DIR).reduce(function (joinedStr, filename) {
     return joinedStr + require('crypto').createHash('sha1').update(fs.readFileSync(UPLOAD_LOCAL_DIR + '/' + filename)).digest('base64') + '_';
@@ -2042,10 +2035,6 @@ checkAdb(
     function/*on_complete*/() {
       startAdminWeb();
       startStreamWeb();
-
-      if (conf.restartADB) {
-        restartADB(null);
-      }
     });
 
 //todo: does /saveImage works with cross domain cookie of /capture or /playOrDownloadRecordedFile
