@@ -51,10 +51,10 @@
     </div>
     <div ondblclick="scaleLocally(this)">
       <img class="viewer" onclick="rotateLocally(this)"
-           src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps"/>
+           src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&fromFrame=@fromFrame"/>
     </div>
     <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&quot;/&gt;</div>
+    <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&fromFrame=@fromFrame&quot;/&gt;</div>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>

@@ -792,6 +792,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
           res.setHeader('Content-Length', stats.size);
         } else if (aimgVideoTypeSet[q.type]) {
           rfile.aimgDecoder = aimgCreateContext(q.device, q.type);
+          rfile.aimgDecoder.fromFrame = Number(q.fromFrame) || 0;
           rfile.startTimeMs = Date.now();
         }
         updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
@@ -815,7 +816,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
             }, Math.max(1, (rfile.startTimeMs + rfile.aimgDecoder.frameIndex * 1000 / q.fps) - Date.now()));
           }
         }); //end of 'data' event handler
-      }); //end of on_complete of fstat
+      }); //end of fstat on_complete of fstat
     }); //end of 'open' event handler
 
     rfile.on('close', function () { //file's 'close' event will always be fired
@@ -1070,7 +1071,10 @@ function aimgCreateContext(device, type) {
  * write animated png, jpg stream to all consumers
  */
 function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optional*/) {
-  var nextPos = pos, decodeStart = pos;
+  if (context.stopped) {
+    return;
+  }
+  var nextPos = pos, unsavedStart = pos;
   if (context.is_apng) {//---------------------------------------------png----------------------------------------------
     for (; pos < endPos; pos = nextPos) {
       nextPos = Math.min(pos + context.requiredSize, endPos);
@@ -1087,16 +1091,15 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         case APNG_STATE_FIND_TAIL:
           var chunkDataSize = context.tmpBuf.readUInt32BE(0); //todo: caution
           if (conf.logImageDecoderDetail) {
-            log(context.id + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + chunkDataSize);
+            log(context.id + '_frame' + context.frameIndex + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + chunkDataSize);
           }
           if (chunkDataSize === 0 && context.tmpBuf.readInt32BE(4) === 0x49454E44) { //ok, found png tail
-            writeWholeImage();
-            if (fnDecodeRest) {
+            if (!writeWholeImage()) {
               return;
             }
           } else {                                                          //not found tail
             if (chunkDataSize === 0) {
-              log(context.id + ' ********************** chunkSize 0 *************************');
+              log(context.id + '_frame' + context.frameIndex + ' ********************** chunkSize 0 *************************');
               context.state = APNG_STATE_FIND_TAIL;
               context.requiredSize = 12; //min chunk size
               context.scanedSize = 0;
@@ -1110,10 +1113,16 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         case APNG_STATE_READ_HEAD:
           var headHexStr = context.tmpBuf.slice(0, 8).toString('hex');
           if (conf.logImageDecoderDetail) {
-            log(context.id + ' head ' + headHexStr);
+            log(context.id + '_frame' + context.frameIndex + ' head ' + headHexStr);
           }
           if (headHexStr !== PNG_HEAD_HEX_STR) {
-            log(context.id + ' ************************* wrong head*************************');
+            log(context.id + '_frame' + context.frameIndex + ' ************************* wrong head*************************');
+            forEachValueIn(consumerMap, function (res) {
+              end(res, 'internal error: wrong png head');
+            });
+            context.bufAry = [];
+            context.stopped = true;
+            return;
           }
           context.state = APNG_STATE_FIND_TAIL;
           context.requiredSize = 12; //min chunk size
@@ -1121,7 +1130,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
           break;
         case APNG_STATE_READ_DATA:
           if (conf.logImageDecoderDetail) {
-            log(context.id + ' chunkData ' + context.scanedSize);
+            log(context.id + '_frame' + context.frameIndex + ' chunkData ' + context.scanedSize);
           }
           context.state = APNG_STATE_FIND_TAIL;
           context.requiredSize = 12; //min chunk size
@@ -1133,8 +1142,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     for (; pos < endPos; pos = nextPos) {
       nextPos = pos + 1;
       if (context.isMark && buf[pos] === 0xD9) {
-        writeWholeImage();
-        if (fnDecodeRest) {
+        if (!writeWholeImage()) {
           return;
         }
       } else {
@@ -1145,18 +1153,19 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
   //----------------------------------now, no more data in the buffer---------------------------------------------------
 
-  if (decodeStart < endPos) {
+  if (unsavedStart < endPos) {
     if (context.isLastBuffer) { //found incomplete image
-      log('[' + context.id + '_frame_' + context.frameIndex + ']' + 'Warning: incomplete');
+      log(context.id + '_frame' + context.frameIndex + ' Warning: incomplete');
       writeWholeImage();
     } else {
-      context.bufAry.push(buf.slice(decodeStart, endPos));
+      context.bufAry.push(buf.slice(unsavedStart, endPos));
     }
   }
 
   function writeWholeImage() {
-    context.bufAry.push(buf.slice(decodeStart, nextPos));
-    decodeStart = nextPos;
+    var myFrameComes = context.frameIndex >= context.fromFrame;
+    context.bufAry.push(buf.slice(unsavedStart, nextPos));
+    unsavedStart = nextPos;
 
     var wholeImageBuf = Buffer.concat(context.bufAry);
     context.bufAry = [];
@@ -1167,29 +1176,35 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     var isLastFrame = context.isLastBuffer && (nextPos === endPos);
 
     forEachValueIn(consumerMap, function (res) {
-      if (res.setHeader && !res.__bytesWritten) {
-        write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
-      }
+      if (myFrameComes) {
+        if (res.setHeader && !res.__bytesWritten) {
+          write(res, '--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
+        }
 
-      write(res, wholeImageBuf);
+        write(res, wholeImageBuf);
+      }
 
       if (isLastFrame) {
         end(res);
       } else {
-        if (res.setHeader) {
-          //write next content-type early to force Chrome draw image immediately.
-          write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
+        if (myFrameComes) {
+          if (res.setHeader) {
+            //write next content-type early to force Chrome draw image immediately.
+            write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
+          }
         }
       }
     });
 
-    try {
-      if (conf.logImageDumpFile) {
-        log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
+    if (myFrameComes) {
+      try {
+        if (conf.logImageDumpFile) {
+          log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
+        }
+        fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
+      } catch (err) {
+        log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
       }
-      fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
-    } catch (err) {
-      log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
     }
 
     context.totalOffset += wholeImageBuf.length;
@@ -1203,9 +1218,13 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
       context.isMark = false;
     }
 
-    if (fnDecodeRest && !isLastFrame) {
-      fnDecodeRest(nextPos);
+    if (myFrameComes) {
+      if (fnDecodeRest && !isLastFrame) {
+        fnDecodeRest(nextPos);
+        return false;
+      }
     }
+    return true;
   }
 } //end of aimgDecode()
 
@@ -1503,6 +1522,7 @@ function startStreamWeb() {
               .replace(/@MIN_FPS\b/g, MIN_FPS)
               .replace(/@MAX_FPS\b/g, MAX_FPS)
               .replace(/@fps\b/g, q.fps)
+              .replace(/&fromFrame=@fromFrame\b/g, Number(q.fromFrame) > 0 ? '&fromFrame=' + q.fromFrame : '') //debug only
           );
         });
         break;
