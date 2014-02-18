@@ -6,12 +6,13 @@ var child_process = require('child_process'),
     fs = require('fs'),
     url = require('url'),
     querystring = require('querystring'),
+    Path = require('path'),
     jsonFile = require('./node_modules/jsonFile.js'),
     logger = require('./node_modules/logger.js');
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
+  conf = {adb: '', ffmpeg: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -39,6 +40,7 @@ var aimgVideoTypeSet = {apng: 1, ajpg: 1}; //animated PNG or JPG
 var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPG'}};
 var videoAndImageTypeAry = Object.keys(videoTypeMap).concat(Object.keys(imageTypeMap));
 var imageFileCleanerTimer;
+var lastImageMap = {}; //key: aimgDecoderIndex. value: {fileIndex:fileIndex, data:wholeImageBuf}
 var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logImageDumpFile', 'logImageDecoderDetail', 'forceUseFbFormat'];
 
 //************************common *********************************************************
@@ -68,7 +70,7 @@ function spawn(logHead, _path, args, on_close, opt) {
 
   childProc.once('error', function (err) {
     if (err.code === 'ENOENT') {
-      var hasDir = /[\/\\]/.test(_path);
+      var hasDir = containsDir(_path);
       var hint = hasDir ? '' : ', Please use full path or add dir of file to `PATH` environment variable';
       err = 'Error ENOENT(file is not found' + (hasDir ? '' : ' in dir list defined by PATH environment variable') + '). File: ' + _path + hint;
     } else if (err.code === 'EACCES') {
@@ -305,17 +307,51 @@ function isAnyIp(ip) {
   return !ip || ip === '0.0.0.0' || ip === '*';
 }
 
+function containsDir(filename) {
+  return ((process.platform === 'win32') ? /\/\\/ : /\//).test(filename);
+}
+
+function searchInPath(filename) {
+  if (containsDir(filename)) {
+    return Path.resolve(filename); //prepend working dir
+  }
+  process.env['PATH'].split(Path.delimiter).some(function (dir) {
+    try {
+      if (fs.existsSync(dir + '/' + filename)) {
+        filename = dir + '/' + filename;
+        return true;
+      }
+    } catch (err) {
+    }
+    return false;
+  });
+  return filename;
+}
 //****************************************************************************************
 
 function checkAdb(on_complete) {
+  log('[CheckAdb]Full path of "Android Debug Bridge" is "' + searchInPath(conf.adb) + '"');
   spawn('[CheckAdb]', conf.adb, ['version'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
-          log('Failed to check Android Debug Bridge. Please check log', {stderr: true});
+          log('Failed to check "Android Debug Bridge". Please check log', {stderr: true});
           process.exit(1);
         } else {
           on_complete();
         }
+      });
+}
+
+function checkFfmpeg(on_complete) {
+  log('[CheckFfmpeg]Full path of FFMPEG is "' + searchInPath(conf.ffmpeg) + '"');
+  spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'],
+      function /*on_close*/(ret, stdout, stderr) {
+        if (ret !== 0 || stderr) {
+          log('Failed to check FFMPEG (for this machine, not for Android device). You will not get MP4 video when record. Please check log', {stderr: true});
+        } else {
+          checkFfmpeg.success = true;
+        }
+        on_complete();
       });
 }
 
@@ -661,6 +697,9 @@ function capture(outputStream, q) {
           }
 
           childProc.on('close', function () { //exited or failed to spawn
+            if (provider.aimgDecoder) {
+              delete lastImageMap[provider.aimgDecoder.id];
+            }
             if (provider === dev.liveStreamer) {
               log(provider.logHead + 'detach live streamer');
               dev.liveStreamer = null;
@@ -683,7 +722,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   updateCounter(provider.dev.device, provider.type, -1, res/*ownerOutputStream*/);
 
   end(res, reason);
-  if (res.filename) {
+  if (res.filename && res.close) {
     res.close();
   }
 
@@ -710,31 +749,84 @@ function startRecording(q/*same as capture*/, on_complete) {
           return;
         }
         var filename = stringifyCaptureParameter(q, 'filename');
+        var wfile;
 
-        var wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
-        wfile.logHead = '[FileWriter(Record) ' + filename + ']';
-        wfile.filename = filename;
-
-        wfile.on('open', function () {
-          log(wfile.logHead + 'opened for write');
-          recordingFileMap[filename] = true;
-          capture(wfile, q); //-----------------------------------capture to file---------------------------------------
-          callbackOnce('', wfile);
-        });
-        wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
-          wfile.__isClosed = true;
-          log(wfile.logHead + 'closed');
-          delete recordingFileMap[filename];
-          callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
-          if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
-            log('all files have been flushed. Now exit');
-            process.exit(0);
+        if (false && checkFfmpeg.success) {
+          filename = filename + '.mp4';
+          var args = [];
+          if (conf.ffmpegStatistics !== true) {
+            args.push('-nostats');
           }
-        });
-        wfile.on('error', function (err) {
-          log(wfile.logHead + stringifyError(err));
-          callbackOnce(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
-        });
+          if (conf.ffmpegDebugLog === true) {
+            args.push('-loglevel', 'debug');
+          }
+          args.push('-r', q.fps);
+          if (q.type === 'apng') {
+            args.push('-vcodec', 'png', '-update', '1');
+          } else if (q.type === 'ajpg') {
+            args.push('-vcodec', 'mjpeg', '-update', '1');
+          } else if (q.type === 'webm') {
+            args.push('-vcodec', 'libvpx');
+          } else {
+            log('impossible route');
+          }
+
+          args.push('-i', '-'); //means from stdin
+          args.push('-vcodec', 'libx264');
+          args.push(conf.outputDir + '/' + filename); //convert to this file
+
+          var childProc = spawn('[Converter ' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
+            wfile.__isClosed = true;
+            log(wfile.logHead + 'closed');
+            delete recordingFileMap[filename];
+            callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
+            if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
+              log('all files have been flushed. Now exit');
+              process.exit(0);
+            }
+          });
+          if (childProc.pid > 0) {
+            wfile = childProc.stdin;
+            wfile.filename = filename;
+            wfile.logHead = childProc.logHead;
+
+            wfile.on('error', function (err) {
+              log(wfile.logHead + stringifyError(err));
+            });
+
+            recordingFileMap[filename] = true;
+            capture(wfile, q); //-----------------------------------capture to file and convert to mp4------------------
+            callbackOnce('', wfile);
+          } else {
+            callbackOnce(childProc.__spawnErr);
+          }
+        }
+        else {
+          wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
+          wfile.filename = filename;
+          wfile.logHead = '[FileWriter(Record) ' + filename + ']';
+
+          wfile.on('open', function () {
+            log(wfile.logHead + 'opened for write');
+            recordingFileMap[filename] = true;
+            capture(wfile, q); //-----------------------------------capture to file-------------------------------------
+            callbackOnce('', wfile);
+          });
+          wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
+            wfile.__isClosed = true;
+            log(wfile.logHead + 'closed');
+            delete recordingFileMap[filename];
+            callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
+            if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
+              log('all files have been flushed. Now exit');
+              process.exit(0);
+            }
+          });
+          wfile.on('error', function (err) {
+            log(wfile.logHead + stringifyError(err));
+            callbackOnce(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
+          });
+        }
       }
   );
 
@@ -791,8 +883,8 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
           res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + q.type);
           res.setHeader('Content-Length', stats.size);
         } else if (aimgVideoTypeSet[q.type]) {
-          rfile.aimgDecoder = aimgCreateContext(q.device, q.type);
-          rfile.aimgDecoder.fromFrame = Number(q.fromFrame) || 0;
+          rfile.aimgDecoder = aimgCreateContext(q.device, q.type, q.playerId);
+          rfile.aimgDecoder.fromFrame = Number(q.fromFrame);
           rfile.startTimeMs = Date.now();
         }
         updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
@@ -835,6 +927,10 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
       rfile.close(); //stop reading more
       clearTimeout(rfile.timer);
       updateCounter(q.device, q.type, -1, res/*ownerOutputStream*/);
+      if (rfile.aimgDecoder) {
+        delete lastImageMap[rfile.aimgDecoder.id];
+        delete lastImageMap[rfile.aimgDecoder.id2];
+      }
     });
     res.on('finish', function () { //data have been flushed. This event is not related with 'close' event
       updateCounter(q.device, q.type, -1, res/*ownerOutputStream*/);
@@ -1040,12 +1136,14 @@ function pushStatusForAppVer() {
 
 var PNG_HEAD_HEX_STR = '89504e470d0a1a0a', APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
 
-function aimgCreateContext(device, type) {
+function aimgCreateContext(device, type, id2) {
   var context = {};
   //public area
   context.frameIndex = 0;
   context.qdevice = querystring.escape(device);
-  context.id = context.qdevice + '@' + type + 'Decoder' + nowStr();
+  context.aimgDecoderIndex = type + 'Decoder' + nowStr();
+  context.id = context.qdevice + '@' + context.aimgDecoderIndex;
+  context.id2 = context.qdevice + '@' + id2; //user defined id, used as key of lastImageMap
   context.totalOffset = 0;
 
   //private area
@@ -1089,7 +1187,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
       switch (context.state) {
         case APNG_STATE_FIND_TAIL:
-          var chunkDataSize = context.tmpBuf.readUInt32BE(0); //todo: caution
+          var chunkDataSize = context.tmpBuf.readUInt32BE(0);
           if (conf.logImageDecoderDetail) {
             log(context.id + '_frame' + context.frameIndex + ' chunkHead ' + context.tmpBuf.slice(4, 8) + ' ' + chunkDataSize);
           }
@@ -1163,16 +1261,16 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
   }
 
   function writeWholeImage() {
-    var myFrameComes = context.frameIndex >= context.fromFrame;
+    var myFrameComes = !context.fromFrame || context.frameIndex >= context.fromFrame;
     context.bufAry.push(buf.slice(unsavedStart, nextPos));
     unsavedStart = nextPos;
 
     var wholeImageBuf = Buffer.concat(context.bufAry);
     context.bufAry = [];
 
-    var filename = context.id + '_frame' + context.frameIndex + '_' + nowStr() + '.' + context.imageType;
-    var fileIndex = filename.slice(context.qdevice.length + 1);
-    var setCookie = 'Set-Cookie: aimgDecoderImageIndex=' + fileIndex;
+    var fileIndex = context.aimgDecoderIndex + '_frame' + context.frameIndex + '_' + nowStr() + '.' + context.imageType;
+    var filename = context.qdevice + '@' + fileIndex;
+    var setCookie = 'Set-Cookie: aimgDecoderIndex=' + context.aimgDecoderIndex;
     var isLastFrame = context.isLastBuffer && (nextPos === endPos);
 
     forEachValueIn(consumerMap, function (res) {
@@ -1186,24 +1284,32 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 
       if (isLastFrame) {
         end(res);
+        delete lastImageMap[context.id];
+        delete lastImageMap[context.id2];
       } else {
         if (myFrameComes) {
           if (res.setHeader) {
             //write next content-type early to force Chrome draw image immediately.
-            write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n' + setCookie + '\n\n');
+            write(res, '\n--' + MULTIPART_BOUNDARY + '\n' + 'Content-Type:image/' + context.imageType + '\n\n');
           }
         }
       }
     });
 
     if (myFrameComes) {
-      try {
-        if (conf.logImageDumpFile) {
-          log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
+      lastImageMap[context.id] = {fileIndex: fileIndex, data: wholeImageBuf}; //save image in memory for later used by /saveImage command
+      if (context.id2) {
+        lastImageMap[context.id2] = lastImageMap[context.id];
+      }
+      if (conf.tempImageLifeMilliseconds) {
+        try {
+          if (conf.logImageDumpFile) {
+            log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
+          }
+          fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
+        } catch (err) {
+          log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
         }
-        fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
-      } catch (err) {
-        log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
       }
     }
 
@@ -1229,6 +1335,9 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
 } //end of aimgDecode()
 
 function startImageFileCleanerIfNecessary() {
+  if (!conf.tempImageLifeMilliseconds) {
+    return;
+  }
   var needImageFileCleaner = 0;
   forEachValueIn(devMgr, function (dev) {
     Object.keys(aimgVideoTypeSet).forEach(function (type) {
@@ -1254,7 +1363,7 @@ function startImageFileCleanerIfNecessary() {
 }
 
 function cleanOldImageFile() {
-  var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - (conf.tempImageLifeMilliseconds)));
+  var maxTimestamp = yyyymmdd_hhmmss_mmm(new Date(Date.now() - conf.tempImageLifeMilliseconds));
   fs.readdir(conf.outputDir, function (err, filenameAry) {
     if (err) {
       log('failed to readdir "' + conf.outputDir + '". ' + stringifyError(err));
@@ -1280,16 +1389,20 @@ function cleanOldImageFile() {
   });
 }
 
-function saveImage(res, device, fileIndex) {
-  var oldName = conf.outputDir + '/' + querystring.escape(device) + '@' + fileIndex;
-  var newName = conf.outputDir + '/' + querystring.escape(device) + '~' + fileIndex;
-  log('rename "' + oldName + '" to replace(@ by ~)');
+function saveImage(res, device, aimgDecoderIndex) {
+  var lastImage = lastImageMap[querystring.escape(device) + '@' + aimgDecoderIndex];
+  if (!lastImage) {
+    end(res, 'image not found');
+    return;
+  }
+  var fileIndex = lastImage.fileIndex;
+  var filename = querystring.escape(device) + '~' + fileIndex;
   try {
-    fs.renameSync(oldName, newName);
+    fs.writeFileSync(conf.outputDir + '/' + filename, lastImage.data);
     end(res, 'OK: ' + fileIndex);
   } catch (err) {
-    log('failed to rename "' + oldName + '" to replace(@ by ~). ' + stringifyError(err));
-    end(res, err.code === 'ENOENT' ? '' : 'file operation error ' + err.code);
+    log('failed to write "' + filename + '". ' + stringifyError(err));
+    end(res, 'file operation error ' + err.code);
   }
 }
 
@@ -1399,7 +1512,7 @@ function startStreamWeb() {
     }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
     if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-      q = {device: '', accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, recordOption: '', fileIndex: ''};
+      q = {device: '', accessKey: '', type: '', fps: 0, scale: 0, rotate: 0, recordOption: '', fileIndex: '', playerId: ''};
     }
     if (chkerrRequired('device', q.device)) {
       return res.end(chkerr);
@@ -1523,18 +1636,38 @@ function startStreamWeb() {
               .replace(/@MAX_FPS\b/g, MAX_FPS)
               .replace(/@fps\b/g, q.fps)
               .replace(/&fromFrame=@fromFrame\b/g, Number(q.fromFrame) > 0 ? '&fromFrame=' + q.fromFrame : '') //debug only
+              .replace(/@playerId\b/g, nowStr())
           );
         });
         break;
       case '/saveImage': //-----------------------save image from live view or recorded file ---------------------------
-        if (!req.headers.cookie || req.headers.cookie.indexOf('aimgDecoderImageIndex=') < 0) {
-          return end(res, '`aimgDecoderImageIndex` cookie must be specified');
+        var aimgDecoderIndex;
+        if (req.headers.cookie && req.headers.cookie.indexOf('aimgDecoderIndex=') >= 0) {
+          var match = req.headers.cookie.match(/aimgDecoderIndex=(\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3})\b/);
+          if (!match) {
+            return end(res, '`aimgDecoderIndex` cookie is not valid');
+          }
+          aimgDecoderIndex = match[1];
+        } else if (q.playerId) {
+          aimgDecoderIndex = querystring.escape(q.playerId);
+        } else {
+          if (devMgr[q.device] && devMgr[q.device].liveStreamer && devMgr[q.device].liveStreamer.aimgDecoder) {
+            aimgDecoderIndex = devMgr[q.device].liveStreamer.aimgDecoder.aimgDecoderIndex;
+          } else {
+            var head = querystring.escape(q.device) + '@';
+            if (!Object.keys(lastImageMap).some(function (id) {
+              if (id.slice(0, head.length) === head) {
+                aimgDecoderIndex = id.slice(head.length);
+                return true;
+              }
+              return false;
+            })) {
+              log(res.logHead, '`aimgDecoderIndex` cookie and querystring is not specified and no any live capture nor animated image viewer is running');
+              return end(res, 'image not found');
+            }
+          }
         }
-        var match = req.headers.cookie.match(/aimgDecoderImageIndex=(\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_\d{8}_\d{6}_\d{3}_\d{3}\.\w{3})\b/);
-        if (!match) {
-          return end(res, '`aimgDecoderImageIndex` cookie is not valid');
-        }
-        saveImage(res, q.device, match[1]);
+        saveImage(res, q.device, aimgDecoderIndex);
         break;
       case '/showImage': //--------------------------show saved image --------------------------------------------------
         if (chkerrRequired('fileIndex', q.fileIndex)) {
@@ -1706,7 +1839,7 @@ function startAdminWeb() {
             return end(res, 'bad request');
         }
         break;
-      case '/getDeviceLog':  //--------------------------------get internal log file----------------------------------
+      case '/getDeviceLog':  //--------------------------------get internal log file------------------------------------
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
@@ -1901,7 +2034,7 @@ function startAdminWeb() {
         end(res, 'OK');
         break;
       case '/setTempImageFileLife' :
-        if (chkerrRequired('tempImageLifeMilliseconds', (q.tempImageLifeMilliseconds = Number(q.tempImageLifeMilliseconds)), 1000, 24 * 60 * 60 * 1000)) {
+        if (chkerrRequired('tempImageLifeMilliseconds', (q.tempImageLifeMilliseconds = Number(q.tempImageLifeMilliseconds)), 0, 24 * 60 * 60 * 1000)) {
           return end(res, chkerr);
         }
         if (conf.tempImageLifeMilliseconds !== q.tempImageLifeMilliseconds) {
@@ -2051,11 +2184,13 @@ function loadResourceSync() {
 
 loadResourceSync();
 
-checkAdb(
-    function/*on_complete*/() {
-      startAdminWeb();
-      startStreamWeb();
-    });
+checkAdb(function/*on_complete*/() {
+  checkFfmpeg(function/*on_complete*/() {
+    imageFileCleanerTimer = setTimeout(cleanOldImageFile, conf.tempImageLifeMilliseconds);
+    startAdminWeb();
+    startStreamWeb();
+  });
+});
 
 //todo: does /saveImage works with cross domain cookie of /capture or /playOrDownloadRecordedFile
 //todo: some device crashes if live view full image

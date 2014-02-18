@@ -1,5 +1,6 @@
 {
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
+  "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
 
   "port": 33333, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege.
   "ip": "localhost", //Stream Web public IP or hostname. "*" means listen all network interfaces
@@ -21,7 +22,7 @@
   "outputDir": "./output", //dir to store recorded file
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
-  "tempImageLifeMilliseconds": 5000,
+  "tempImageLifeMilliseconds": 0, //0 means do not dump image file
 
   "log": {
     "filePath": "./log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)
