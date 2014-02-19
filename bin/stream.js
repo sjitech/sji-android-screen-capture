@@ -885,7 +885,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
     }
     q.fps = q.fps || origFps;
   }
-  var fileType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
+  var realType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
 
   var rfile = fs.createReadStream(conf.outputDir + '/' + filename);
   rfile.logHead = '[FileReader(' + (forDownload ? 'Download' : 'Play') + ' ' + filename + ']';
@@ -900,12 +900,12 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
         rfile.close(); //stop reading more
         return;
       }
-      res.setHeader('Content-Type', (!forDownload && aimgVideoTypeSet[fileType]) ? MULTIPART_MIXED_REPLACE : 'video/' + fileType);
+      res.setHeader('Content-Type', (!forDownload && aimgVideoTypeSet[realType]) ? MULTIPART_MIXED_REPLACE : 'video/' + realType);
       if (forDownload) {
-        res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + fileType);
+        res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + realType);
         res.setHeader('Content-Length', stats.size);
-      } else if (aimgVideoTypeSet[fileType]) {
-        rfile.aimgDecoder = aimgCreateContext(q.device, fileType, q.playerId);
+      } else if (aimgVideoTypeSet[realType]) {
+        rfile.aimgDecoder = aimgCreateContext(q.device, realType, q.playerId);
         rfile.aimgDecoder.fromFrame = Number(q.fromFrame);
         rfile.startTimeMs = Date.now();
       }
@@ -914,7 +914,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
       rfile.on('data', function (buf) {
         if (forDownload) {
           write(res, buf);
-        } else if (aimgVideoTypeSet[fileType]) { //play apng, ajpg specially, translate it to multipart output
+        } else if (aimgVideoTypeSet[realType]) { //play apng, ajpg specially, translate it to multipart output
           rfile.aimgDecoder.isLastBuffer = (stats.size -= buf.length) === 0;
           aimgDecode(rfile.aimgDecoder, [res], buf, 0, buf.length, fnDecodeRest);
         } else { //for normal video, just write content
@@ -1652,10 +1652,10 @@ function startStreamWeb() {
           }
           q.fps = q.fps || origFps;
 
-          var fileType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
+          var realType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
 
           res.setHeader('Content-Type', 'text/html');
-          return end(res, htmlCache[(aimgVideoTypeSet[fileType] ? 'aimg' : fileType) + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
+          return end(res, htmlCache[(aimgVideoTypeSet[realType] ? 'aimg' : realType) + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
               .replace(/@device\b/g, querystring.escape(q.device))
               .replace(/#device\b/g, htmlEncode(q.device))
               .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
