@@ -868,7 +868,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
     if ((relFileIndex = Number(q.fileIndex || 0)) >= 0) {
       return findFiles(q.device, q.type, function /*on_complete*/(err, filenameAry) {
         if (err || !(filename = filenameAry[relFileIndex])) {
-          return end(res, err || 'file not found');
+          return end(res, err || 'error: file not found');
         }
         q.fileIndex = filename.slice(querystring.escape(q.device).length + 1 + q.type.length + 1); //strip SN~type~
         return playOrDownloadRecordedFile(res, q, forDownload, true/*__fileIndex_checked*/);
@@ -1408,7 +1408,7 @@ function cleanOldImageFile() {
 function saveImage(res, device, aimgDecoderIndex) {
   var lastImage = lastImageMap[querystring.escape(device) + '@' + aimgDecoderIndex];
   if (!lastImage) {
-    return end(res, 'image not found');
+    return end(res, 'error: image not found');
   }
   var fileIndex = lastImage.fileIndex;
   var filename = querystring.escape(device) + '~' + fileIndex;
@@ -1642,7 +1642,7 @@ function startStreamWeb() {
           var filename, absFileIndex, relFileIndex;
           if ((relFileIndex = Number(q.fileIndex || 0)) >= 0) {
             if (err || !(filename = filenameAry[relFileIndex])) {
-              return end(res, err || 'file not found');
+              return end(res, err || 'error: file not found');
             }
             absFileIndex = filename.slice(querystring.escape(q.device).length + 1 + q.type.length + 1); //strip SN~type~
           } else {
@@ -1650,7 +1650,7 @@ function startStreamWeb() {
             filename = querystring.escape(q.device) + '~' + q.type + '~' + absFileIndex;
             relFileIndex = filenameAry.indexOf(filename);
             if (relFileIndex < 0) {
-              return end(res, 'file not found');
+              return end(res, 'error: file not found');
             }
           }
 
@@ -1709,7 +1709,7 @@ function startStreamWeb() {
               return false;
             })) {
               log(res.logHead, '`aimgDecoderIndex` cookie and querystring is not specified and no any live capture nor animated image viewer is running');
-              return end(res, 'image not found');
+              return end(res, 'error: image not found');
             }
           }
         }
