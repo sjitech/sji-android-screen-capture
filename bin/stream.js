@@ -62,7 +62,7 @@ function spawn(logHead, _path, args, on_close, opt) {
   var childProc = child_process.spawn(_path, args);
   if (childProc.pid > 0) {
     childProcPidMap[childProc.pid] = true;
-    childProc.logHead = logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
+    childProc.logHead = logHead + '[pid_' + childProc.pid + ']';
     log(childProc.logHead + 'spawned');
   } else {
     log(childProc.logHead + 'spawn failed');
@@ -623,13 +623,18 @@ function capture(outputStream, q) {
           opt.in = opt.in || '';
           opt.out = opt.out || '';
 
-          var FFMPEG_PARAM = ' -r ' + (q.fps || 1) + ' ' + opt.in + ' -i -';
+          var FFMPEG_PARAM = '';
+          //------------------------now make global parameters------------------------
           if (conf.ffmpegStatistics !== true) {
             FFMPEG_PARAM += ' -nostats';
           }
           if (conf.ffmpegDebugLog === true) {
             FFMPEG_PARAM += ' -loglevel debug';
           }
+          //------------------------now make input parameters------------------------
+          FFMPEG_PARAM += ' -r ' + (q.fps || 1);
+          FFMPEG_PARAM += ' ' + opt.in + ' -i -'; //"-i -" means read from stdin
+          //------------------------now make output parameters------------------------
           if (q.scale || q.rotate) {
             var filter = '';
             if (typeof(q.scale) === 'number') {
@@ -644,7 +649,7 @@ function capture(outputStream, q) {
             }
 
             if (filter) {
-              FFMPEG_PARAM += ' -vf ' + filter.slice(1);
+              FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
             }
           }
           if (q.type === 'webm') { //webm video
@@ -672,10 +677,6 @@ function capture(outputStream, q) {
 
           if (childProc.pid > 0) {
             provider.pid = childProc.pid;
-            forEachValueIn(provider.consumerMap, function (res) {
-              res.logHead = res.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
-            });
-            provider.logHead = provider.logHead.slice(0, -1) + ' @ pid_' + childProc.pid + ']';
 
             if (aimgVideoTypeSet[provider.type]) { //for apng, ajpg
               provider.aimgDecoder = aimgCreateContext(q.device, provider.type);
@@ -730,7 +731,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
 
   if (provider === provider.dev.liveStreamer && Object.keys(provider.consumerMap).length === 0) {
     if (provider.pid) {
-      log(provider.logHead + 'kill this live streamer process due to no more consumer');
+      log(provider.logHead + 'kill this live streamer process pid_' + provider.pid + ' due to no more consumer');
       try {
         process.kill(provider.pid);
       } catch (err) {
@@ -751,31 +752,37 @@ function startRecording(q/*same as capture*/, on_complete) {
         var filename = stringifyCaptureParameter(q, 'filename');
         var wfile;
 
-        if (false && checkFfmpeg.success) {
+        if (checkFfmpeg.success && q.type !== 'apng') {
           filename = filename + '.mp4';
           var args = [];
+          //------------------------now make global parameters------------------------
+          args.push('-y'); //-y: always overwrite output file
           if (conf.ffmpegStatistics !== true) {
             args.push('-nostats');
           }
           if (conf.ffmpegDebugLog === true) {
             args.push('-loglevel', 'debug');
           }
-          args.push('-r', q.fps);
+          //------------------------now make input parameters------------------------
           if (q.type === 'apng') {
-            args.push('-vcodec', 'png', '-update', '1');
+            args.push('-f', 'image2', '-vcodec', 'png', '-update', '1');
           } else if (q.type === 'ajpg') {
-            args.push('-vcodec', 'mjpeg', '-update', '1');
+            args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
           } else if (q.type === 'webm') {
-            args.push('-vcodec', 'libvpx');
+            args.push('-f', 'webm', '-vcodec', 'libvpx');
           } else {
             log('impossible route');
           }
-
+          args.push('-r', q.fps); //rate
           args.push('-i', '-'); //means from stdin
-          args.push('-vcodec', 'libx264');
+          //------------------------now make output parameters------------------------
+          args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2');
+          args.push('-fs', conf.maxRecordedFileSize);
           args.push(conf.outputDir + '/' + filename); //convert to this file
-
-          var childProc = spawn('[Converter ' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
+          /*
+           * ------------------------------------start new converter process -------------------------------------------
+           */
+          var childProc = spawn('[MP4Converter ' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
             wfile.__isClosed = true;
             log(wfile.logHead + 'closed');
             delete recordingFileMap[filename];
@@ -788,14 +795,14 @@ function startRecording(q/*same as capture*/, on_complete) {
           if (childProc.pid > 0) {
             wfile = childProc.stdin;
             wfile.filename = filename;
-            wfile.logHead = childProc.logHead;
+            wfile.logHead = '[FileWriter(Record)' + filename + ')]';
 
             wfile.on('error', function (err) {
               log(wfile.logHead + stringifyError(err));
             });
 
             recordingFileMap[filename] = true;
-            capture(wfile, q); //-----------------------------------capture to file and convert to mp4------------------
+            capture(wfile, q); //-----------------------------------capture and convert to mp4 file---------------------
             callbackOnce('', wfile);
           } else {
             callbackOnce(childProc.__spawnErr);
@@ -809,7 +816,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           wfile.on('open', function () {
             log(wfile.logHead + 'opened for write');
             recordingFileMap[filename] = true;
-            capture(wfile, q); //-----------------------------------capture to file-------------------------------------
+            capture(wfile, q); //-----------------------------------capture to animated image file----------------------
             callbackOnce('', wfile);
           });
           wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
