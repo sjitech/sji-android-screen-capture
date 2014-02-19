@@ -343,11 +343,15 @@ function checkAdb(on_complete) {
 }
 
 function checkFfmpeg(on_complete) {
+  if (!conf.convertAjpgToFormat) {
+    on_complete();
+    return;
+  }
   log('[CheckFfmpeg]Full path of FFMPEG is "' + searchInPath(conf.ffmpeg) + '"');
   spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
-          log('Failed to check FFMPEG (for this machine, not for Android device). You will not be able to convert Animated JPG to other type on-fly when recording. Please check log', {stderr: true});
+          log('Failed to check FFMPEG (for this machine, not for Android device). You will not be able to convert Animated JPG to ' + conf.convertAjpgToFormat + ' on-fly when recording. Please check log', {stderr: true});
         } else {
           checkFfmpeg.success = true;
         }
