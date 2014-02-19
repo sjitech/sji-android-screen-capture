@@ -12,7 +12,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', ffmpeg: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0};
+  conf = {adb: '', ffmpeg: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0, convertAjpgToFormat: ''};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -347,7 +347,7 @@ function checkFfmpeg(on_complete) {
   spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
-          log('Failed to check FFMPEG (for this machine, not for Android device). You will not get MP4 video when record. Please check log', {stderr: true});
+          log('Failed to check FFMPEG (for this machine, not for Android device). You will not be able to convert Animated JPG to other type on-fly when recording. Please check log', {stderr: true});
         } else {
           checkFfmpeg.success = true;
         }
@@ -653,7 +653,7 @@ function capture(outputStream, q) {
             }
           }
           if (q.type === 'webm') { //webm video
-            FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0 -qmin 0 -qmax 20 -b:v 1000k';
+            FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0';
           } else if (q.type === 'apng') { //animated png image
             FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
           } else if (q.type === 'ajpg') { //animated jpg image
@@ -752,8 +752,8 @@ function startRecording(q/*same as capture*/, on_complete) {
         var filename = stringifyCaptureParameter(q, 'filename');
         var wfile;
 
-        if (checkFfmpeg.success && q.type === 'ajpg') {
-          filename = filename + '.mp4';
+        if (q.type === 'ajpg' && (conf.convertAjpgToFormat === 'mp4' || conf.convertAjpgToFormat === 'webm') && checkFfmpeg.success) {
+          filename = filename + '.' + conf.convertAjpgToFormat;
           var args = [];
           //------------------------now make global parameters------------------------
           args.push('-y'); //-y: always overwrite output file
@@ -764,23 +764,19 @@ function startRecording(q/*same as capture*/, on_complete) {
             args.push('-loglevel', 'debug');
           }
           //------------------------now make input parameters------------------------
-          if (q.type === 'apng') {
-            args.push('-f', 'image2', '-vcodec', 'png', '-update', '1');
-          } else if (q.type === 'ajpg') {
-            args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
-          } else {
-            log('impossible route');
-          }
+          args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
           args.push('-r', q.fps); //rate
           args.push('-i', '-'); //means from stdin
           //------------------------now make output parameters------------------------
-          args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2');
+          if (conf.convertAjpgToFormat === 'mp4') {
+            args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2');
+          }
           args.push('-fs', conf.maxRecordedFileSize);
           args.push(conf.outputDir + '/' + filename); //convert to this file
           /*
            * ------------------------------------start new converter process -------------------------------------------
            */
-          var childProc = spawn('[MP4Converter ' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
+          var childProc = spawn('[Converter' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
             wfile.__isClosed = true;
             log(wfile.logHead + 'closed');
             delete recordingFileMap[filename];
@@ -800,7 +796,7 @@ function startRecording(q/*same as capture*/, on_complete) {
             });
 
             recordingFileMap[filename] = true;
-            capture(wfile, q); //-----------------------------------capture and convert to mp4 file---------------------
+            capture(wfile, q); //-----------------------------------capture and convert to other type file--------------
             callbackOnce('', wfile);
           } else {
             callbackOnce(childProc.__spawnErr);
@@ -853,7 +849,7 @@ function startRecording(q/*same as capture*/, on_complete) {
       type:    'apng', 'ajpg', 'webm'
       fileIndex: [optional]
                 [Absolute file index string]: result of /deviceControl?action=startRecording command.
-                   Sample: "f4w300~20140219_101855_133_000.mp4"
+                   Sample: "f4w300~20140219_101855_133_000.webm"
                 [Relative file index number]: Bigger number means older file. E.g. 1 means 1 generation older file.
                    Sample: 0, 1, ...
       fps:     [optional] rate for apng, ajpg only. Must be in range MIN_FPS~MAX_FPS
@@ -879,13 +875,14 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
     }
 
     //check absFileIndex simply
-    var origFps = Number((absFileIndex.match(/^f([0-9.]+)/) || [])[1]);
-    if (chkerrRequired('fps', origFps, MIN_FPS, MAX_FPS)) {
-      return end(res, chkerr || 'bad `fileIndex`');
+    var origFps = absFileIndex.match(/^f([0-9.]+)/);
+    if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
+      return end(res, 'bad `fileIndex`');
     }
     q.fps = q.fps || origFps;
   }
-  var realType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
+  var realType = absFileIndex.match(/\.(\w+)$/);
+  realType = realType ? realType[1] : q.type;
 
   var rfile = fs.createReadStream(conf.outputDir + '/' + filename);
   rfile.logHead = '[FileReader(' + (forDownload ? 'Download' : 'Play') + ' ' + filename + ']';
@@ -902,7 +899,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
       }
       res.setHeader('Content-Type', (!forDownload && aimgVideoTypeSet[realType]) ? MULTIPART_MIXED_REPLACE : 'video/' + realType);
       if (forDownload) {
-        res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename + '.' + realType);
+        res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename.replace(/\.\w+$/, '') + '.' + realType);
         res.setHeader('Content-Length', stats.size);
       } else if (aimgVideoTypeSet[realType]) {
         rfile.aimgDecoder = aimgCreateContext(q.device, realType, q.playerId);
@@ -1013,8 +1010,8 @@ function findFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, on_complete) 
     if (findVideo) {
       //sort by time (newer first)
       filenameAry.sort(function (a, b) {
-        a = (a.slice(-4) === '.mp4' ? a.slice(0, -4) : a).slice(-nowStr.LEN);
-        b = (b.slice(-4) === '.mp4' ? b.slice(0, -4) : b).slice(-nowStr.LEN);
+        a = a.replace(/\.\w+$/, '').slice(-nowStr.LEN);
+        b = b.replace(/\.\w+$/, '').slice(-nowStr.LEN);
         return (a < b) ? 1 : (a > b) ? -1 : 0;
       });
     }
@@ -1600,6 +1597,7 @@ function startStreamWeb() {
             q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
           return end(res, chkerr);
         }
+        q.recordOption = q.recordOption || '';
         prepareDeviceFile(q.device, function /*on_complete*/(err) {
               if (err) {
                 return end(res, err);
@@ -1619,7 +1617,7 @@ function startStreamWeb() {
                   .replace(/@scale\b/g, q.scale)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
-                  .replace(new RegExp('<option value="' + (q.recordOption || '') + '"', 'g'), '$& selected') //set selected
+                  .replace(new RegExp('<option value="' + q.recordOption + '"', 'g'), '$& selected') //set selected
                   .replace(/@recordOption\b/g, q.recordOption)
               );
             }
@@ -1646,13 +1644,14 @@ function startStreamWeb() {
             }
           }
 
-          var origFps = Number((absFileIndex.match(/^f([0-9.]+)/) || [])[1]);
-          if (chkerrRequired('fps', origFps, MIN_FPS, MAX_FPS)) {
-            return end(res, chkerr || 'bad `fileIndex`');
+          var origFps = absFileIndex.match(/^f([0-9.]+)/);
+          if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
+            return end(res, 'bad `fileIndex`');
           }
           q.fps = q.fps || origFps;
 
-          var realType = /\.mp4$/.test(absFileIndex) ? 'mp4' : q.type;
+          var realType = absFileIndex.match(/\.(\w+)$/);
+          realType = realType ? realType[1] : q.type;
 
           res.setHeader('Content-Type', 'text/html');
           return end(res, htmlCache[(aimgVideoTypeSet[realType] ? 'aimg' : realType) + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
@@ -1661,7 +1660,7 @@ function startStreamWeb() {
               .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
               .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
               .replace(/@type\b/g, q.type)
-              .replace(/#typeDisp\b/g, htmlEncode(videoTypeMap[q.type].name))
+              .replace(/#typeDisp\b/g, (realType !== q.type ? 'converted from ' : '') + ' ' + htmlEncode(videoTypeMap[q.type].name))
               .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
               .replace(/@relFileIndex\b/g, relFileIndex)
               .replace(/@absFileIndex\b/g, absFileIndex)
@@ -2242,7 +2241,7 @@ checkAdb(function/*on_complete*/() {
 //todo: close existing ffmpeg processes in android by busybox -> seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit
 //todo: create shell script to start this application, download ffmpeg bin
 //todo: use "for ever" tool to start this server
-//todo: convert apng to mp4 so can control progress by viewer
+//todo: convert apng to mp4/webm so can control progress by viewer (ajpg to mp4/webm is done)
 //todo: safari: multipart/x-mixed-replace still does not work
 //todo: enable webm live viewing and recording at same time. Completely remove recordOption when liveViewer
 //todo: adapt fps change without interrupting viewer
