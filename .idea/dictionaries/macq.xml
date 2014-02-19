@@ -11,6 +11,7 @@
       <w>ajpg</w>
       <w>apng</w>
       <w>armv</w>
+      <w>axxx</w>
       <w>busybox</w>
       <w>chkerr</w>
       <w>crcrlf</w>
@@ -23,6 +24,7 @@
       <w>fstat</w>
       <w>getprop</w>
       <w>hhmmss</w>
+      <w>inited</w>
       <w>libvpx</w>
       <w>libx</w>
       <w>lightcyan</w>

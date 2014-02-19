@@ -11,7 +11,7 @@
   </style>
 </head>
 <body>
-  <h4 style="text-align: center">Recorded Video Of Android Screen (#typeDisp)
+  <h4 style="text-align: center">Recorded Video(MP4) Of Android Screen (converted from #typeDisp)
     <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">Download</a>
   </h4>
   <div style="text-align: center; width: 100%;">
@@ -36,12 +36,12 @@
     <div class="viewerContainer" ondblclick="scaleLocally(this)">
       <video class="viewer" onclick="rotateLocally(this)"
              autoplay controls preload="none" autobuffer="0">
-        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" type="video/webm">
-        Your browser does not support WebM video format. Please use Google Chrome Browser.
+        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" type="video/mp4">
+        Your browser does not support mp4 video format.
       </video>
     </div>
     <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&quot; type=&quot;video/webm&quot;&gt;&lt;/video&gt;</div>
+    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&quot; type=&quot;video/mp4&quot;&gt;&lt;/video&gt;</div>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>

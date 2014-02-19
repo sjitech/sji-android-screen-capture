@@ -28,18 +28,18 @@
       <label>
         <select name="recordOption">
           <option value="">Do Not Record</option>
-          <option value="">Record until close view</option>
-          <option value="">Record in background</option>
+          <option value="sync">Record until close view</option>
+          <option value="async">Record in background</option>
         </select>
       </label>
     </form>
     <div class="toolbar">
-      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClick=<b title="scale locally">Scale</b></span>
+      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClickMargin=<b title="scale locally">Scale</b></span>
     </div>
-    <div ondblclick="scaleLocally(this)">
+    <div class="viewerContainer" ondblclick="scaleLocally(this)">
       <video class="viewer" onclick="rotateLocally(this)"
              autoplay controls preload="none" autobuffer="0">
-        <source src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate" type="video/webm">
+        <source src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate&recordOption=@recordOption" type="video/webm">
         Your browser does not support WebM video format. Please use Google Chrome Browser.
       </video>
     </div>
@@ -74,7 +74,6 @@
       </li>
     </ul>
   </div>
-  <iframe name="resultIFrame" style="display: none"></iframe>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>
 </html>

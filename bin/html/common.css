@@ -41,6 +41,13 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
     -webkit-user-select: none;
     -ms-user-select: none;
 }
+.viewerContainer {
+    width: 100%;
+    background-color: #A0A0A0;
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
 .rotate90 {
     transform:rotate(90deg);
     -webkit-transform:rotate(90deg);
