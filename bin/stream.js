@@ -1318,10 +1318,10 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         lastImageMap[context.id2] = lastImageMap[context.id];
       }
       if (conf.tempImageLifeMilliseconds) {
+        if (conf.logImageDumpFile) {
+          log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
+        }
         try {
-          if (conf.logImageDumpFile) {
-            log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:', context.totalOffset);
-          }
           fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
         } catch (err) {
           log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
@@ -1408,18 +1408,17 @@ function cleanOldImageFile() {
 function saveImage(res, device, aimgDecoderIndex) {
   var lastImage = lastImageMap[querystring.escape(device) + '@' + aimgDecoderIndex];
   if (!lastImage) {
-    end(res, 'image not found');
-    return;
+    return end(res, 'image not found');
   }
   var fileIndex = lastImage.fileIndex;
   var filename = querystring.escape(device) + '~' + fileIndex;
   try {
     fs.writeFileSync(conf.outputDir + '/' + filename, lastImage.data);
-    end(res, 'OK: ' + fileIndex);
   } catch (err) {
     log('failed to write "' + filename + '". ' + stringifyError(err));
-    end(res, 'file operation error ' + err.code);
+    return end(res, 'file operation error ' + err.code);
   }
+  return end(res, 'OK: ' + fileIndex);
 }
 
 /*
@@ -1502,7 +1501,14 @@ function startStreamWeb() {
   conf.ipForHtmlLink = (isAnyIp(conf.ip) ? '127.0.0.1' : conf.ip);
   if (conf.ssl.on) {
     log('load SSL server certificate and private key from PKCS12 file: ' + conf.ssl.certificateFilePath);
-    var options = {pfx: fs.readFileSync(conf.ssl.certificateFilePath)};
+    var options;
+    try {
+      options = {pfx: fs.readFileSync(conf.ssl.certificateFilePath)};
+    } catch (err) {
+      log('failed to read certificate file "' + conf.ssl.certificateFilePath + '". ' + stringifyError(err), {stderr: true});
+      process.exit(1);
+      return;
+    }
     process.streamWeb = httpServer = require('https').createServer(options, handler);
   } else {
     process.streamWeb = httpServer = require('http').createServer(handler);
@@ -1751,7 +1757,14 @@ function startAdminWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.adminWeb.ip), smark = (conf.adminWeb.ssl.on ? 's' : '');
   if (conf.adminWeb.ssl.on) {
     log('load SSL server certificate and private key from PKCS12 file: ' + conf.adminWeb.ssl.certificateFilePath);
-    var options = {pfx: fs.readFileSync(conf.adminWeb.ssl.certificateFilePath)};
+    var options;
+    try {
+      options = {pfx: fs.readFileSync(conf.adminWeb.ssl.certificateFilePath)};
+    } catch (err) {
+      log('failed to read certificate file "' + conf.adminWeb.ssl.certificateFilePath + '". ' + stringifyError(err));
+      process.exit(1);
+      return;
+    }
     httpServer = require('https').createServer(options, handler);
   } else {
     httpServer = require('http').createServer(handler);
@@ -2216,11 +2229,25 @@ function loadResourceSync() {
 
   overallCounterMap.recorded.bytes = 0;
   //scan recorded files to get device serial numbers ever used
-  fs.readdirSync(conf.outputDir).forEach(function (filename) {
+  var filenameAry;
+  try {
+    filenameAry = fs.readdirSync(conf.outputDir);
+  } catch (err) {
+    log('failed to check output dir "' + conf.outputDir + '"' + stringifyError(err), {stderr: true});
+    process.exit(1);
+    return;
+  }
+  filenameAry.forEach(function (filename) {
     var parts = filename.split('~');
     if (parts.length > 1) {
       getOrCreateDevCtx(querystring.unescape(parts[0])/*device serial number*/);
-      overallCounterMap.recorded.bytes += fs.statSync(conf.outputDir + '/' + filename).size;
+      var stats;
+      try {
+        stats = fs.statSync(conf.outputDir + '/' + filename);
+      } catch (err) {
+        return;
+      }
+      overallCounterMap.recorded.bytes += stats.size;
     }
   });
 

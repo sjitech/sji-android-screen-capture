@@ -5,8 +5,8 @@
       <entry url="file://$PROJECT_DIR$">
         <entryData>
           <resourceRoots>
-            <path value="file://$PROJECT_DIR$/bin/out" />
-            <path value="file://$PROJECT_DIR$/bin/log" />
+            <path value="file://$PROJECT_DIR$/out" />
+            <path value="file://$PROJECT_DIR$/log" />
           </resourceRoots>
         </entryData>
       </entry>

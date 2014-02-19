@@ -19,14 +19,14 @@
     }
   },
 
-  "outputDir": "./output", //dir to store recorded file
+  "outputDir": "../out", //dir to store recorded file
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
   "tempImageLifeMilliseconds": 0, //0 means do not dump image file
   "convertAjpgToFormat": "webm", //convert recorded AJPG to ? format. Empty string means do not convert
 
   "log": {
-    "filePath": "./log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)
+    "filePath": "../log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)
     "backupDays": 7 //Should be >= 1
   },
 
