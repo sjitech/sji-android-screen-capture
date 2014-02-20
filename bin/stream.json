@@ -22,8 +22,11 @@
   "outputDir": "../out", //dir to store recorded file
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
-  "tempImageLifeMilliseconds": 0, //0 means do not dump image file
-  "convertAjpgToFormat": "webm", //convert recorded AJPG to ? format. Empty string means do not convert
+  "tempImageLifeMilliseconds": 0,    //0 means do not dump image file
+  "shadowRecordingFormat": "webm",   //when recording, save live capture stream as the specified format on fly.
+                                     // The original format file will also be saved.
+                                     // Empty string means do not convert on fly.
+                                     //Shadow recording will be stopped if owner recording is stopped
 
   "log": {
     "filePath": "../log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)

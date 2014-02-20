@@ -5,7 +5,9 @@ This project is aimed to capture android screen and view it in HTML5 video capab
 Yes, real time, low bandwidth.  This product will do encoding in android by <a href="http://ffmpeg.org/">ffmpeg</a>.  
 <pre><code><a href="http://youtu.be/CWcOjzAJ6Sg">recorded video sample( converted by youtube)</a>  
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
-  
+
+<b>New</b>: Recorded file can be viewed or downloaded as mp4 or webm.<br/>
+
 [Screenshot]
 
 Menu<br/>

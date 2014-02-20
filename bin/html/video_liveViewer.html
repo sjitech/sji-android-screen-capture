@@ -34,17 +34,16 @@
       </label>
     </form>
     <div class="toolbar">
-      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClickMargin=<b title="scale locally">Scale</b></span>
+      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
     </div>
-    <div class="viewerContainer" ondblclick="scaleLocally(this)">
-      <video class="viewer" onclick="rotateLocally(this)"
-             autoplay controls preload="none" autobuffer="0">
-        <source src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate&recordOption=@recordOption" type="video/webm">
-        Your browser does not support WebM video format. Please use Google Chrome Browser.
+    <div id="viewerContainer">
+      <video id="viewer" autoplay controls preload="none" autobuffer="0">
+        <source src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate&recordOption=@recordOption" type="video/@type">
+        Your browser does not support @type video format. Please use Google Chrome Browser.
       </video>
     </div>
     <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate type=&quot;video/webm&quot;&gt;&lt;/video&gt;</div>
+    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate type=&quot;video/@type&quot;&gt;&lt;/video&gt;</div>
   </div>
   <div class="expandable" style="position: fixed; top: 1px; left: 1px">
     <div>Help</div>

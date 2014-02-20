@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Recorded @type on #device</title>
+  <title>Recorded @realType on #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
     .navigationBar > a {font-size: large; font-weight: bold}
@@ -11,7 +11,7 @@
   </style>
 </head>
 <body>
-  <h4 style="text-align: center">Recorded Video Of Android Screen (#typeDisp)
+  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)
     <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">Download</a>
   </h4>
   <div style="text-align: center; width: 100%;">
@@ -23,6 +23,18 @@
         &lt;
       </a>
       <span>@absFileIndex</span>
+      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex" target="_self">
+        @type
+      </a>
+      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="_self">
+        webm
+      </a>
+      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.mp4" hideIf_mp4 target="_self">
+        mp4
+      </a>
+      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.ogg" hideIf_ogg target="_self">
+        ogg
+      </a>
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@newerFileIndex" target="_self">
         &gt;
       </a>
@@ -31,17 +43,16 @@
       </a>
     </div>
     <div class="toolbar">
-      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClickMargin=<b title="scale locally">Scale</b></span>
+      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
     </div>
-    <div class="viewerContainer" ondblclick="scaleLocally(this)">
-      <video class="viewer" onclick="rotateLocally(this)"
-             autoplay controls preload="none" autobuffer="0">
-        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" type="video/webm">
-        Your browser does not support WebM video format. Please use Google Chrome Browser.
+    <div id="viewerContainer">
+      <video id="viewer" autoplay controls preload="none" autobuffer="0">
+        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" type="video/@realType">
+        Your browser does not support @realType video format.
       </video>
     </div>
     <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&quot; type=&quot;video/webm&quot;&gt;&lt;/video&gt;</div>
+    <div class="code">&lt;video&gt;&lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&quot; type=&quot;video/@realType&quot;&gt;&lt;/video&gt;</div>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>

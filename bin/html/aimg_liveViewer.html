@@ -34,8 +34,8 @@
       <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved</a>
       <iframe name="resultIFrame" style="width: 100%; height: 28px; border: 1px solid lightgray" title="Saved Image FileIndex"></iframe>
     </div>
-    <div class="viewerContainer" ondblclick="scaleLocally(this)">
-      <img class="viewer" onclick="rotateLocally(this)"
+    <div id="viewerContainer" ondblclick="scaleLocally()">
+      <img id="viewer" onclick="rotateLocally()"
            src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate"/>
     </div>
     <div>You can embed following source into your HTML:</div>

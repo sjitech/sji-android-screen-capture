@@ -12,7 +12,7 @@ var child_process = require('child_process'),
 
 var conf = jsonFile.parse('./stream.json');
 if (!process) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  conf = {adb: '', ffmpeg: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0, convertAjpgToFormat: ''};
+  conf = {adb: '', ffmpeg: '', port: 0, ip: '', ssl: {on: false, certificateFilePath: ''}, adminWeb: {}, outputDir: '', maxRecordedFileSize: 0, ffmpegDebugLog: false, ffmpegStatistics: false, remoteLogAppend: false, logHttpReqAddr: false, reloadDevInfo: false, logImageDumpFile: false, logImageDecoderDetail: false, forceUseFbFormat: false, ffmpegOption: {}, tempImageLifeMilliseconds: 0, shadowRecordingFormat: ''};
 }
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
@@ -32,13 +32,14 @@ var devMgr = {}; //key:device serial number, value:device info. See getOrCreateD
 var chkerr = ''; //for chkerrXxx() to save error info 
 var htmlCache = {}; //key:filename
 var status = { consumerMap: {}};
-var overallCounterMap = {streaming: null, recording: null, recorded: {bytes: 0}};
+var overallCounterMap = {streaming: null, recording: null, recorded: {bytes: 0}, converting: null};
 var recordingFileMap = {}; //key:filename
 var childProcPidMap = {}; //key: pid
-var videoTypeMap = {apng: {name: 'Animated PNG'}, ajpg: {name: 'Animated JPG'}, webm: {name: 'WebM Video'}};
-var aimgVideoTypeSet = {apng: 1, ajpg: 1}; //animated PNG or JPG
-var imageTypeMap = {png: {name: 'PNG'}, jpg: {name: 'JPG'}};
-var videoAndImageTypeAry = Object.keys(videoTypeMap).concat(Object.keys(imageTypeMap));
+var videoTypeNameMap = {apng: 'Animated PNG', ajpg: 'Animated JPG', webm: 'WebM Video', mp4: 'MP4 H264 Video', ogg: 'Ogg Video'};
+var videoTypeSet = {apng: 1, ajpg: 1, webm: 1};
+var aimgTypeSet = {apng: 1, ajpg: 1}; //animated PNG or JPG
+var imageTypeSet = {png: 1, jpg: 1};
+var videoAndImageTypeAry = Object.keys(videoTypeSet).concat(Object.keys(imageTypeSet));
 var imageFileCleanerTimer;
 var lastImageMap = {}; //key: aimgDecoderIndex. value: {fileIndex:fileIndex, data:wholeImageBuf}
 var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqAddr', 'reloadDevInfo', 'logImageDumpFile', 'logImageDecoderDetail', 'forceUseFbFormat'];
@@ -228,9 +229,7 @@ function chkerrRequired(name, value /*candidateArray | candidateValue | candidat
     }
     if (Array.isArray(value)) { //check array type value
       if (canBeArray) {
-        if (value.every(function (el) {
-          return !el && el !== 0;
-        })) {
+        if (value.every(isEmpty)) {
           return setchkerr(name + ' must not be an empty array');
         }
       } else {
@@ -239,6 +238,10 @@ function chkerrRequired(name, value /*candidateArray | candidateValue | candidat
     }
   }
   return '';
+
+  function isEmpty(el) {
+    return !el && el !== 0;
+  }
 }
 
 function chkerrOptional(name, value /*,arrayOrMinValue, maxValue*/) {
@@ -252,16 +255,11 @@ function write(res, dataStrOfBuf) {
   }
   res.__bytesWritten += dataStrOfBuf.length;
 
-  var counter;
   if (res.filename) {
-    if ((counter = res.counter)) {
-      counter.bytes += dataStrOfBuf.length; //set recording bytes counter per device/type
-    }
-    if ((counter = overallCounterMap.recorded)) {
-      counter.bytes += dataStrOfBuf.length; //set recorded bytes counter overall
-    }
-  } else if ((counter = overallCounterMap.streaming)) {
-    counter.bytes += dataStrOfBuf.length; //set streaming bytes counter overall
+    (res.counter || {}).bytes += dataStrOfBuf.length; //set recording bytes counter per device/type
+    overallCounterMap.recorded.bytes += dataStrOfBuf.length; //set recorded bytes counter overall
+  } else {
+    (overallCounterMap.streaming || {}).bytes += dataStrOfBuf.length; //set streaming bytes counter overall
   }
 
   res.write(dataStrOfBuf);
@@ -343,15 +341,13 @@ function checkAdb(on_complete) {
 }
 
 function checkFfmpeg(on_complete) {
-  if (!conf.convertAjpgToFormat) {
-    on_complete();
-    return;
-  }
   log('[CheckFfmpeg]Full path of FFMPEG is "' + searchInPath(conf.ffmpeg) + '"');
   spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'],
       function /*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stderr) {
-          log('Failed to check FFMPEG (for this machine, not for Android device). You will not be able to convert Animated JPG to ' + conf.convertAjpgToFormat + ' on-fly when recording. Please check log', {stderr: true});
+          log('Failed to check FFMPEG (for this machine, not for Android device).' +
+              ' You will not be able to convert recorded video to other format.' +
+              ' Please install it from "http://www.ffmpeg.org/download.html". Please check log', {stderr: true});
         } else {
           checkFfmpeg.success = true;
         }
@@ -477,8 +473,8 @@ function prepareDeviceFile(device, on_complete) {
 
 function chkerrCaptureParameter(q) {
   if (chkerrRequired('type', q.type, videoAndImageTypeAry) ||
-      videoTypeMap[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
-      imageTypeMap[q.type] && (q.fps = 0) && false ||
+      videoTypeSet[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
+      imageTypeSet[q.type] && (q.fps = 0) && false ||
       chkerrOptional('rotate(optional)', (q.rotate = Number(q.rotate)), [0, 90, 270])) {
     return chkerr;
   }
@@ -550,40 +546,30 @@ function capture(outputStream, q) {
       logHead: '[Capture ' + stringifyCaptureParameter(q, 'log') + ']'};
   }
 
-  if (imageTypeMap[q.type]) {
+  function didOutput(consumerId, consumerMap) {
+    return consumerMap[consumerId].__bytesWritten > 0;
+  }
+
+  if (imageTypeSet[q.type]) {
     //for single image, it is light process, so let it coexistent with existing capture.
     provider = createCaptureProvider();
-  } else {
-    if (dev.liveStreamer && res.filename) { //stop other recording
-      forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
-        if (_res.filename) {
-          endCaptureConsumer(_res, 'start another capture for recording');
-        }
-      });
-    }
-    if (dev.liveStreamer) { //there is an existing capture running or preparing
-      if (dev.liveStreamer.type !== q.type || dev.liveStreamer.fps !== q.fps || dev.liveStreamer.scale !== q.scale || dev.liveStreamer.rotate !== q.rotate) {
-        forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
-        provider = dev.liveStreamer = createCaptureProvider();
-      } else if (dev.liveStreamer.type === 'webm') {
-        //theoretically WebM video stream can be broadcast to multiple client if fps is same,
-        //but currently can not be analysed correctly, so this feature is not supported yet.
-        //Specially, if no any consumer started output yet, it is possible to share the capture.
-        if (Object.keys(dev.liveStreamer.consumerMap).some(function (consumerId) {
-          return dev.liveStreamer.consumerMap[consumerId].__bytesWritten;
-        })) {
-          forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
-          provider = dev.liveStreamer = createCaptureProvider();
-        } else {
-          provider = dev.liveStreamer;
-        }
-      } else {
-        //Animated PNG,JPG stream can be broadcast to multiple client if fps is same
-        provider = dev.liveStreamer;
-      }
-    } else { //there is no existing capture running or preparing
+  } else if (dev.liveStreamer) { //there is an existing capture running or preparing
+    if (dev.liveStreamer.type !== q.type || dev.liveStreamer.fps !== q.fps || dev.liveStreamer.scale !== q.scale || dev.liveStreamer.rotate !== q.rotate ||
+        !aimgTypeSet[dev.liveStreamer.type] && (Object.keys(dev.liveStreamer.consumerMap).some(didOutput))) {
+      forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
       provider = dev.liveStreamer = createCaptureProvider();
+    } else { //share existing stream provider (Animated PNG,JPG or webm if have not output yet)
+      provider = dev.liveStreamer;
+      if (res.filename) { //stop other unrelated recording
+        forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
+          if (_res.filename && res.filename.slice(0, _res.filename.length) === _res.filename) {
+            endCaptureConsumer(_res, 'start another recording');
+          }
+        });
+      }
     }
+  } else { //there is no existing capture running or preparing
+    provider = dev.liveStreamer = createCaptureProvider();
   }
 
   /*
@@ -597,7 +583,7 @@ function capture(outputStream, q) {
   updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
 
   if (res.setHeader) {
-    res.setHeader('Content-Type', aimgVideoTypeSet[q.type] ? MULTIPART_MIXED_REPLACE : imageTypeMap[q.type] ? 'image/' + q.type : 'video/' + q.type);
+    res.setHeader('Content-Type', aimgTypeSet[q.type] ? MULTIPART_MIXED_REPLACE : imageTypeSet[q.type] ? 'image/' + q.type : 'video/' + q.type);
   }
   res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
     endCaptureConsumer(res, 'closed'/*do not change this string*/);
@@ -682,13 +668,13 @@ function capture(outputStream, q) {
           if (childProc.pid > 0) {
             provider.pid = childProc.pid;
 
-            if (aimgVideoTypeSet[provider.type]) { //for apng, ajpg
+            if (aimgTypeSet[provider.type]) { //for apng, ajpg
               provider.aimgDecoder = aimgCreateContext(q.device, provider.type);
             }
 
             childProc.stdout.on('data', function (buf) {
               convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
-                if (aimgVideoTypeSet[provider.type]) { //broadcast animated image to multiple client
+                if (aimgTypeSet[provider.type]) { //broadcast animated image to multiple client
                   aimgDecode(provider.aimgDecoder, provider.consumerMap, buf, 0, buf.length);
                 } else {
                   forEachValueIn(provider.consumerMap, write, buf);
@@ -739,7 +725,9 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
       try {
         process.kill(provider.pid);
       } catch (err) {
-        log('failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
+        if (err.code !== 'ENOENT') {
+          log('failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
+        }
       }
     }
     log(provider.logHead + 'detach this live streamer');
@@ -754,83 +742,32 @@ function startRecording(q/*same as capture*/, on_complete) {
           return;
         }
         var filename = stringifyCaptureParameter(q, 'filename');
-        var wfile;
+        var wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
+        wfile.filename = filename;
+        wfile.logHead = '[FileWriter(Record) ' + filename + ']';
 
-        if (q.type === 'ajpg' && (conf.convertAjpgToFormat === 'mp4' || conf.convertAjpgToFormat === 'webm') && checkFfmpeg.success) {
-          filename = filename + '.' + conf.convertAjpgToFormat;
-          var args = [];
-          //------------------------now make global parameters------------------------
-          args.push('-y'); //-y: always overwrite output file
-          if (conf.ffmpegStatistics !== true) {
-            args.push('-nostats');
-          }
-          if (conf.ffmpegDebugLog === true) {
-            args.push('-loglevel', 'debug');
-          }
-          //------------------------now make input parameters------------------------
-          args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
-          args.push('-r', q.fps); //rate
-          args.push('-i', '-'); //means from stdin
-          //------------------------now make output parameters------------------------
-          if (conf.convertAjpgToFormat === 'mp4') {
-            args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2');
-          }
-          args.push('-fs', conf.maxRecordedFileSize);
-          args.push(conf.outputDir + '/' + filename); //convert to this file
-          /*
-           * ------------------------------------start new converter process -------------------------------------------
-           */
-          var childProc = spawn('[Converter' + filename + ']', conf.ffmpeg, args, function/*on_close*/() {
-            wfile.__isClosed = true;
-            log(wfile.logHead + 'closed');
-            delete recordingFileMap[filename];
-            callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
-            if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
-              log('all files have been flushed. Now exit');
-              process.exit(0);
-            }
-          });
-          if (childProc.pid > 0) {
-            wfile = childProc.stdin;
-            wfile.filename = filename;
-            wfile.logHead = '[FileWriter(Record)' + filename + ')]';
-
-            wfile.on('error', function (err) {
-              log(wfile.logHead + stringifyError(err));
-            });
-
-            recordingFileMap[filename] = true;
-            capture(wfile, q); //-----------------------------------capture and convert to other type file--------------
-            callbackOnce('', wfile);
-          } else {
-            callbackOnce(childProc.__spawnErr);
-          }
-        }
-        else {
-          wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
-          wfile.filename = filename;
-          wfile.logHead = '[FileWriter(Record) ' + filename + ']';
-
-          wfile.on('open', function () {
-            log(wfile.logHead + 'opened for write');
-            recordingFileMap[filename] = true;
-            capture(wfile, q); //-----------------------------------capture to animated image file----------------------
-            callbackOnce('', wfile);
-          });
-          wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
-            wfile.__isClosed = true;
-            log(wfile.logHead + 'closed');
-            delete recordingFileMap[filename];
-            callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
-            if (process.toBeExited && Object.keys(recordingFileMap).length === 0) {
-              log('all files have been flushed. Now exit');
-              process.exit(0);
-            }
-          });
-          wfile.on('error', function (err) {
-            log(wfile.logHead + stringifyError(err));
-            callbackOnce(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
-          });
+        wfile.on('open', function () {
+          log(wfile.logHead + 'opened for write');
+          recordingFileMap[filename] = true;
+          capture(wfile, q); //---------do capture, save output to wfile----------
+          callbackOnce('', wfile);
+        });
+        wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
+          wfile.__isClosed = true;
+          log(wfile.logHead + 'closed');
+          delete recordingFileMap[filename];
+          callbackOnce('recording is stopped'); //do not worry, normally 'open' event handler have cleared this callback
+        });
+        wfile.on('error', function (err) {
+          log(wfile.logHead + stringifyError(err));
+          callbackOnce(err.code === 'ENOENT' ? 'error: output dir not found' : 'file operation error ' + err.code);
+        });
+        /*
+         *-------------------on-fly convert to other format-------------------------------------------------------------
+         *  shadow recording will be stopped if owner recording is stopped
+         */
+        if (checkFfmpeg.success && conf.shadowRecordingFormat && conf.shadowRecordingFormat !== q.type) {
+          wfile.childConsumerId = convertOnRecording(q, filename, conf.shadowRecordingFormat);
         }
       }
   );
@@ -841,6 +778,162 @@ function startRecording(q/*same as capture*/, on_complete) {
       on_complete = null;
     }
   }
+}
+
+function convertOnRecording(q, origFilename, newType) {
+  var newFilename = origFilename + '.' + newType;
+  var logHead = '[Converter(live ' + q.type + ' -> ' + newFilename + ')]';
+  var args = makeConverterParameter(null, newFilename, q.type, q.fps, newType);
+  /*
+   * ------------------------------------start new converter process -------------------------------------------
+   */
+  var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) {
+    log(logHead + (ret === 0 ? 'complete' : 'failed due to ' + (childProc.__spawnErr || 'internal error')));
+    if (childProc.pid > 0) {
+      childProc.stdin.__isClosed = true;
+      delete recordingFileMap[newFilename];
+    }
+  });
+  if (childProc.pid > 0) {
+    childProc.stdin.filename = newFilename;
+    childProc.stdin.logHead = '[FileWriter(Record)' + newFilename + ')]';
+    childProc.stdin.on('error', function (err) {
+      log(childProc.stdin.logHead + stringifyError(err));
+    });
+    recordingFileMap[newFilename] = true;
+    capture(childProc.stdin, q); //---------do capture, save output to childProc.stdin----------
+    return childProc.stdin.consumerId;
+  }
+  return null;
+}
+
+function convertRecordedFile(origFileName, newFilename, origType, origFps, newType, on_complete) {
+  var logHead = '[Converter (' + origFileName + ' -> *.' + newType + ')]';
+  if (recordingFileMap[origFileName] || !fs.existsSync(conf.outputDir + '/' + origFileName)) {
+    log(logHead + (recordingFileMap[origFileName] ? 'error: file in recording' : 'error: file not found'));
+    on_complete('error: file not found');
+    return null;
+  }
+  var waiter = {}; //also serve as fake owner stream
+  waiter.id = nowStr();
+  waiter.callback = on_complete;
+  waiter.newFilename = newFilename; //.filename is needed by updateCounter
+  waiter.device = origFileName.split('~')[0];
+  waiter.origType = origType; //owner type
+
+  if (recordingFileMap[newFilename]) { //converter process is running
+    recordingFileMap[newFilename].waiterMap[waiter.id] = waiter;
+    log(logHead + 'use existing converter');
+    return waiter;
+  }
+
+  var args = makeConverterParameter(origFileName, newFilename, origType, origFps, newType);
+  /*
+   * ------------------------------------start new converter process -------------------------------------------
+   */
+  var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) {
+    log(logHead + (ret === 0 ? 'complete' : (childProc.__spawnErr || 'internal error')));
+    if (childProc.pid > 0 && recordingFileMap[newFilename]) {
+      recordingFileMap[newFilename].pid = 0; //means normally end converting
+      var err = ret === 0 ? '' : 'converter have internal error';
+      forEachValueIn(recordingFileMap[newFilename].waiterMap, endConverterWaiter, err);
+    }
+  });
+  if (childProc.pid > 0) {
+    var converter = {};
+    recordingFileMap[newFilename] = converter;
+    converter.pid = childProc.pid;
+    converter.waiterMap = {};
+    converter.waiterMap[waiter.id] = waiter;
+    converter.convertedSize = 0;
+    converter.updateRecordedBytes = function () {
+      var stats, deltaSize;
+      try {
+        stats = fs.statSync(conf.outputDir + '/' + newFilename);
+      } catch (err) {
+        return;
+      }
+      deltaSize = stats.size - converter.convertedSize;
+      converter.convertedSize = stats.size; //set recording bytes counter per device/type
+      overallCounterMap.recorded.bytes += deltaSize; //set recorded bytes counter overall
+    };
+    converter.timerToUpdateRecordedBytes = setInterval(converter.updateRecordedBytes, 1000);
+
+    updateCounter(waiter.device, origType, +1, waiter);
+
+    return waiter;
+  } else {
+    on_complete(childProc.__spawnErr);
+    return null;
+  }
+}
+
+function endConverterWaiter(waiter, err) {
+  var converter, waiterMap;
+  if (!(converter = recordingFileMap[waiter.newFilename]) || !(waiterMap = converter.waiterMap) || !waiterMap[waiter.id]) {
+    return;
+  }
+  waiter.callback(err);
+  delete waiterMap[waiter.id];
+
+  updateCounter(waiter.device, waiter.origType, -1, waiter);
+
+  if (Object.keys(waiterMap).length === 0) {
+    delete recordingFileMap[waiter.newFilename];
+    clearInterval(converter.timerToUpdateRecordedBytes);
+
+    converter.updateRecordedBytes();
+
+    if (converter.pid > 0) {
+      log('kill converter process pid_' + converter.pid + ' to abort converting');
+      try {
+        process.kill(converter.pid);
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          log('failed to kill process pid_' + converter.pid + '. ' + stringifyError(err));
+        }
+      }
+      log('delete "' + conf.outputDir + waiter.newFilename + '" to abort converting');
+      try {
+        fs.unlinkSync(conf.outputDir + '/' + waiter.newFilename);
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          log('failed to delete "' + conf.outputDir + waiter.newFilename + '". ' + stringifyError(err));
+        }
+        return;
+      }
+      overallCounterMap.recorded.bytes -= converter.convertedSize;
+      pushStatus();
+    }
+  }
+}
+
+function makeConverterParameter(filename, newFilename, type, fps, newType) {
+  var args = [];
+  //------------------------now make global parameters------------------------
+  args.push('-y'); //-y: always overwrite output file
+  if (conf.ffmpegStatistics !== true) {
+    args.push('-nostats');
+  }
+  if (conf.ffmpegDebugLog === true) {
+    args.push('-loglevel', 'debug');
+  }
+  //------------------------now make input parameters------------------------
+  if (type === 'apng') {
+    args.push('-f', filename ? 'image2' : 'image2pipe', '-vcodec', 'png');
+  } else if (type === 'ajpg') {
+    args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
+  } else if (type === 'webm') {
+    args.push('-f', 'webm', '-vcodec', 'libvpx');
+  }
+  args.push('-r', fps); //rate
+  args.push('-i', filename ? (conf.outputDir + '/' + filename) : '-'); //from file or stdin
+  //------------------------now make output parameters------------------------
+  if (newType === 'mp4') {
+    args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2'); //w, h to even integer. Because Odd w, h cause error!
+  }
+  args.push(conf.outputDir + '/' + newFilename);
+  return args;
 }
 
 /**
@@ -859,10 +952,15 @@ function startRecording(q/*same as capture*/, on_complete) {
       fps:     [optional] rate for apng, ajpg only. Must be in range MIN_FPS~MAX_FPS
     }
  * @param forDownload  true/false
- * @param __fileIndex_checked internal flag
+ * @param range [optional] {start:?, end:?}
+ * @param __fileIndex_checked [optional] internal flag
+ * @param __file_checked [optional] internal flag
  */
-function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/, __fileIndex_checked) {
+function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/, range, __fileIndex_checked/*internal*/, __file_checked/*internal*/) {
   var res = httpOutputStream, filename, absFileIndex;
+  /*
+   * get file name by fileIndex or first recorded file of the type
+   */
   if (!__fileIndex_checked) {
     var relFileIndex;
     if ((relFileIndex = Number(q.fileIndex || 0)) >= 0) {
@@ -871,67 +969,118 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload/*optional*/
           return end(res, err || 'error: file not found');
         }
         q.fileIndex = filename.slice(querystring.escape(q.device).length + 1 + q.type.length + 1); //strip SN~type~
-        return playOrDownloadRecordedFile(res, q, forDownload, true/*__fileIndex_checked*/);
+        return playOrDownloadRecordedFile(res, q, forDownload, range, true/*__fileIndex_checked*/, false/*file not checked*/);
       });
-    } else {
-      absFileIndex = q.fileIndex;
-      filename = querystring.escape(q.device) + '~' + q.type + '~' + absFileIndex;
     }
-
-    //check absFileIndex simply
-    var origFps = absFileIndex.match(/^f([0-9.]+)/);
-    if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
-      return end(res, 'bad `fileIndex`');
-    }
-    q.fps = q.fps || origFps;
   }
-  var realType = absFileIndex.match(/\.(\w+)$/);
+  absFileIndex = q.fileIndex;
+  filename = querystring.escape(q.device) + '~' + q.type + '~' + absFileIndex;
+  if (recordingFileMap[filename] && !__file_checked) {
+    return end(res, 'error: file in recording');
+  }
+
+  var origFps = absFileIndex.match(/^f([0-9.]+)/);
+  if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
+    return end(res, 'bad `fileIndex`');
+  }
+  q.fps = q.fps || origFps;
+
+  var realType = absFileIndex.match(/\.(\w+)$/); //get extension name
   realType = realType ? realType[1] : q.type;
 
-  var rfile = fs.createReadStream(conf.outputDir + '/' + filename);
+  var origFilename = filename.replace(/\.(\w+)$/, ''); //remove extension name
+
+  var stats;
+  try {
+    stats = fs.statSync(conf.outputDir + '/' + filename);
+  } catch (err) {
+    if (err.code === 'ENOENT' && realType !== q.type && !__file_checked) {
+      /*
+       * ------------------ convert format if does not exists ------------------------
+       */
+      var waiter = convertRecordedFile(origFilename, filename, q.type, origFps, realType, function/*on_complete*/(err) {
+        if (err) {
+          end(res, err);
+        } else { //-----------------------when conversion succeed, do playOrDownloadRecordedFile-----------------------
+          playOrDownloadRecordedFile(res, q, forDownload, range, true/*__fileIndex_checked*/, true/*__file_checked*/);
+        }
+      });
+      if (waiter) {
+        res.on('close', function () { //http connection is closed without normal end(res,...)
+          endConverterWaiter(waiter, 'owner http connection is closed by peer');
+        });
+      }
+    } else {
+      end(res, err.code === 'ENOENT' ? 'error: file not found' : 'file operation error ' + err.code);
+    }
+    return '';
+  }
+  if (!stats.size) {
+    return end(res, 'error: file is empty');
+  }
+  /*
+   * ------------------ support partial data request ---------------------
+   */
+  if ((!forDownload && aimgTypeSet[realType])) {
+    range = undefined;
+  } else {
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (range) {
+      range.start = Math.min(Math.max(Number(range.start), 0), stats.size) || 0;
+      range.end = Math.min(Math.max(Number(range.end), range.start), stats.size) || stats.size;
+      if (range.start === 0 && range.end === stats.size) {
+        range = undefined;
+      }
+    }
+    if (range) {
+      res.setHeader('Content-Range', 'bytes ' + range.start + '-' + (range.end - 1) + '/' + stats.size);
+      res.setHeader('Content-Length', range.end - range.start);
+    } else {
+      res.setHeader('Content-Length', stats.size);
+    }
+  }
+  /*
+   * ------------------ now open file ---------------------
+   */
+  var rfile = fs.createReadStream(conf.outputDir + '/' + filename, range);
   rfile.logHead = '[FileReader(' + (forDownload ? 'Download' : 'Play') + ' ' + filename + ']';
   res.logHead = res.logHead.slice(0, -1) + ' @ ' + rfile.logHead.slice(1, -1) + ']';
 
-  rfile.on('open', function (fd) {
+  rfile.on('open', function () {
     log(rfile.logHead + 'opened for read');
-    fs.fstat(fd, function/*on_complete*/(err, stats) {
-      if (err) {
-        log(rfile.logHead + 'fstat ' + err);
-        end(res, 'file operation error ' + err.code);
-        rfile.close(); //stop reading more
-        return;
+    res.setHeader('Content-Type', (!forDownload && aimgTypeSet[realType]) ? MULTIPART_MIXED_REPLACE : 'video/' + realType);
+    if (forDownload) {
+      res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename.replace(/\.\w+$/, '') + '.' + realType);
+    } else if (aimgTypeSet[realType]) {
+      rfile.aimgDecoder = aimgCreateContext(q.device, realType, q.playerId);
+      rfile.aimgDecoder.fromFrame = Number(q.fromFrame);
+      rfile.startTimeMs = Date.now();
+    } else {
+      if (range) {
+        res.writeHead(206); //Partial Content
       }
-      res.setHeader('Content-Type', (!forDownload && aimgVideoTypeSet[realType]) ? MULTIPART_MIXED_REPLACE : 'video/' + realType);
+    }
+    updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
+
+    rfile.on('data', function (buf) {
       if (forDownload) {
-        res.setHeader('Content-Disposition', 'attachment;filename=asc~' + filename.replace(/\.\w+$/, '') + '.' + realType);
-        res.setHeader('Content-Length', stats.size);
-      } else if (aimgVideoTypeSet[realType]) {
-        rfile.aimgDecoder = aimgCreateContext(q.device, realType, q.playerId);
-        rfile.aimgDecoder.fromFrame = Number(q.fromFrame);
-        rfile.startTimeMs = Date.now();
+        write(res, buf);
+      } else if (aimgTypeSet[realType]) { //play apng, ajpg specially, translate it to multipart output
+        rfile.aimgDecoder.isLastBuffer = (stats.size -= buf.length) === 0;
+        aimgDecode(rfile.aimgDecoder, [res], buf, 0, buf.length, fnDecodeRest);
+      } else { //for normal video, just write content
+        write(res, buf);
       }
-      updateCounter(q.device, q.type, +1, res/*ownerOutputStream*/);
 
-      rfile.on('data', function (buf) {
-        if (forDownload) {
-          write(res, buf);
-        } else if (aimgVideoTypeSet[realType]) { //play apng, ajpg specially, translate it to multipart output
-          rfile.aimgDecoder.isLastBuffer = (stats.size -= buf.length) === 0;
-          aimgDecode(rfile.aimgDecoder, [res], buf, 0, buf.length, fnDecodeRest);
-        } else { //for normal video, just write content
-          write(res, buf);
-        }
-
-        function fnDecodeRest(pos/*rest data start position*/) {
-          rfile.pause();
-          rfile.timer = setTimeout(function () {
-            rfile.resume();
-            rfile.timer = null;
-            aimgDecode(rfile.aimgDecoder, [res], buf, pos, buf.length, fnDecodeRest);
-          }, Math.max(1, (rfile.startTimeMs + rfile.aimgDecoder.frameIndex * 1000 / q.fps) - Date.now()));
-        }
-      }); //end of 'data' event handler
-    }); //end of fstat on_complete of fstat
+      function fnDecodeRest(pos/*rest data start position*/) {
+        rfile.pause();
+        rfile.timer = setTimeout(function () {
+          rfile.resume();
+          rfile.timer = null;
+          aimgDecode(rfile.aimgDecoder, [res], buf, pos, buf.length, fnDecodeRest);
+        }, Math.max(1, (rfile.startTimeMs + rfile.aimgDecoder.frameIndex * 1000 / q.fps) - Date.now()));
+      }
+    }); //end of 'data' event handler
   }); //end of 'open' event handler
 
   rfile.on('close', function () { //file's 'close' event will always be fired
@@ -966,7 +1115,7 @@ function findFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, on_complete) 
   var typeAry = !typeOrAry ? null : Array.isArray(typeOrAry) ? typeOrAry : [typeOrAry];
   var findVideo, findImage;
   if (typeAry) {
-    findVideo = videoTypeMap[typeAry[0]];
+    findVideo = videoTypeSet[typeAry[0]];
     findImage = !findVideo;
   }
 
@@ -1049,7 +1198,7 @@ function deleteFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/) {
 }
 
 function updateCounter(device, type, delta, res/*ownerOutputStream*/) {
-  var dev = devMgr[device], counter, counterType = res.filename ? 'recording' : 'streaming';
+  var dev = devMgr[device], counter, counterType = res.filename ? 'recording' : res.newFilename ? 'converting' : 'streaming';
 
   //set overall counter. overallCounterMap[counterType].bytes will be set by write(res,...)
   if (!(counter = overallCounterMap[counterType])) {
@@ -1100,10 +1249,11 @@ function pushStatus() {
   }
   sd.totalRecordedFileSize = 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB';
   sd.totalRecordingCount = overallCounterMap.recording ? overallCounterMap.recording.count : 0;
+  sd.totalConvertingCount = overallCounterMap.converting ? overallCounterMap.converting.count : 0;
 
   //set individual counter. res.counter.bytes will be set by write(res,...)
   forEachValueIn(devMgr, function (dev, device) {
-    forEachValueIn(dev.counterMapRoot, function (counterMap, type) {
+    forEachValueIn(dev.counterMapRoot, function (counterMap, type/*video/image type*/) {
       ['streaming', 'recording'].forEach(function (counterType) {
         counter = counterMap[counterType];
         disp = '';
@@ -1356,7 +1506,7 @@ function startImageFileCleanerIfNecessary() {
   }
   var needImageFileCleaner = 0;
   forEachValueIn(devMgr, function (dev) {
-    Object.keys(aimgVideoTypeSet).forEach(function (type) {
+    Object.keys(aimgTypeSet).forEach(function (type) {
       needImageFileCleaner += Object.keys(dev.counterMapRoot[type]).length;
     });
   });
@@ -1415,7 +1565,7 @@ function saveImage(res, device, aimgDecoderIndex) {
   try {
     fs.writeFileSync(conf.outputDir + '/' + filename, lastImage.data);
   } catch (err) {
-    log('failed to write "' + filename + '". ' + stringifyError(err));
+    log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
     return end(res, 'file operation error ' + err.code);
   }
   return end(res, 'OK: ' + fileIndex);
@@ -1496,6 +1646,18 @@ function setDefaultHttpHeader(res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 
+function getByteRange(req) {
+  var range = req.headers['range']; //just to avoid compiler warning
+  if (!range) {
+    return undefined;
+  }
+  var match = range.match(/^bytes=(\d*)-(\d*)$/i);
+  if (!match) {
+    return undefined;
+  }
+  return {start: match[1] ? Number(match[1]) : 0, end: match[2] ? (Number(match[2]) + 1) : undefined};
+}
+
 function startStreamWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.ip), smark = (conf.ssl.on ? 's' : '');
   conf.ipForHtmlLink = (isAnyIp(conf.ip) ? '127.0.0.1' : conf.ip);
@@ -1552,7 +1714,7 @@ function startStreamWeb() {
         return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
       default :
         res.logHead = '[HTTP' + smark.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']';
-        log(res.logHead.slice(0, -1) + (conf.logHttpReqAddr ? ' ' + req.connection.remoteAddress + ':' + req.connection.remotePort : '') + ' ' + req.url + ' ]' + 'begin');
+        log(res.logHead.slice(0, -1) + (conf.logHttpReqAddr ? ' ' + req.connection.remoteAddress + ':' + req.connection.remotePort : '') + ' ' + req.url + ' ]' + 'begin' + (req.headers['range'] ? ' with range:' + req.headers['range'] : ''));
         res.on('close', function () { //closed without normal end(res,...)
           res.__isClosed = true;
           log(res.logHead + 'closed by peer');
@@ -1590,17 +1752,17 @@ function startStreamWeb() {
         }
         break;
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
-        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
-            aimgVideoTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeSet)) ||
+            aimgTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
-        playOrDownloadRecordedFile(res, q, false/*forPlay*/, false/*fileIndex not checked*/);
+        playOrDownloadRecordedFile(res, q, false/*forPlay*/, getByteRange(req), false/*fileIndex not checked*/, false/*file not checked*/);
         break;
       case '/downloadRecordedFile': //---------------------download recorded file---------------------------------------
-        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap))) {
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeSet))) {
           return end(res, chkerr);
         }
-        playOrDownloadRecordedFile(res, q, true/*forDownload*/, false/*fileIndex not checked*/);
+        playOrDownloadRecordedFile(res, q, true/*forDownload*/, getByteRange(req), false/*fileIndex not checked*/, false/*file not checked*/);
         break;
       case '/liveViewer':  //------------------------------show live capture (Just as a sample) ------------------------
         if (chkerrCaptureParameter(q) ||
@@ -1613,13 +1775,13 @@ function startStreamWeb() {
                 return end(res, err);
               }
               res.setHeader('Content-Type', 'text/html');
-              return end(res, htmlCache[(aimgVideoTypeSet[q.type] ? 'aimg' : q.type) + '_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
+              return end(res, htmlCache[aimgTypeSet[q.type] ? 'aimg_liveViewer.html' : 'video_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
                   .replace(/@device\b/g, querystring.escape(q.device))
                   .replace(/#device\b/g, htmlEncode(q.device))
                   .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
                   .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
                   .replace(/@type\b/g, q.type)
-                  .replace(/#typeDisp\b/g, htmlEncode(videoTypeMap[q.type].name))
+                  .replace(/#realTypeDisp\b/g, htmlEncode(videoTypeNameMap[q.type]))
                   .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
                   .replace(/@MIN_FPS\b/g, MIN_FPS)
                   .replace(/@MAX_FPS\b/g, MAX_FPS)
@@ -1634,57 +1796,11 @@ function startStreamWeb() {
         );
         break;
       case '/fileViewer':  //---------------------------show recorded file  (Just as a sample)--------------------------
-        if (chkerrRequired('type', q.type, Object.keys(videoTypeMap)) ||
-            aimgVideoTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
+        if (chkerrRequired('type', q.type, Object.keys(videoTypeSet)) ||
+            aimgTypeSet[q.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS)) {
           return end(res, chkerr);
         }
-        findFiles(q.device, q.type, function/*on_complete*/(err, filenameAry) {
-          var filename, absFileIndex, relFileIndex;
-          if ((relFileIndex = Number(q.fileIndex || 0)) >= 0) {
-            if (err || !(filename = filenameAry[relFileIndex])) {
-              return end(res, err || 'error: file not found');
-            }
-            absFileIndex = filename.slice(querystring.escape(q.device).length + 1 + q.type.length + 1); //strip SN~type~
-          } else {
-            absFileIndex = q.fileIndex;
-            filename = querystring.escape(q.device) + '~' + q.type + '~' + absFileIndex;
-            relFileIndex = filenameAry.indexOf(filename);
-            if (relFileIndex < 0) {
-              return end(res, 'error: file not found');
-            }
-          }
-
-          var origFps = absFileIndex.match(/^f([0-9.]+)/);
-          if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
-            return end(res, 'bad `fileIndex`');
-          }
-          q.fps = q.fps || origFps;
-
-          var realType = absFileIndex.match(/\.(\w+)$/);
-          realType = realType ? realType[1] : q.type;
-
-          res.setHeader('Content-Type', 'text/html');
-          return end(res, htmlCache[(aimgVideoTypeSet[realType] ? 'aimg' : realType) + '_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
-              .replace(/@device\b/g, querystring.escape(q.device))
-              .replace(/#device\b/g, htmlEncode(q.device))
-              .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
-              .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
-              .replace(/@type\b/g, q.type)
-              .replace(/#typeDisp\b/g, (realType !== q.type ? 'converted from ' : '') + ' ' + htmlEncode(videoTypeMap[q.type].name))
-              .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
-              .replace(/@relFileIndex\b/g, relFileIndex)
-              .replace(/@absFileIndex\b/g, absFileIndex)
-              .replace(/@maxRelFileIndex\b/g, filenameAry.length - 1)
-              .replace(/@olderFileIndex\b/g, Math.min(relFileIndex + 1, filenameAry.length - 1))
-              .replace(/@newerFileIndex\b/g, Math.max(relFileIndex - 1, 0))
-              .replace(/@pathname\b/g, parsedUrl.pathname)
-              .replace(/@MIN_FPS\b/g, MIN_FPS)
-              .replace(/@MAX_FPS\b/g, MAX_FPS)
-              .replace(/@fps\b/g, q.fps)
-              .replace(/&fromFrame=@fromFrame\b/g, Number(q.fromFrame) > 0 ? '&fromFrame=' + q.fromFrame : '') //debug only
-              .replace(/@playerId\b/g, nowStr())
-          );
-        });
+        showFileViewer(false/*means file maybe need be converted to*/);
         break;
       case '/saveImage': //-----------------------save image from live view or recorded file ---------------------------
         var aimgDecoderIndex;
@@ -1720,7 +1836,7 @@ function startStreamWeb() {
           return end(res, chkerr);
         }
         match = q.fileIndex.match(/^\w{4}Decoder\d{8}_\d{6}_\d{3}_\d{3}_frame\d+_\d{8}_\d{6}_\d{3}_\d{3}\.(\w{3})$/);
-        if (!match || !imageTypeMap[match[1]]) {
+        if (!match || !imageTypeSet[match[1]]) {
           return end(res, '`fileIndex` is not valid');
         }
         res.setHeader('Content-Type', 'image/' + match[1]);
@@ -1732,7 +1848,7 @@ function startStreamWeb() {
         break;
       case '/listSavedImages': //--------------------list all saved images----------------------------------------------
         var qdevice = querystring.escape(q.device);
-        findFiles(q.device, Object.keys(imageTypeMap), function/*on_complete*/(err, filenameAry) {
+        findFiles(q.device, Object.keys(imageTypeSet), function/*on_complete*/(err, filenameAry) {
           if (err || !filenameAry || !filenameAry.length) {
             return end(res, err || '');
           }
@@ -1750,8 +1866,88 @@ function startStreamWeb() {
         end(res, 'bad request');
     }
     return ''; //just to avoid compiler warning
-  }
-}
+
+    function showFileViewer(__file_converted) {
+      findFiles(q.device, q.type, function/*on_complete*/(err, filenameAry) {
+        var filename, absFileIndex, relFileIndex;
+        if ((relFileIndex = Number(q.fileIndex || 0)) >= 0) {
+          if (err || !(filename = filenameAry[relFileIndex])) {
+            return end(res, err || 'error: file not found');
+          }
+          absFileIndex = filename.slice(querystring.escape(q.device).length + 1 + q.type.length + 1); //strip SN~type~
+        } else {
+          absFileIndex = q.fileIndex;
+          filename = querystring.escape(q.device) + '~' + q.type + '~' + absFileIndex;
+          relFileIndex = filenameAry.indexOf(filename);
+        }
+
+        var origFps = absFileIndex.match(/^f([0-9.]+)/);
+        if (!origFps || chkerrRequired('fps', (origFps = Number(origFps[1])), MIN_FPS, MAX_FPS)) {
+          return end(res, 'bad `fileIndex`');
+        }
+        q.fps = q.fps || origFps;
+
+        var realType = absFileIndex.match(/\.(\w+)$/); //get extension name
+        realType = realType ? realType[1] : q.type;
+
+        var origFilename = filename.replace(/\.(\w+)$/, ''); //remove extension name
+
+        if (relFileIndex < 0) {
+          if (realType === q.type || __file_converted) {
+            return end(res, 'error: file not found');
+          }
+          if (filenameAry.indexOf(origFilename) < 0) {
+            return end(res, 'error: file not found');
+          }
+          /*
+           * ------------- convert file format if not exists-----------------
+           */
+          var waiter = convertRecordedFile(origFilename, filename, q.type, origFps, realType, function/*on_complete*/(err) {
+            if (err) {
+              end(res, err);
+            } else { //-------------------------when conversion succeed, do showFileViewer-----------------------
+              showFileViewer(true/*__file_converted*/);
+            }
+          });
+          if (waiter) {
+            res.on('close', function () { //http connection is closed without normal end(res,...)
+              endConverterWaiter(waiter, 'owner http connection is closed by peer');
+            });
+          }
+          return '';
+        }
+
+        var origFileIndex = absFileIndex.replace(/\.(\w+)$/, ''); //remove extension name
+
+        res.setHeader('Content-Type', 'text/html');
+        return end(res, htmlCache[aimgTypeSet[realType] ? 'aimg_fileViewer.html' : 'video_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
+            .replace(/@device\b/g, querystring.escape(q.device))
+            .replace(/#device\b/g, htmlEncode(q.device))
+            .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
+            .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
+            .replace(/@type\b/g, q.type) //owner type
+            .replace(/@realType\b/g, realType)
+            .replace(/#realTypeDisp\b/g, htmlEncode(videoTypeNameMap[realType] || (realType.slice(0, 1).toUpperCase() + realType.slice(1) + ' Video')))
+            .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
+            .replace(/@relFileIndex\b/g, relFileIndex)
+            .replace(/@absFileIndex\b/g, absFileIndex)
+            .replace(/@maxRelFileIndex\b/g, filenameAry.length - 1)
+            .replace(/@olderFileIndex\b/g, Math.min(relFileIndex + 1, filenameAry.length - 1))
+            .replace(/@newerFileIndex\b/g, Math.max(relFileIndex - 1, 0))
+            .replace(/@pathname\b/g, parsedUrl.pathname)
+            .replace(/@MIN_FPS\b/g, MIN_FPS)
+            .replace(/@MAX_FPS\b/g, MAX_FPS)
+            .replace(/@fps\b/g, q.fps)
+            .replace(/&fromFrame=@fromFrame\b/g, Number(q.fromFrame) > 0 ? '&fromFrame=' + q.fromFrame : '') //debug only
+            .replace(/@playerId\b/g, nowStr())
+            .replace(new RegExp('hideIf_' + realType, 'g'), 'style="display:none"')
+            .replace(new RegExp('hideIf_' + q.type, 'g'), 'style="display:none"')
+            .replace(/@origFileIndex\b/g, origFileIndex)
+        );
+      });
+    } //end of showFileViewer()
+  } //end of handler(req, res)
+} //end of startStreamWeb()
 
 function startAdminWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.adminWeb.ip), smark = (conf.adminWeb.ssl.on ? 's' : '');
@@ -1884,14 +2080,14 @@ function startAdminWeb() {
             end(res, 'OK');
             break;
           case 'deleteRecordedFiles': //---------------------delete recorded files for multiple devices-----------------
-            if (chkerrRequired('type', q.type, Object.keys(videoTypeMap))) {
+            if (chkerrRequired('type', q.type, Object.keys(videoTypeSet))) {
               return end(res, chkerr);
             }
             deleteFiles(q.device, q.type);
             end(res, 'OK');
             break;
           case 'deleteImages': //--------------------------delete image files for multiple devices----------------------
-            deleteFiles(q.device, Object.keys(imageTypeMap));
+            deleteFiles(q.device, Object.keys(imageTypeSet));
             end(res, 'OK');
             break;
           default :
@@ -2017,15 +2213,20 @@ function startAdminWeb() {
         log('stop on demand');
         httpServer.close();
         process.streamWeb.close();
+        forEachValueIn(devMgr, function (dev) {
+          forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, res, 'stop server');
+        });
         Object.keys(childProcPidMap).forEach(function (pid) {
           log('kill child process pid_' + pid);
           try {
             process.kill(pid);
           } catch (err) {
-            log('failed to kill process pid_' + pid + '. ' + stringifyError(err));
+            if (err.code !== 'ENOENT') {
+              log('failed to kill process pid_' + pid + '. ' + stringifyError(err));
+            }
           }
         });
-        setTimeout(function () {
+        setInterval(function () {
           if (Object.keys(recordingFileMap).length) {
             log('there are ' + Object.keys(recordingFileMap).length + ' recording files have not been flushed. Wait...');
             process.toBeExited = true; //let 'close' event handler of recording file to do the check
@@ -2033,7 +2234,7 @@ function startAdminWeb() {
             log('no problem. Now exit');
             process.exit(0);
           }
-        }, 10);
+        }, 100);
         break;
       case '/restartAdb':  //------------------------------------restart ADB--------------------------------------------
         log(httpServer.logHead + 'restart ADB');
@@ -2265,6 +2466,7 @@ checkAdb(function/*on_complete*/() {
   });
 });
 
+//todo: firefox can not play mp4 but chrome can
 //todo: some device crashes if live view full image
 //todo: sometimes ScreenshotClient::update just failed
 //todo: screenshot buffer changed frequently, should lock
@@ -2272,9 +2474,7 @@ checkAdb(function/*on_complete*/() {
 //todo: close existing ffmpeg processes in android by busybox -> seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit
 //todo: create shell script to start this application, download ffmpeg bin
 //todo: use "for ever" tool to start this server
-//todo: convert apng to mp4/webm so can control progress by viewer (ajpg to mp4/webm is done)
 //todo: safari: multipart/x-mixed-replace still does not work
-//todo: enable webm live viewing and recording at same time. Completely remove recordOption when liveViewer
 //todo: adapt fps change without interrupting viewer
 //todo: use error image or video to show error
 //todo: water mark

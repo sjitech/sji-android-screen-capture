@@ -446,7 +446,7 @@
           });
 
           //set totalRecordedFileSize style
-          if (status.data.totalRecordingCount) {
+          if (status.data.totalRecordingCount || status.data.totalConvertingCount) {
             $('#totalRecordedFileSize').addClass('highlight');
           } else {
             $('#totalRecordedFileSize').removeClass('highlight');
