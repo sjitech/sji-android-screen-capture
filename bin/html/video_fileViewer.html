@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Recorded video on #device</title>
+  <title>Recorded mp4,webm on #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
     .navigationBar > a[href$="fileIndex=@relFileIndex"] {visibility: hidden}
@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <div style="text-align: center">Recorded Video Of Android Screen (converted from <b>@type</b>)</div>
+  <div style="text-align: center">Recorded <b>mp4,webm</b> Of Android Screen (converted from <b>@type</b>)</div>
   <div style="text-align: center; width: 100%;">
     <div class="navigationBar toolbar">
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@maxRelFileIndex&as=video" target="_self">
@@ -33,7 +33,7 @@
       <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm" target="asc download">webm</a>
       <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" hideIfOrigTypeIsNotAimg target="asc download">@type</a>
       <span hideIfOrigTypeIsNotAimg>
-        <span style="background-color: darkgray">&nbsp;</span>
+        &nbsp;&nbsp;<span style="background-color: darkgray">&nbsp;</span>&nbsp;&nbsp;
         <b>Show</b> as Animated Image
         <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="_self">@type</a>
       </span>
