@@ -2,15 +2,15 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Recorded @realType on #device</title>
+  <title>Recorded @type on #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
-    .navigationBar > a[href$="fileIndex=@relFileIndex"] {display: none}
-    .navigationBar > a[href*="fileIndex=@relFileIndex&"] {display: none}
+    .navigationBar > a[href$="fileIndex=@relFileIndex"] {visibility: hidden}
+    .navigationBar > a[href*="fileIndex=@relFileIndex&"] {visibility: hidden}
   </style>
 </head>
 <body>
-  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)</h4>
+  <div style="text-align: center">Recorded Animated Image(<b>@type</b>) Of Android Screen</div>
   <div style="text-align: center; width: 100%;">
     <div class="expandable" style="position: fixed; top: 1px; right: 1px">
       <div style="width: 86px">Advanced</div>
@@ -35,17 +35,7 @@
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@olderFileIndex&fps=@fps" target="_self">
         &lt;
       </a>
-      @absFileIndex <b class="mediaType">@realType</b>
-      <span style="background-color: darkgray">&nbsp;</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="_self">
-        webm
-      </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.mp4" hideIf_mp4 target="_self">
-        mp4
-      </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.ogg" hideIf_ogg target="_self">
-        ogg
-      </a>
+      <span class="fileIndex">@absFileIndex</span>
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@newerFileIndex&fps=@fps" target="_self">
         &gt;
       </a>
@@ -55,11 +45,14 @@
     </div>
     <div class="toolbar">
       <b>Download</b>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">@realType</a>
-      <span style="background-color: darkgray">&nbsp;</span>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="asc download">webm</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.mp4" hideIf_mp4 target="asc download">mp4</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.ogg" hideIf_ogg target="asc download">ogg</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=mp4" target="asc download">mp4</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm" target="asc download">webm</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">@type</a>
+      <span hideIfOrigTypeIsNotAimg>
+        <span style="background-color: darkgray">&nbsp;</span>
+        <b>Show</b> as
+        <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=video" target="_self">Video</a>(mp4,webm)
+      </span>
     </div>
     <div class="toolbar">
       <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
@@ -74,7 +67,7 @@
            src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&playerId=@playerId&fromFrame=@fromFrame"/>
     </div>
     <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&fromFrame=@fromFrame&quot;/&gt;</div>
+    <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&quot;/&gt;</div>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>
