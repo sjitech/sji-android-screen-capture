@@ -903,13 +903,13 @@ function endConverterWaiter(waiter, err) {
         }
       }
       var deleteOK;
-      log('delete "' + conf.outputDir + '/'+waiter.newFilename + '" to abort converting');
+      log('delete "' + conf.outputDir + '/' + waiter.newFilename + '" to abort converting');
       try {
         fs.unlinkSync(conf.outputDir + '/' + waiter.newFilename);
         deleteOK = true;
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          log('failed to delete "' + conf.outputDir + '/'+waiter.newFilename + '". ' + stringifyError(err));
+          log('failed to delete "' + conf.outputDir + '/' + waiter.newFilename + '". ' + stringifyError(err));
         }
       }
       if (deleteOK) {
@@ -1807,7 +1807,7 @@ function startStreamWeb() {
                   .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
                   .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
                   .replace(/@type\b/g, q.type)
-                  .replace(/#realTypeDisp\b/g, htmlEncode(videoTypeNameMap[q.type]))
+                  .replace(/#typeDisp\b/g, htmlEncode(videoTypeNameMap[q.type]))
                   .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
                   .replace(/@MIN_FPS\b/g, MIN_FPS)
                   .replace(/@MAX_FPS\b/g, MAX_FPS)
