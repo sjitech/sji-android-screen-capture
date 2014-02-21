@@ -34,12 +34,14 @@ a.internal {/*color: lightskyblue*/}
 a.confused {color: lightgray}
 a.caution {/*color: cadetblue*/}
 .toolbar {background-color: ghostwhite; z-index: 97;}
+.toolbar > a {font-size: large; font-weight: bold}
 label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: center}
 
 #viewer {
     user-select: none;
     -webkit-user-select: none;
     -ms-user-select: none;
+    min-height: 300px;
 }
 #viewerContainer {
     width: 100%;
@@ -81,4 +83,10 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
 
 .rotateScaleButton {
     background-color: #ededf4;
+}
+.mediaType {
+    font-size: larger; font-weight: bold;
+    color: blue;
+    border: 1px solid black;
+    padding: 2px;
 }

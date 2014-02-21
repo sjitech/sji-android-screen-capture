@@ -5,27 +5,29 @@
   <title>Recorded @realType on #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
-    .navigationBar > a {font-size: large; font-weight: bold}
     .navigationBar > a[href$="fileIndex=@relFileIndex"] {display: none}
     .navigationBar > a[href*="fileIndex=@relFileIndex&"] {display: none}
   </style>
 </head>
 <body>
-  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)
-    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">Download</a>
-  </h4>
+  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)</h4>
   <div style="text-align: center; width: 100%;">
-    <form class="toolbar" target="_self">
-      <input type="hidden" name="device" value="#device">
-      <input type="hidden" name="accessKey" value="#accessKey">
-      <input type="hidden" name="type" value="@type">
-      <input type="hidden" name="fileIndex" value="@absFileIndex">
+    <div class="expandable" style="position: fixed; top: 1px; right: 1px">
+      <div style="width: 86px">Advanced</div>
+      <div>
+        <form class="toolbar" target="_self">
+          <input type="hidden" name="device" value="#device">
+          <input type="hidden" name="accessKey" value="#accessKey">
+          <input type="hidden" name="type" value="@type">
+          <input type="hidden" name="fileIndex" value="@absFileIndex">
 
-      <button type="submit">Using</button>
-      <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
-        Rate<input type="text" name="fps" size="2" value="@fps"/>
-      </label>
-    </form>
+          <button type="submit">Using</button>
+          <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
+            Rate<input type="text" name="fps" size="2" value="@fps"/>
+          </label>
+        </form>
+      </div>
+    </div>
     <div class="navigationBar toolbar">
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@maxRelFileIndex&fps=@fps" target="_self">
         &lt;&lt;
@@ -33,7 +35,8 @@
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@olderFileIndex&fps=@fps" target="_self">
         &lt;
       </a>
-      <span>@absFileIndex</span>
+      @absFileIndex <b class="mediaType">@realType</b>
+      <span style="background-color: darkgray">&nbsp;</span>
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="_self">
         webm
       </a>
@@ -51,15 +54,23 @@
       </a>
     </div>
     <div class="toolbar">
-      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClickMargin=<b title="scale locally">Scale</b></span>
+      <b>Download</b>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">@realType</a>
+      <span style="background-color: darkgray">&nbsp;</span>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="asc download">webm</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.mp4" hideIf_mp4 target="asc download">mp4</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.ogg" hideIf_ogg target="asc download">ogg</a>
+    </div>
+    <div class="toolbar">
+      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
       <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&playerId=@playerId" target="resultIFrame" title="Save Current Image (on server side)">
         Save
       </a>
       <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved Images</a>
       <iframe name="resultIFrame" style="width: 100%; height: 28px; border: 1px solid lightgray" title="Saved Image FileIndex"></iframe>
     </div>
-    <div id="viewerContainer" ondblclick="scaleLocally()">
-      <img id="viewer" onclick="rotateLocally()"
+    <div id="viewerContainer">
+      <img id="viewer"
            src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&playerId=@playerId&fromFrame=@fromFrame"/>
     </div>
     <div>You can embed following source into your HTML:</div>

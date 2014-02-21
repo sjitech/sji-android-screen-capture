@@ -413,10 +413,10 @@
           var recordingFlagMap = {};
           $.each(status.data, function (elementId, text) {
 
+            var match = elementId.match(/recordingStatus_([^_]+)_(.*)$/);
             //show "Stop" button and hide all other "Record" button when recording
-            if (elementId.indexOf('recordingStatus_') >= 0) {
-
-              var parts = elementId.split('_'), device = parts[2], type = parts[1];
+            if (match) {
+              var device = match[2], type = match[1];
               recordingFlagMap[device] = recordingFlagMap[device] || (text ? true : false);
               if (text) {
                 var theToggleElement = document.getElementById('toggleRecording_' + type + '_' + device);

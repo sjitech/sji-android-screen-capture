@@ -5,15 +5,12 @@
   <title>Recorded @realType on #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
-    .navigationBar > a {font-size: large; font-weight: bold}
     .navigationBar > a[href$="fileIndex=@relFileIndex"] {display: none}
     .navigationBar > a[href*="fileIndex=@relFileIndex&"] {display: none}
   </style>
 </head>
 <body>
-  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)
-    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">Download</a>
-  </h4>
+  <h4 style="text-align: center">Recorded Video Of Android Screen (#realTypeDisp)</h4>
   <div style="text-align: center; width: 100%;">
     <div class="navigationBar toolbar">
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@maxRelFileIndex" target="_self">
@@ -22,8 +19,9 @@
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@olderFileIndex" target="_self">
         &lt;
       </a>
-      <span>@absFileIndex</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex" target="_self">
+      @absFileIndex <b class="mediaType">@realType</b>
+      <span style="background-color: darkgray">&nbsp;</span>
+      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex&fps=@fps" hideIfOrig target="_self">
         @type
       </a>
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="_self">
@@ -41,6 +39,15 @@
       <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=0" target="_self">
         &gt;&gt;
       </a>
+    </div>
+    <div class="toolbar">
+      <b>Download</b>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="asc download">@realType</a>
+      <span style="background-color: darkgray">&nbsp;</span>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex" hideIfOrig target="asc download">@type</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.webm" hideIf_webm target="asc download">webm</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.mp4" hideIf_mp4 target="asc download">mp4</a>
+      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@origFileIndex.ogg" hideIf_ogg target="asc download">ogg</a>
     </div>
     <div class="toolbar">
       <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>

@@ -27,15 +27,15 @@
       </span>
     </form>
     <div class="toolbar">
-      <span style="font-size: small">Click=<b title="rotate locally">Rotate</b> DoubleClickMargin=<b title="scale locally">Scale</b></span>
+      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
       <a class="button" href="/saveImage?device=@device&accessKey=@accessKey" target="resultIFrame" title="Save Current Image (on server side)">
         Save
       </a>
       <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved Images</a>
       <iframe name="resultIFrame" style="width: 100%; height: 28px; border: 1px solid lightgray" title="Saved Image FileIndex"></iframe>
     </div>
-    <div id="viewerContainer" ondblclick="scaleLocally()">
-      <img id="viewer" onclick="rotateLocally()"
+    <div id="viewerContainer">
+      <img id="viewer"
            src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate"/>
     </div>
     <div>You can embed following source into your HTML:</div>
