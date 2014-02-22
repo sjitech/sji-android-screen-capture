@@ -650,14 +650,10 @@ function capture(outputStream, q) {
 
           if (childProc.pid > 0) {
             provider.pid = childProc.pid;
-
-            if (aimgTypeSet[provider.type]) { //for apng, ajpg
-              provider.aimgDecoder = aimgCreateContext(q.device, provider.type);
-            }
-
             childProc.stdout.on('data', function (buf) {
               convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
                 if (aimgTypeSet[provider.type]) { //broadcast animated image to multiple client
+                  provider.aimgDecoder = provider.aimgDecoder || aimgCreateContext(q.device, provider.type);
                   aimgDecode(provider.aimgDecoder, provider.consumerMap, buf, 0, buf.length);
                 } else {
                   forEachValueIn(provider.consumerMap, write, buf);
@@ -816,18 +812,18 @@ function convertRecordedFile(origFileName, newFilename, origType, origFps, newTy
   }
 
   if (recordingFileMap[origFileName]) {
-    on_complete('error: source file not found');
+    on_complete('error: file not found');
     return null;
   }
   var stats;
   try {
     stats = fs.statSync(conf.outputDir + '/' + origFileName);
   } catch (err) {
-    on_complete(err.code === 'ENOENT' ? 'error: source file not found' : 'source file operation error ' + err.code);
+    on_complete(err.code === 'ENOENT' ? 'error: file not found' : 'file operation error ' + err.code);
     return null;
   }
   if (!stats.size) {
-    on_complete('error: source file is empty');
+    on_complete('error: file is empty');
     return null;
   }
 
@@ -1425,6 +1421,13 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     var filename = context.qdevice + '@' + fileIndex;
     var isLastFrame = context.isLastBuffer && (nextPos === endPos);
 
+    if (myFrameComes) {
+      lastImageMap[context.id] = {fileIndex: fileIndex, data: wholeImageBuf}; //save image in memory for later used by /saveImage command
+      if (context.id2) {
+        lastImageMap[context.id2] = lastImageMap[context.id];
+      }
+    }
+
     forEachValueIn(consumerMap, function (res) {
       if (myFrameComes) {
         if (res.setHeader && !res.__bytesWritten) {
@@ -1448,20 +1451,14 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
       }
     });
 
-    if (myFrameComes) {
-      lastImageMap[context.id] = {fileIndex: fileIndex, data: wholeImageBuf}; //save image in memory for later used by /saveImage command
-      if (context.id2) {
-        lastImageMap[context.id2] = lastImageMap[context.id];
+    if (myFrameComes && conf.tempImageLifeMilliseconds) {
+      if (conf.logImageDumpFile) {
+        log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:' + context.totalOffset);
       }
-      if (conf.tempImageLifeMilliseconds) {
-        if (conf.logImageDumpFile) {
-          log('write "' + conf.outputDir + '/' + filename + '" length:' + wholeImageBuf.length + ' offset:' + context.totalOffset);
-        }
-        try {
-          fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
-        } catch (err) {
-          log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
-        }
+      try {
+        fs.writeFileSync(conf.outputDir + '/' + filename, wholeImageBuf);
+      } catch (err) {
+        log('failed to write "' + conf.outputDir + '/' + filename + '". ' + stringifyError(err));
       }
     }
 
