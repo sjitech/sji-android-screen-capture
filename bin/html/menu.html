@@ -36,7 +36,7 @@
       <label><input type="radio" name="rotate" value="270"/>270°</label>
     </span>
   </form>
-  <form action="/deviceControl" style="width: 100%; text-align: center" target="_self">
+  <form action="/deviceControl" style="width: 100%; text-align: center" target="resultIFrame">
     <input type="hidden" name="adminKey" value="#adminKey"/>
     <input type="hidden" name="fps" value="@fps"/><!--only used for "Start Recording"-->
     <input type="hidden" name="scale" value="@scale"/><!--only used for "Start Recording"-->
@@ -53,21 +53,22 @@
         Unset
       </button>
       <span style="background-color: darkgray">&nbsp;</span>
-      <button type="submit" name="action" value="startRecording" formtarget="resultIFrame" title="Stop existing recording and start new recording fore selected devices">
+      <button type="submit" name="action" value="startRecording" title="Stop existing recording and start new recording fore selected devices">
         Record
       </button>
-      <button type="submit" name="action" value="stopRecording" formtarget="resultIFrame" title="Stop existing recording for selected devices">
+      <button type="submit" name="action" value="stopRecording" title="Stop existing recording for selected devices">
         Stop
       </button>
-      <button type="submit" name="action" value="deleteRecordedFiles" formtarget="resultIFrame" title="Delete recorded files for selected devices" onclick="return confirm('Sure?')">
+      <button type="submit" name="action" value="deleteRecordedFiles" title="Delete recorded files for selected devices" onclick="return confirm('Sure?')">
         DeleteV
       </button>
       <span style="background-color: darkgray">&nbsp;</span>
-      <button type="submit" name="action" value="deleteImages" formtarget="resultIFrame" title="Delete saved images for selected devices" onclick="return confirm('Sure?')">
+      <button type="submit" name="action" value="deleteImages" title="Delete saved images for selected devices" onclick="return confirm('Sure?')">
         DeleteImg
       </button>
+      <iframe class="toolbar" name="resultIFrame"></iframe>
     </div>
-    <table border="1px" id="device_tbl" style="width:100%; margin-top:63px; margin-bottom: 30px">
+    <table border="1px" id="device_tbl" style="width:100%; margin-top:91px; margin-bottom: 30px">
       <tr>
         <th rowspan="2"><label class="fillParent"><input type="checkbox" id="device_chkAll" checked/></label></th>
         <th colspan="2" title="Android device connected actually or scanned from recorded files">
@@ -294,10 +295,10 @@
     <div style="width: 86px">AdminTool</div>
     <div>
       <div style="margin-bottom: 8px">
-        <a class="button" href="/stopServer?adminKey=@adminKey" target="_self" style="color: red" onclick="return confirm('Sure?')">
+        <a class="button" href="/stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
           Stop Server
         </a>
-        <a class="button" href="/restartAdb?adminKey=@adminKey" target="_self" style="color: red" onclick="return confirm('Sure?')">
+        <a class="button" href="/restartAdb?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
           Restart ADB
         </a>
       </div>
@@ -322,46 +323,46 @@
         </div>
       </form>
       <div>
-        <a class="button" href="/reloadResource?adminKey=@adminKey" target="_self">Reload</a>
+        <a class="button" href="/reloadResource?adminKey=@adminKey" target="resultIFrame">Reload</a>
         Html,Css,Js,Recorded Files...
       </div>
       <div>
-        <a class="button" href="/prepareDeviceFile?adminKey=@adminKey" target="_self">Prepare</a>
+        <a class="button" href="/prepareDeviceFile?adminKey=@adminKey" target="resultIFrame">Prepare</a>
         Device File Forcibly
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&ffmpegDebugLog=@ffmpegDebugLog_negVal" target="_self">#ffmpegDebugLog_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&ffmpegDebugLog=@ffmpegDebugLog_negVal" target="resultIFrame">#ffmpegDebugLog_negBtn</a>
         FFMPEG Debug Log
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&ffmpegStatistics=@ffmpegStatistics_negVal" target="_self">#ffmpegStatistics_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&ffmpegStatistics=@ffmpegStatistics_negVal" target="resultIFrame">#ffmpegStatistics_negBtn</a>
         FFMPEG Statistics Log
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&remoteLogAppend=@remoteLogAppend_negVal" target="_self">#remoteLogAppend_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&remoteLogAppend=@remoteLogAppend_negVal" target="resultIFrame">#remoteLogAppend_negBtn</a>
         Android-Side Utility(FFMPEG etc.) Append Mode Log
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&logHttpReqAddr=@logHttpReqAddr_negVal" target="_self">#logHttpReqAddr_negBtn</a>
-        Log HTTP Request IP And Port
+        <a class="button" href="/var?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">#logHttpReqDetail_negBtn</a>
+        Log HTTP Request IP,Port,Browser Type
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&reloadDevInfo=@reloadDevInfo_negVal" target="_self">#reloadDevInfo_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&reloadDevInfo=@reloadDevInfo_negVal" target="resultIFrame">#reloadDevInfo_negBtn</a>
         Reload Device Info Forcibly On Menu
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&logImageDumpFile=@logImageDumpFile_negVal" target="_self">#logImageDumpFile_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&logImageDumpFile=@logImageDumpFile_negVal" target="resultIFrame">#logImageDumpFile_negBtn</a>
         Log Animated Image Dump File Activity
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&logImageDecoderDetail=@logImageDecoderDetail_negVal" target="_self">#logImageDecoderDetail_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&logImageDecoderDetail=@logImageDecoderDetail_negVal" target="resultIFrame">#logImageDecoderDetail_negBtn</a>
         Log Animated Image Decoder Detail
       </div>
       <div>
-        <a class="button" href="/var?adminKey=@adminKey&forceUseFbFormat=@forceUseFbFormat_negVal" target="_self">#forceUseFbFormat_negBtn</a>
+        <a class="button" href="/var?adminKey=@adminKey&forceUseFbFormat=@forceUseFbFormat_negVal" target="resultIFrame">#forceUseFbFormat_negBtn</a>
         Force Get Pixel Format From Frame Buffer
       </div>
-      <form action="/useStreamWebIp" target="_self">
+      <form action="/useStreamWebIp" target="resultIFrame">
         <input type="hidden" name="adminKey" value="#adminKey"/>
 
         <button type="submit">Using</button>
@@ -369,7 +370,7 @@
           StreamWeb IP<input type="input" name="ip" value="@streamWebIP"/>
         </label>
       </form>
-      <form action="/setTempImageFileLife" target="_self">
+      <form action="/setTempImageFileLife" target="resultIFrame">
         <input type="hidden" name="adminKey" value="#adminKey"/>
 
         <button type="submit">Set</button>
@@ -381,9 +382,7 @@
   </div>
   <table style="position: fixed; bottom: 0; left: 0; width: 100%; background-color: #fafafa">
     <tr style="vertical-align: bottom">
-      <td style="text-align: left; vertical-align: bottom; width: 50%; padding-left: 1px">
-        <iframe name="resultIFrame" style="width: 100%; min-height: 27px; max-height: 27px; height: 27px; background-color: ghostwhite; border: 1px solid lightgray; margin: 0; padding: 0; display: block"></iframe>
-      </td>
+      <td style="text-align: left; padding-left: 3px; width: 50%;" id="statusBar"></td>
       <td style="text-align: right; vertical-align: bottom; padding-left: 3px">
         <span id="streamingSpeed" style="background-color: blue; color: white; height: 27px"></span>
       </td>
@@ -408,11 +407,12 @@
     });
     var appVer = '@appVer';
     var ver = '';
+    var $statusBar = $('#statusBar');
     function queryStatus() {
       $.ajax('/status?adminKey=@adminKey&ver=' + ver, {timeout: 60 * 1000})
         .done(function (status) {
           if (status.appVer != appVer) {
-            //refresh page if menu version is changed
+            $statusBar.text('Refresh...');
             setTimeout(function(){
               document.location.reload(true);
             }, 250);
