@@ -11,12 +11,6 @@
     })();
   </script>
   <link rel="stylesheet" type="text/css" href="common.css?adminKey=@adminKey">
-  <style>
-    .streamingIndicator {background-color: blue; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
-    .recordingIndicator {background-color: #0000A0; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
-    #totalRecordedFileSize.highlight {color: blue; font-weight: bold}
-    .disconnected {background-color: #ededf4}
-  </style>
 </head>
 <body onunload="">
   <div id="darkMask" style="display: none">Disconnected. Auto reconnect every 10 seconds...</div>
@@ -41,6 +35,7 @@
     <input type="hidden" name="fps" value="@fps"/><!--only used for "Start Recording"-->
     <input type="hidden" name="scale" value="@scale"/><!--only used for "Start Recording"-->
     <input type="hidden" name="rotate" value="@rotate"/><!--only used for "Start Recording"-->
+    <input type="hidden" name="__isBatchMode" value="true"/>
 
     <div class="toolbar" style="width: 100%; text-align: center; position: fixed; top: 30px; left: 0">
       <button type="submit" name="action" value="setAccessKey" title="Set Access Key for selected devices">

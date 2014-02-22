@@ -2012,6 +2012,9 @@ function startAdminWeb() {
         if (chkerrRequired('device[]', q.device)) {
           return end(res, chkerr);
         }
+        if (q.__isBatchMode === 'true' && q.type) {
+          res.setHeader('Set-Cookie', 'targetVideoTypeOfBatchMode=' + q.type);
+        }
         q.device = uniqueNonEmptyArray(q.device);
         switch (q.action) {
           case 'setAccessKey': //----------------------------set access key for multiple devices------------------------
@@ -2137,10 +2140,13 @@ function startAdminWeb() {
       case '/': //---------------------------------------show menu of all devices---------------------------------------
         q.fps = q.fps || 4;
         q.type = q.type || 'ajpg';
-        q.scale = (q.scale === undefined) ? '300x' : q.scale;
+        q.scale = (q.scale === undefined) ? '320x' : q.scale;
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
+        q.targetVideoTypeOfBatchMode = (req.headers.cookie || '').match(/targetVideoTypeOfBatchMode=(\w+)\b/);
+        q.targetVideoTypeOfBatchMode = q.targetVideoTypeOfBatchMode ? q.targetVideoTypeOfBatchMode[1] : q.type;
+
         getAllDevInfo(function/*on_complete*/(err, deviceList, infoList) {
           (deviceList || []).forEach(function (device, i) {
             getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
@@ -2155,7 +2161,7 @@ function startAdminWeb() {
                   .replace(/@scale\b/g, q.scale)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
-                  .replace(new RegExp('name="type" value="' + q.type + '"', 'g'), '$& checked')  //set check mark
+                  .replace(new RegExp('name="type" value="' + q.targetVideoTypeOfBatchMode + '"', 'g'), '$& checked')  //set check mark
                   .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
                   .replace(/@totalRecordedFileSize_disp\b/g, 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB')
                   .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
@@ -2431,8 +2437,8 @@ checkAdb(function/*on_complete*/() {
 
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, maxRecordedFileSize: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDumpFile: 0, logImageDecoderDetail: 0, forceUseFbFormat: 0, ffmpegOption: 0, tempImageLifeMilliseconds: 0, shadowRecording: 0,
-    device: 0, qdevice: 0, accessKey: 0, type: 0, fps: 0, scale: 0, rotate: 0, recordOption: 0, fileIndex: 0, playerId: 0, as: 0,
-    adminKey: 0, action: 0, logDate: 0, logDownload: 0, logStart: 0, logEnd: 0, range: 0});
+    device: 0, qdevice: 0, accessKey: 0, type: 0, fps: 0, scale: 0, rotate: 0, recordOption: 0, fileIndex: 0, playerId: 0, as: 0, range: 0,
+    adminKey: 0, action: 0, logDate: 0, logDownload: 0, logStart: 0, logEnd: 0, __isBatchMode: 0});
 }
 
 //todo: some device crashes if live view full image
