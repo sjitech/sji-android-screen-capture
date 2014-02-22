@@ -58,10 +58,12 @@ function getOrCreateDevCtx(device/*device serial number*/) {
   return dev;
 }
 
-function spawn(logHead, _path, args, on_close, opt) {
+function spawn(logHead, _path, args, on_close, options) {
   log(logHead + 'spawn ' + _path + ' with args: ' + JSON.stringify(args));
+  options = options || {};
+  options.stdio = options.stdio || ['ignore'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/];
 
-  var childProc = child_process.spawn(_path, args);
+  var childProc = child_process.spawn(_path, args, options);
   if (childProc.pid > 0) {
     childProcPidMap[childProc.pid] = true;
     childProc.logHead = logHead + '[pid_' + childProc.pid + ']';
@@ -90,7 +92,7 @@ function spawn(logHead, _path, args, on_close, opt) {
     var stdoutBufAry = [];
     childProc.stdout.on('data', function (buf) {
       stdoutBufAry.push(buf);
-      if (opt && opt.noLogStdout === true) {
+      if (options.noLogStdout === true) {
         if (!childProc.didOmitStdout) {
           childProc.didOmitStdout = true;
           log(childProc.logHead + 'stdout output... omitted');
@@ -330,46 +332,42 @@ function searchInPath(filename) {
 
 function checkAdb(on_complete) {
   log('[CheckAdb]Full path of "Android Debug Bridge" is "' + searchInPath(conf.adb) + '"');
-  spawn('[CheckAdb]', conf.adb, ['version'],
-      function /*on_close*/(ret, stdout, stderr) {
-        if (ret !== 0 || stderr) {
-          log('Failed to check "Android Debug Bridge". Please check log', {stderr: true});
-          process.exit(1);
-        } else {
-          on_complete();
-        }
-      });
+  spawn('[CheckAdb]', conf.adb, ['version'], function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr) {
+      log('Failed to check "Android Debug Bridge". Please check log', {stderr: true});
+      return process.exit(1);
+    }
+    return on_complete();
+  });
 }
 
 function checkFfmpeg(on_complete) {
   log('[CheckFfmpeg]Full path of FFMPEG is "' + searchInPath(conf.ffmpeg) + '"');
-  spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'],
-      function /*on_close*/(ret, stdout, stderr) {
-        if (ret !== 0 || stderr) {
-          log('Failed to check FFMPEG (for this machine, not for Android device).' +
-              ' You will not be able to convert recorded video to other format.' +
-              ' Please install it from "http://www.ffmpeg.org/download.html". Please check log', {stderr: true});
-        } else {
-          checkFfmpeg.success = true;
-        }
-        on_complete();
-      });
+  spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'], function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr) {
+      log('Failed to check FFMPEG (for this machine, not for Android device).' +
+          ' You will not be able to convert recorded video to other format.' +
+          ' Please install it from "http://www.ffmpeg.org/download.html". Please check log', {stderr: true});
+    } else {
+      checkFfmpeg.success = true;
+    }
+    on_complete();
+  });
 }
 
 function getAllDev(on_complete) {
-  spawn('[GetAllDevices]', conf.adb, ['devices'],
-      function /*on_close*/(ret, stdout, stderr) {
-        if (ret !== 0 || stderr) {
-          return on_complete(toErrSentence(stderr) || 'unknown error: failed to get all connected devices', []);
-        }
-        var deviceList = [], parts;
-        stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
-          if ((parts = lineStr.split('\t')).length > 1) {
-            deviceList.push(parts[0]);
-          }
-        });
-        return on_complete('', deviceList);
-      });
+  spawn('[GetAllDevices]', conf.adb, ['devices'], function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr) {
+      return on_complete(toErrSentence(stderr) || 'unknown error: failed to get all connected devices', []);
+    }
+    var deviceList = [], parts;
+    stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
+      if ((parts = lineStr.split('\t')).length > 1) {
+        deviceList.push(parts[0]);
+      }
+    });
+    return on_complete('', deviceList);
+  });
 }
 
 var ADB_GET_DEV_INFO_CMD_ARGS = [
@@ -385,8 +383,7 @@ function getDevInfo(device, on_complete, timeoutMs) {
     on_complete('', devMgr[device].info);
     return;
   }
-  var childProc = spawn('[GetDevInfo]', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('`'),
-      function  /*on_close*/(ret, stdout, stderr) {
+  var childProc = spawn('[GetDevInfo]', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('`'), function/*on_close*/(ret, stdout, stderr) {
         clearTimeout(childProc.myTimer);
         on_complete('', (ret === 0 && !stderr) ? stdout.replace(re_adbNewLineSeq, '') : '');
       }
@@ -394,7 +391,7 @@ function getDevInfo(device, on_complete, timeoutMs) {
   if (childProc.pid) {
     childProc.myTimer = setTimeout(function () {
       log(childProc.logHead + 'kill due to timeout');
-      childProc.kill();
+      childProc.kill('SIGKILL');
     }, timeoutMs);
   }
 }
@@ -408,8 +405,7 @@ function getAllDevInfo(on_complete) {
     var infoList = [];
     (function get_next_device_info() {
       if (infoList.length < deviceList.length) {
-        getDevInfo(deviceList[infoList.length],
-            function/*on_complete*/(err, info) {
+        getDevInfo(deviceList[infoList.length], function/*on_complete*/(err, info) {
               infoList.push(info);
               get_next_device_info();
             },
@@ -429,47 +425,37 @@ function prepareDeviceFile(device, on_complete) {
     on_complete();
     return;
   }
-  spawn('[CheckDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat(
-      'echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null',
-      '`'),
-      function /*on_close*/(ret, stdout, stderr) {
-        if (ret !== 0 || stderr || !stdout) {
-          on_complete(toErrSentence(stderr) || 'unknown error: failed to check device');
-        } else {
-          var stdoutNoCRLF = stdout.replace(re_adbNewLineSeq, '');
-          var parts = stdoutNoCRLF.split('====');
-          var _ver = parts[1].trim(); //get remote version file content
+  spawn('[CheckDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null', '`'), function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr || !stdout) {
+      return on_complete(toErrSentence(stderr) || 'unknown error: failed to check device');
+    }
+    var stdoutNoCRLF = stdout.replace(re_adbNewLineSeq, '');
+    var parts = stdoutNoCRLF.split('====');
+    var _ver = parts[1].trim(); //get remote version file content
 
-          var dev = getOrCreateDevCtx(device);
-          dev.info = parts[0].trim(); //save device info for later use
-          // BTW, detect new line sequence returned by adb, Usually CrCount=0 (means need not convert), But for Windows OS, at least=1
-          dev.CrCount = (stdout.length - stdoutNoCRLF.length) - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
+    var dev = getOrCreateDevCtx(device);
+    dev.info = parts[0].trim(); //save device info for later use
+    // BTW, detect new line sequence returned by adb, Usually CrCount=0 (means need not convert), But for Windows OS, at least=1
+    dev.CrCount = (stdout.length - stdoutNoCRLF.length) - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
 
-          //compare to local version
-          if (_ver === prepareDeviceFile.ver) {
-            dev.didPrepare = true;
-            on_complete();
-          } else {
-            spawn('[PushFileToDevice ' + device + ']', conf.adb, ['-s', device , 'push', UPLOAD_LOCAL_DIR, ANDROID_WORK_DIR],
-                function /*on_close*/(ret, stdout, stderr) {
-                  if (ret !== 0) {
-                    on_complete(toErrSentence(stderr) || 'unknown error: failed to prepare device file');
-                  } else {
-                    spawn('[UpdateFileOnDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'chmod', '755', ANDROID_WORK_DIR + '/*', '&&',
-                      'echo', prepareDeviceFile.ver, '>', ANDROID_WORK_DIR + '/version'],
-                        function /*on_close*/(ret, stdout, stderr) {
-                          if (ret !== 0 || stdout || stderr) {
-                            on_complete(toErrSentence(stderr) || 'unknown error: failed to finish preparing device file');
-                          } else {
-                            dev.didPrepare = true;
-                            on_complete();
-                          }
-                        });
-                  }
-                });
-          }
+    //compare to local version
+    if (_ver === prepareDeviceFile.ver) {
+      dev.didPrepare = true;
+      return on_complete();
+    }
+    return spawn('[PushFileToDevice ' + device + ']', conf.adb, ['-s', device , 'push', UPLOAD_LOCAL_DIR, ANDROID_WORK_DIR], function/*on_close*/(ret, stdout, stderr) {
+      if (ret !== 0) {
+        return on_complete(toErrSentence(stderr) || 'unknown error: failed to prepare device file');
+      }
+      return spawn('[UpdateFileOnDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'chmod', '755', ANDROID_WORK_DIR + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', ANDROID_WORK_DIR + '/version'], function/*on_close*/(ret, stdout, stderr) {
+        if (ret !== 0 || stdout || stderr) {
+          return on_complete(toErrSentence(stderr) || 'unknown error: failed to finish preparing device file');
         }
+        dev.didPrepare = true;
+        return on_complete();
       });
+    });
+  });
 }
 
 function chkerrCaptureParameter(q) {
@@ -547,16 +533,14 @@ function capture(outputStream, q) {
       logHead: '[Capture ' + stringifyCaptureParameter(q, 'log') + ']'};
   }
 
-  function didOutput(consumerId, consumerMap) {
-    return consumerMap[consumerId].__bytesWritten > 0;
-  }
-
   if (imageTypeSet[q.type]) {
     //for single image, it is light process, so let it coexistent with existing capture.
     provider = createCaptureProvider();
   } else if (dev.liveStreamer) { //there is an existing capture running or preparing
     if (dev.liveStreamer.type !== q.type || dev.liveStreamer.fps !== q.fps || dev.liveStreamer.scale !== q.scale || dev.liveStreamer.rotate !== q.rotate ||
-        !aimgTypeSet[dev.liveStreamer.type] && (Object.keys(dev.liveStreamer.consumerMap).some(didOutput))) {
+        !aimgTypeSet[dev.liveStreamer.type] && Object.keys(dev.liveStreamer.consumerMap).some(function/*didOutput*/(consumerId) {
+          return dev.liveStreamer.consumerMap[consumerId].__bytesWritten > 0;
+        })) {
       forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another live streamer is going to run');
       provider = dev.liveStreamer = createCaptureProvider();
     } else { //share existing stream provider (Animated PNG,JPG or webm if have not output yet)
@@ -593,7 +577,7 @@ function capture(outputStream, q) {
   if (!createCaptureProvider.called) {
     log(res.logHead + 'use existing capture process ' + (provider.pid ? 'pid_' + provider.pid : '?(still in preparing)'));
   } else {
-    prepareDeviceFile(q.device, function /*on_complete*/(err) {
+    prepareDeviceFile(q.device, function/*on_complete*/(err) {
           if (Object.keys(provider.consumerMap).length === 0) {
             return; //abort
           } else if (err) {
@@ -734,7 +718,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
     if (provider.pid) {
       log(provider.logHead + 'kill this live streamer process pid_' + provider.pid + ' due to no more consumer');
       try {
-        process.kill(provider.pid);
+        process.kill(provider.pid, 'SIGKILL');
       } catch (err) {
         if (err.code !== 'ENOENT') {
           log('failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
@@ -747,10 +731,9 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
 }
 
 function startRecording(q/*same as capture*/, on_complete) {
-  prepareDeviceFile(q.device, function /*on_complete*/(err) {
+  prepareDeviceFile(q.device, function/*on_complete*/(err) {
         if (err) {
-          on_complete(err);
-          return;
+          return on_complete(err);
         }
         var filename = stringifyCaptureParameter(q, 'filename');
         var wfile = fs.createWriteStream(conf.outputDir + '/' + filename);
@@ -777,14 +760,12 @@ function startRecording(q/*same as capture*/, on_complete) {
          *-------------------on-fly convert to other format-------------------------------------------------------------
          *  shadow recording will be stopped if owner recording is stopped
          */
-        if (checkFfmpeg.success) {
-          wfile.childConsumerAry = [];
-          ['mp4', 'webm'].forEach(function (newType) {
-            if (conf.shadowRecording[newType] && newType !== q.type) {
-              wfile.childConsumerAry.push(convertOnRecording(q, filename, newType));
-            }
-          });
-        }
+        wfile.childConsumerAry = [];
+        return ['mp4', 'webm'].forEach(function (newType) {
+          if (checkFfmpeg.success && conf.shadowRecording[newType] && newType !== q.type) {
+            wfile.childConsumerAry.push(convertOnRecording(q, filename, newType));
+          }
+        });
       }
   );
 
@@ -799,17 +780,13 @@ function startRecording(q/*same as capture*/, on_complete) {
 function convertOnRecording(q, origFilename, newType) {
   var newFilename = origFilename + '.' + newType;
   var logHead = '[Converter(live ' + q.type + ' -> ' + newFilename + ')]';
-  var args = makeConverterParameter(null, newFilename, q.type, q.fps, newType);
-  /*
-   * ------------------------------------start new converter process -------------------------------------------
-   */
-  var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) {
+  var childProc = spawn(logHead, conf.ffmpeg, makeConverterParameter(null, newFilename, q.type, q.fps, newType), function/*on_close*/(ret) {
     log(logHead + (ret === 0 ? 'complete' : 'failed due to ' + (childProc.__spawnErr || 'internal error')));
     if (childProc.pid > 0) {
       childProc.stdin.__isClosed = true;
       delete recordingFileMap[newFilename];
     }
-  });
+  }, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
   if (childProc.pid > 0) {
     childProc.stdin.filename = newFilename;
     childProc.stdin.logHead = '[FileWriter(Record)' + newFilename + ')]';
@@ -820,7 +797,7 @@ function convertOnRecording(q, origFilename, newType) {
     capture(childProc.stdin, q); //---------do capture, save output to childProc.stdin----------
     return childProc.stdin.consumerId;
   }
-  return null;
+  return '';
 }
 
 function convertRecordedFile(origFileName, newFilename, origType, origFps, newType, on_complete) {
@@ -837,18 +814,12 @@ function convertRecordedFile(origFileName, newFilename, origType, origFps, newTy
   waiter.device = origFileName.split('~')[0];
   waiter.origType = origType; //owner type
   waiter.isConverterWaiter = true;
-
   if (recordingFileMap[newFilename]) { //converter process is running
     recordingFileMap[newFilename].waiterMap[waiter.id] = waiter;
     log(logHead + 'use existing converter');
     return waiter;
   }
-
-  var args = makeConverterParameter(origFileName, newFilename, origType, origFps, newType);
-  /*
-   * ------------------------------------start new converter process -------------------------------------------
-   */
-  var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) {
+  var childProc = spawn(logHead, conf.ffmpeg, makeConverterParameter(origFileName, newFilename, origType, origFps, newType), function/*on_close*/(ret) {
     log(logHead + (ret === 0 ? 'complete' : (childProc.__spawnErr || 'internal error')));
     if (childProc.pid > 0 && recordingFileMap[newFilename] && recordingFileMap[newFilename].pid) {
       recordingFileMap[newFilename].pid = 0; //means normally end converting
@@ -876,9 +847,7 @@ function convertRecordedFile(origFileName, newFilename, origType, origFps, newTy
       overallCounterMap.recorded.bytes += deltaSize; //set recorded bytes counter overall
     };
     converter.timerToUpdateRecordedBytes = setInterval(converter.updateRecordedBytes, 1000);
-
     updateCounter(waiter.device, origType, +1, waiter);
-
     return waiter;
   } else {
     on_complete(childProc.__spawnErr);
@@ -898,13 +867,12 @@ function endConverterWaiter(waiter, err) {
   if (Object.keys(waiterMap).length === 0) {
     delete recordingFileMap[waiter.newFilename];
     clearInterval(converter.timerToUpdateRecordedBytes);
-
     converter.updateRecordedBytes();
 
     if (converter.pid > 0) {
       log('kill converter process pid_' + converter.pid + ' to abort converting');
       try {
-        process.kill(converter.pid);
+        process.kill(converter.pid, 'SIGKILL');
       } catch (err) {
         if (err.code !== 'ENOENT') {
           log('failed to kill process pid_' + converter.pid + '. ' + stringifyError(err));
@@ -1003,16 +971,12 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload, range) {
     }
   }
   if (isConverting || !stats) {
-    /*
-     * ------------------ convert format if does not exists ------------------------
-     * or add to waiterMap if converting
-     */
+    //------------------ convert format if does not exists or add to waiterMap if converting ------------------------
     var waiter = convertRecordedFile(origFilename, filename, q.type, origFps, realType, function/*on_complete*/(err) {
       if (err) {
-        end(res, err);
-      } else { //-----------------------when conversion succeed, do playOrDownloadRecordedFile-----------------------
-        playOrDownloadRecordedFile(res, q, forDownload, range);
+        return end(res, err);
       }
+      return playOrDownloadRecordedFile(res, q, forDownload, range);
     });
     if (waiter) {
       res.on('close', function () { //http connection is closed without normal end(res,...)
@@ -1023,7 +987,7 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload, range) {
   }
 
   if (!stats.size) {
-    return end(res, 'error: file is empty');
+    return end(res);
   }
   /*
    * ------------------ support partial data request ---------------------
@@ -1188,7 +1152,7 @@ function findFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/, on_complete) 
 }
 
 function deleteFiles(deviceOrAry/*optional*/, typeOrAry/*optional*/) {
-  findFiles(deviceOrAry, typeOrAry, function /*on_complete*/(err, filenameAry) {
+  findFiles(deviceOrAry, typeOrAry, function/*on_complete*/(err, filenameAry) {
     if (err) {
       return;
     }
@@ -1675,10 +1639,9 @@ function startStreamWeb() {
     process.exit(1);
   });
   log(httpServer.logHead + 'listen on ' + ( _isAnyIp ? '*' : conf.ip) + ':' + conf.port);
-  httpServer.listen(conf.port, _isAnyIp ? undefined : conf.ip,
-      function/*on_complete*/() {
-        log(httpServer.logHead + 'OK');
-      });
+  httpServer.listen(conf.port, _isAnyIp ? undefined : conf.ip, function/*on_complete*/() {
+    log(httpServer.logHead + 'OK');
+  });
 
   function handler(req, res) {
     // set stream error handler to prevent from crashing
@@ -1730,16 +1693,14 @@ function startStreamWeb() {
           return end(res, chkerr);
         }
         if (q.type === 'webm' && q.recordOption) { //need record webm video at same time
-          startRecording(q,
-              function/*on_complete*/(err, wfile) {
+          startRecording(q, function/*on_complete*/(err, wfile) {
                 if (err) {
-                  end(res, err);
-                } else {
-                  if (q.recordOption === 'sync') {
-                    res.childConsumerAry = [wfile.consumerId]; //remember the file so that end it with res together
-                  } //else 'async'
-                  capture(res, q); //also send capture result to browser
+                  return end(res, err);
                 }
+                if (q.recordOption === 'sync') {
+                  res.childConsumerAry = [wfile.consumerId]; //remember the file so that end it with res together
+                } //else 'async'
+                return capture(res, q); //also send capture result to browser
               }
           );
         } else {
@@ -1766,12 +1727,11 @@ function startStreamWeb() {
         playOrDownloadRecordedFile(res, q, forDownload, getByteRange(req));
         break;
       case '/liveViewer':  //------------------------------show live capture (Just as a sample) ------------------------
-        if (chkerrCaptureParameter(q) ||
-            q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
+        if (chkerrCaptureParameter(q) || q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
           return end(res, chkerr);
         }
         q.recordOption = q.recordOption || '';
-        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+        prepareDeviceFile(q.device, function/*on_complete*/(err) {
               if (err) {
                 return end(res, err);
               }
@@ -1987,10 +1947,9 @@ function startAdminWeb() {
     process.exit(1);
   });
   log(httpServer.logHead + 'listen on ' + ( _isAnyIp ? '*' : conf.adminWeb.ip) + ':' + conf.adminWeb.port);
-  httpServer.listen(conf.adminWeb.port, _isAnyIp ? undefined : conf.adminWeb.ip,
-      function/*on_complete*/() {
-        log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? '127.0.0.1' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + '/?adminKey=' + querystring.escape(conf.adminWeb.adminKey), {stderr: true});
-      });
+  httpServer.listen(conf.adminWeb.port, _isAnyIp ? undefined : conf.adminWeb.ip, function/*on_complete*/() {
+    log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? '127.0.0.1' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + '/?adminKey=' + querystring.escape(conf.adminWeb.adminKey), {stderr: true});
+  });
 
   function handler(req, res) {
     // set stream error handler to prevent from crashing
@@ -2068,8 +2027,7 @@ function startAdminWeb() {
                 _q[k] = q[k];
               });
               _q.device = device;
-              startRecording(_q,
-                  function/*on_complete*/(err, wfile) {
+              startRecording(_q, function/*on_complete*/(err, wfile) {
                     if (err) {
                       errAry.push(devAry.length > 1 ? device + ': ' + err : err);
                     } else {
@@ -2114,23 +2072,21 @@ function startAdminWeb() {
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        spawn('[GetDeviceLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_WORK_DIR + '/log'],
-            function  /*on_close*/(ret, stdout, stderr) {
-              end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
-            }, {noLogStdout: true});
+        spawn('[GetDeviceLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_WORK_DIR + '/log'], function/*on_close*/(ret, stdout, stderr) {
+          end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
+        }, {noLogStdout: true});
         break;
       case '/getDeviceCpuMemTop':  //--------------------------get device cpu memory usage -----------------------------
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+        prepareDeviceFile(q.device, function/*on_complete*/(err) {
               if (err) {
                 return end(res, err);
               }
-              return spawn('[GetDeviceCpuMemTop]', conf.adb, ['-s', q.device, 'shell', ANDROID_WORK_DIR + '/busybox', 'top', '-b', '-n' , '1'],
-                  function  /*on_close*/(ret, stdout, stderr) {
-                    end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
-                  }, {noLogStdout: true});
+              return spawn('[GetDeviceCpuMemTop]', conf.adb, ['-s', q.device, 'shell', ANDROID_WORK_DIR + '/busybox', 'top', '-b', '-n' , '1'], function/*on_close*/(ret, stdout, stderr) {
+                end(res, removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
+              }, {noLogStdout: true});
             }
         );
         break;
@@ -2138,10 +2094,9 @@ function startAdminWeb() {
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        prepareDeviceFile(q.device, function /*on_complete*/(err) {
+        prepareDeviceFile(q.device, function/*on_complete*/(err) {
               if (err) {
-                end(res, err);
-                return;
+                return end(res, err);
               }
               res.setHeader('Content-Type', 'image/raw');
               res.setHeader('Content-Disposition', 'attachment;filename=' + q.qdevice + '~raw~' + nowStr());
@@ -2165,6 +2120,7 @@ function startAdminWeb() {
               childProc.on('close', function () {
                 end(res);
               });
+              return ''; //just to avoid compiler warning
             }
         );
         break;
@@ -2175,54 +2131,53 @@ function startAdminWeb() {
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
-        getAllDevInfo(
-            function /*on_complete*/(err, deviceList, infoList) {
-              (deviceList || []).forEach(function (device, i) {
-                getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
-              });
+        getAllDevInfo(function/*on_complete*/(err, deviceList, infoList) {
+          (deviceList || []).forEach(function (device, i) {
+            getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
+          });
 
-              var html = htmlCache['menu.html']
-                      .replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey))
-                      .replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''))
-                      .replace(/@MIN_FPS\b/g, String(MIN_FPS))
-                      .replace(/@MAX_FPS\b/g, String(MAX_FPS))
-                      .replace(/@fps\b/g, q.fps)
-                      .replace(/@scale\b/g, q.scale)
-                      .replace(/@rotate\b/g, q.rotate)
-                      .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
-                      .replace(new RegExp('name="type" value="' + q.type + '"', 'g'), '$& checked')  //set check mark
-                      .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
-                      .replace(/@totalRecordedFileSize_disp\b/g, 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB')
-                      .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
-                      .replace(/@logStart\b/g, conf.logStart || -64000)
-                      .replace(/@logEnd\b/g, conf.logEnd || '')
-                      .replace(/@appVer\b/g, status.appVer)
-                      .replace(/@tempImageLifeMilliseconds\b/g, conf.tempImageLifeMilliseconds)
+          var html = htmlCache['menu.html']
+                  .replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey))
+                  .replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''))
+                  .replace(/@MIN_FPS\b/g, String(MIN_FPS))
+                  .replace(/@MAX_FPS\b/g, String(MAX_FPS))
+                  .replace(/@fps\b/g, q.fps)
+                  .replace(/@scale\b/g, q.scale)
+                  .replace(/@rotate\b/g, q.rotate)
+                  .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
+                  .replace(new RegExp('name="type" value="' + q.type + '"', 'g'), '$& checked')  //set check mark
+                  .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
+                  .replace(/@totalRecordedFileSize_disp\b/g, 'Storage: ' + (overallCounterMap.recorded.bytes / 1000000000).toFixed(3) + ' GB')
+                  .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
+                  .replace(/@logStart\b/g, conf.logStart || -64000)
+                  .replace(/@logEnd\b/g, conf.logEnd || '')
+                  .replace(/@appVer\b/g, status.appVer)
+                  .replace(/@tempImageLifeMilliseconds\b/g, conf.tempImageLifeMilliseconds)
+              ;
+          //set enable or disable of some config buttons for /var? command
+          dynamicConfKeyList.forEach(function (k) {
+            html = html.replace('@' + k + '_negVal', (conf[k] ? 'false' : 'true')).replace('#' + k + '_negBtn', (conf[k] ? 'Disable' : 'Enable'));
+          });
+
+          res.setHeader('Content-Type', 'text/html');
+          end(res, html.replace(/<!--repeatBegin-->[^\0]*<!--repeatEnd-->/, createMultipleHtmlRows));
+
+          function createMultipleHtmlRows(htmlRow) {
+            return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
+              var dev = devMgr[device];
+              return joinedStr + htmlRow //do some device concerned replace
+                  .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
+                  .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (deviceList.indexOf(device) >= 0 ? '' : ' disconnected'))
+                  .replace(/#device\b/g, htmlEncode(device))
+                  .replace(/@device\b/g, querystring.escape(device))
+                  .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))
+                  .replace(/@accessKey\b/g, querystring.escape(dev.accessKey || ''))
+                  .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey ? dev.accessKey : conf.adminWeb.adminKey ? '<None> Please "Set Access Key" for this device' : '<None>'))
+                  .replace(/#styleName_AccessKey_disp\b/g, (dev.accessKey || !conf.adminWeb.adminKey) ? '' : 'errorWithTip')
                   ;
-              //set enable or disable of some config buttons for /var? command
-              dynamicConfKeyList.forEach(function (k) {
-                html = html.replace('@' + k + '_negVal', (conf[k] ? 'false' : 'true')).replace('#' + k + '_negBtn', (conf[k] ? 'Disable' : 'Enable'));
-              });
-
-              res.setHeader('Content-Type', 'text/html');
-              end(res, html.replace(/<!--repeatBegin-->[^\0]*<!--repeatEnd-->/, createMultipleHtmlRows));
-
-              function createMultipleHtmlRows(htmlRow) {
-                return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
-                  var dev = devMgr[device];
-                  return joinedStr + htmlRow //do some device concerned replace
-                      .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
-                      .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (deviceList.indexOf(device) >= 0 ? '' : ' disconnected'))
-                      .replace(/#device\b/g, htmlEncode(device))
-                      .replace(/@device\b/g, querystring.escape(device))
-                      .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))
-                      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey || ''))
-                      .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey ? dev.accessKey : conf.adminWeb.adminKey ? '<None> Please "Set Access Key" for this device' : '<None>'))
-                      .replace(/#styleName_AccessKey_disp\b/g, (dev.accessKey || !conf.adminWeb.adminKey) ? '' : 'errorWithTip')
-                      ;
-                }, ''/*initial joinedStr*/);
-              }
-            });
+            }, ''/*initial joinedStr*/);
+          }
+        });
         break;
       case '/stopServer':  //------------------------------------stop server management---------------------------------
         end(res, 'OK');
@@ -2237,7 +2192,7 @@ function startAdminWeb() {
         Object.keys(childProcPidMap).forEach(function (pid) {
           log('kill child process pid_' + pid);
           try {
-            process.kill(pid);
+            process.kill(pid, 'SIGKILL');
           } catch (err) {
             if (err.code !== 'ENOENT') {
               log('failed to kill process pid_' + pid + '. ' + stringifyError(err));
@@ -2256,13 +2211,11 @@ function startAdminWeb() {
         break;
       case '/restartAdb':  //------------------------------------restart ADB--------------------------------------------
         log(httpServer.logHead + 'restart ADB');
-        spawn('[StopAdb]', conf.adb, ['kill-server'],
-            function  /*on_close*/(/*ret, stdout, stderr*/) {
-              spawn('[StartAdb]', conf.adb, ['start-server'],
-                  function  /*on_close*/(/*ret, stdout, stderr*/) {
-                    end(res, 'OK');
-                  });
-            });
+        spawn('[StopAdb]', conf.adb, ['kill-server'], function/*on_close*/(/*ret, stdout, stderr*/) {
+          spawn('[StartAdb]', conf.adb, ['start-server'], function/*on_close*/(/*ret, stdout, stderr*/) {
+            end(res, 'OK');
+          });
+        });
         break;
       case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
         loadResourceSync();
@@ -2406,7 +2359,7 @@ function startAdminWeb() {
         prepareDeviceFile.ver = getLocalToolFileHashSync();
         Object.keys(devMgr).forEach(function (device, i, devAry) {
           devMgr[device].didPrepare = false;
-          prepareDeviceFile(device, function /*on_complete*/(err) {
+          prepareDeviceFile(device, function/*on_complete*/(err) {
                 if (err) {
                   errAry.push(devAry.length > 1 ? device + ': ' + err : err);
                 } else {
