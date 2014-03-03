@@ -113,7 +113,7 @@ For webm format, just change apng to webm and img tag to video tag in above step
 
 ===================  
 [Note]  
-    Currently tested in android 4.2, 4.1, 4.0, 2.2, 2.3.  With PC Browser Chrome, Firefox.  
+    Currently tested in android 4.2, 4.1, 4.0, 2.2, 2.3.  With PC Browser Chrome 33, Firefox 27, Safari 7.
     Host OS can be Windows/Mac/Linux (Unix should also be OK, but not tested).  
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.  
