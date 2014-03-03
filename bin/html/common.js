@@ -7,6 +7,8 @@ function rotateLocally() {
   if ((j = clsAry.indexOf('rotate90')) >= 0) {
     clsAry[j] = 'rotate270';
   } else if ((j = clsAry.indexOf('rotate270')) >= 0) {
+    clsAry[j] = 'rotate180';
+  } else if ((j = clsAry.indexOf('rotate180')) >= 0) {
     clsAry[j] = '';
   } else {
     clsAry.push('rotate90');

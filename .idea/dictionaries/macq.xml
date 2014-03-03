@@ -22,9 +22,12 @@
       <w>eacces</w>
       <w>eaddrinuse</w>
       <w>ffmpeg</w>
+      <w>fileindex</w>
+      <w>fname</w>
       <w>fstat</w>
       <w>getprop</w>
       <w>hhmmss</w>
+      <w>iframe</w>
       <w>inited</w>
       <w>libvpx</w>
       <w>libx</w>
@@ -34,6 +37,7 @@
       <w>maxage</w>
       <w>mpeg</w>
       <w>mpng</w>
+      <w>multiline</w>
       <w>multipart</w>
       <w>newcap</w>
       <w>newcc</w>
@@ -53,6 +57,7 @@
       <w>rfile</w>
       <w>safarai</w>
       <w>screenshot</w>
+      <w>seekable</w>
       <w>setchkerr</w>
       <w>sigkill</w>
       <w>sigpipe</w>

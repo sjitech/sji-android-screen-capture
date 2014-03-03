@@ -2,72 +2,65 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Recorded @type on #device</title>
+  <title>Recorded Video of #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
-    .navigationBar > a[href$="fileIndex=@relFileIndex"] {visibility: hidden}
-    .navigationBar > a[href*="fileIndex=@relFileIndex&"] {visibility: hidden}
+    .toolbar > a[href$="fileindex=@fileindex"] {visibility: hidden}
+    .toolbar > a[href*="fileindex=@fileindex&"] {visibility: hidden}
   </style>
 </head>
 <body>
-  <div style="text-align: center">Recorded Animated Image(<b>@type</b>) Of Android Screen</div>
-  <div style="text-align: center; width: 100%;">
-    <div class="expandable" style="position: fixed; top: 1px; right: 1px">
-      <div style="width: 86px">Advanced</div>
-      <div>
-        <form class="toolbar" target="_self">
-          <input type="hidden" name="device" value="#device">
-          <input type="hidden" name="accessKey" value="#accessKey">
-          <input type="hidden" name="type" value="@type">
-          <input type="hidden" name="fileIndex" value="@absFileIndex">
-
-          <button type="submit">Using</button>
-          <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
-            Rate<input type="text" name="fps" size="2" value="@fps"/>
-          </label>
-        </form>
-      </div>
-    </div>
-    <div class="navigationBar toolbar">
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@maxRelFileIndex&fps=@fps" target="_self">
+  <div style="position: fixed; left: 1px; top: 1px; z-index: 1">
+    #typeDisp
+  </div>
+  <div style="position: fixed; right: 1px; top: 1px; z-index: 2">
+    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename" target="resultIFrame">Download</a>
+  </div>
+  <div style="text-align: center; width: 100%; position: fixed; top:0">
+    <div class="toolbar">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@maxFileindex&fps=@fps">
         &lt;&lt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@olderFileIndex&fps=@fps" target="_self">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@olderFileindex&fps=@fps">
         &lt;
       </a>
-      <span class="fileIndex">@absFileIndex</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@newerFileIndex&fps=@fps" target="_self">
+      <span class="fileDesc">@timestamp</span>
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@newerFileindex&fps=@fps">
         &gt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=0&fps=@fps" target="_self">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=0&fps=@fps">
         &gt;&gt;
       </a>
     </div>
-    <div class="toolbar">
-      <b>Download</b>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=mp4" target="resultIFrame">mp4</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm" target="resultIFrame">webm</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="resultIFrame">@type</a>
-      <span hideIfOrigTypeIsNotAimg>
-        &nbsp;&nbsp;<span style="background-color: darkgray">&nbsp;</span>&nbsp;&nbsp;
-        <b>Show</b> as
-        <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=video" target="_self">mp4,webm</a>
-      </span>
-    </div>
-    <div class="toolbar">
-      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
-      <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&playerId=@playerId" target="resultIFrame" title="Save Current Image (on server side)">
-        Save
+    <div style="position: absolute; width: 100%; text-align: right">
+      <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&filename=@origFilename&playerId=@playerId" target="resultIFrame" title="Save Current Image To File On Server">
+        Save Image
       </a>
-      <a href="/listSavedImages?device=@device&accessKey=@accessKey" target="list saved images @device" title="List All Saved Images">List Saved Images</a>
+      <a href="/listSavedImages?device=@device&accessKey=@accessKey&type=@imageType&order=desc" target="list saved images @device" title="List All Saved Images">Saved Images</a>&nbsp;&nbsp;
     </div>
     <iframe class="toolbar" name="resultIFrame"></iframe>
-    <div id="viewerContainer">
-      <img id="viewer"
-           src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&playerId=@playerId&fromFrame=@fromFrame"/>
+    <div style="float: right; text-align: right">
+      <div><button onclick="rotateLocally()">Rotate</button></div>
+      <div><button onclick="scaleLocally()">Scale</button></div>
+      <div class="expandable" style="background-color: inherit; border: none; padding-right: 4px">
+        <div style="width: 40px; padding-right: 6px">Rate</div>
+        <div>
+          <form class="toolbar">
+            <input type="hidden" name="device" value="#device">
+            <input type="hidden" name="accessKey" value="#accessKey">
+            <input type="hidden" name="filename" value="@origFilename">
+
+            <button type="submit">Using</button>
+            <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
+              Rate<input type="text" name="fps" size="3" value="@fps"/>
+            </label>
+          </form>
+        </div>
+      </div>
     </div>
-    <div>You can embed following source into your HTML:</div>
-    <div class="code">&lt;img src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&fps=@fps&quot;/&gt;</div>
+  </div>
+  <div id="viewerContainer" style="margin-top: 56px">
+    <img id="viewer" src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename&fps=@fps&playerId=@playerId"/>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>

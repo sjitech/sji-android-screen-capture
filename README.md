@@ -35,23 +35,37 @@ You can edit configuration file <a href="https://raw.github.com/sjitech/sji-andr
 <br/><br/>
 4.<b>Show video/image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br/>
 For video, currently only support <a href="http://www.webmproject.org/">WebM</a> video, so recommend <a href="http://www.google.com/chrome">Google Chrome Browser</a>.  
-For image, currently support animated PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">multi-part http response</a>. Chrome and Firefox are well supported.  
+For image, currently support animated JPEG or PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">multi-part http response</a>. Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
 <br/><br/>
-To embed Animated PNG image into your html page:  
+To embed Animated JPEG image into your html page:
+<pre><code>&lt;img src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=ajpg&fps=4" /&gt;
+</code></pre>
+
+To embed Animated PNG image into your html page. (PNG is lostless image compression):
 <pre><code>&lt;img src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=apng&fps=4" /&gt;
 </code></pre>
 
-To embed webm video into your html page:  
-<pre><code>&lt;video controls preload="none" autobuffer="false"&gt;  
-  &lt;source src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=webm&fps=4" type="video/webm">  
-&lt;/video&gt;
-</code></pre>  
+You can record and seamlessly convert to H264/MP4 and WebM format file.
+To record, you submit a HTTP GET request with following URL:
+<pre><code>http://localhost:3000/deviceControl?action=startRecording?device=yourDeviceSerialNumber&type=ajpg&fps=4" /&gt;
+</code></pre>
+or via animated PNG  (better quality than above URL)
+<pre><code>http://localhost:3000/deviceControl?action=startRecording?device=yourDeviceSerialNumber&type=ajpg&fps=4" /&gt;
+</code></pre>
 
-To just capture one screenshot:  
+To stop recording, you submit a HTTP GET request with following URL:
+<pre><code>http://localhost:3000/deviceControl?action=stopRecording?device=yourDeviceSerialNumber" /&gt;
+</code></pre>
+
+To just capture one screenshot:
+JPEG:
+<pre><code>&lt;img src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=jpg" /&gt;
+</code></pre>
+PNG:
 <pre><code>&lt;img src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=png" /&gt;
 </code></pre>
 
-[Note]:  
+[Note]:
 All above URLs can specify scale and rotate optionally by append following querystring:
 <pre>
 &scale=0.5&rotate=270 or  

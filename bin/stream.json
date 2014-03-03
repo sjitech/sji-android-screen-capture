@@ -20,13 +20,10 @@
   },
 
   "outputDir": "../out", //dir to store recorded file
+  "protectOutputDir": false, //true means you can not view recorded file without correct adminKey querystring
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
   "tempImageLifeMilliseconds": 0,    //0 means do not dump image file
-  "shadowRecording": { //when recording, convert live capture to another file with specified format. The original format file will also be saved.
-    "mp4": true,
-    "webm": true
-  },
 
   "log": {
     "filePath": "../log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)

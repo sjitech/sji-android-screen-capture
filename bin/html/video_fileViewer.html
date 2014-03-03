@@ -2,61 +2,50 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Recorded mp4,webm on #device</title>
+  <title>Recorded Video of #device</title>
   <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
   <style>
-    .navigationBar > a[href$="fileIndex=@relFileIndex"] {visibility: hidden}
-    .navigationBar > a[href*="fileIndex=@relFileIndex&"] {visibility: hidden}
+    .toolbar > a[href$="fileindex=@fileindex"] {visibility: hidden}
+    .toolbar > a[href*="fileindex=@fileindex&"] {visibility: hidden}
   </style>
 </head>
 <body>
-  <div style="text-align: center">Recorded <b>mp4,webm</b> Of Android Screen (converted from <b>@type</b>)</div>
-  <div style="text-align: center; width: 100%;">
-    <div class="navigationBar toolbar">
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@maxRelFileIndex&as=video" target="_self">
+  <div style="position: fixed; left: 1px; top: 1px; z-index: 1">
+    #typeDisp
+  </div>
+  <div style="position: fixed; right: 1px; top: 1px; z-index: 1">
+    Download:
+    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.mp4" showIfExists_mp4 target="resultIFrame">MP4</a>
+    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.webm" showIfExists_webm target="resultIFrame">WebM</a>
+  </div>
+  <div style="text-align: center; width: 100%; position: fixed; top:0">
+    <div class="toolbar">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
         &lt;&lt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@olderFileIndex&as=video" target="_self">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
         &lt;
       </a>
-      <span class="fileIndex">@absFileIndex</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@newerFileIndex&as=video" target="_self">
+      <span class="fileDesc">@timestamp</span>
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
         &gt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=0&as=video" target="_self">
+      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=0">
         &gt;&gt;
       </a>
     </div>
-    <div class="toolbar">
-      <b>Download</b>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=mp4" target="resultIFrame">mp4</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm" target="resultIFrame">webm</a>
-      <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" hideIfOrigTypeIsNotAimg target="resultIFrame">@type</a>
-      <span hideIfOrigTypeIsNotAimg>
-        &nbsp;&nbsp;<span style="background-color: darkgray">&nbsp;</span>&nbsp;&nbsp;
-        <b>Show</b> as Animated Image
-        <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex" target="_self">@type</a>
-      </span>
-    </div>
-    <div class="toolbar">
-      <button onclick="rotateLocally()" class="rotateScaleButton">Rotate Locally</button> <button onclick="scaleLocally()" class="rotateScaleButton">Scale Locally</button>
-    </div>
     <iframe class="toolbar" name="resultIFrame"></iframe>
-    <div id="viewerContainer">
-      <video id="viewer" autoplay controls>
-        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=mp4" type="video/mp4">
-        <source src="/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm" type="video/webm">
-        <p>Your browser does not support mp4,webm in &lt;video&gt; tag</p>
-      </video>
+    <div style="float: right; text-align: right">
+      <div><button onclick="rotateLocally()">Rotate</button></div>
+      <div><button onclick="scaleLocally()">Scale</button></div>
     </div>
-    <div>You can embed following source into your HTML:</div>
-    <div class="code">
-      &lt;video autoplay controls&gt;<br/>
-      &lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=mp4&quot; type=&quot;video/mp4&quot;&gt;<br/>
-      &lt;source src=&quot;@stream_web/playRecordedFile?device=@device&accessKey=@accessKey&type=@type&fileIndex=@absFileIndex&as=webm&quot; type=&quot;video/webm&quot;&gt;<br/>
-      &lt;p&gt;Your browser does not support mp4,webm &lt;video&gt;&lt;/p&gt; tag<br/>
-      &lt;/video&gt;
-    </div>
+  </div>
+  <div id="viewerContainer" style="margin-top: 56px">
+    <video id="viewer" autoplay controls>
+      <source src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.mp4" type="video/mp4">
+      <source src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.webm" type="video/webm">
+      <p>Your browser does not support H264/MP4 or WebM in &lt;video&gt; tag</p>
+    </video>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>
