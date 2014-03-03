@@ -2,7 +2,8 @@ sji-android-screen-capture
 ===================
 <b>Android Screen Capture (For HTML5 Video Live Streaming)</b>  
 This project is aimed to capture android screen and view it in HTML5 video capable browser.  
-Yes, real time, low bandwidth.  This product will do encoding in android by <a href="http://ffmpeg.org/">ffmpeg</a>.  
+Yes, real time, low bandwidth.  This product will do encoding in host and android by <a href="http://ffmpeg.org/">ffmpeg</a>.
+Support Chrome, Firefox, Safari. Windows/Linux/Unix
 <pre><code><a href="http://youtu.be/CWcOjzAJ6Sg">recorded video sample( converted by youtube)</a>  
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
 
