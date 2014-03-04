@@ -82,7 +82,7 @@
       </tr>
       <!--repeatBegin-->
       <tr>
-        <td rowspan="3" style="text-align: left; vertical-align: top"><label class="fillParent"><input type="checkbox" name="device" value="#device" class="device_chk" checked/></label></td>
+        <td style="text-align: left; vertical-align: top; border-bottom: 0"><label class="fillParent"><input type="checkbox" name="device" value="#device" class="device_chk" checked/></label></td>
         <td style="text-align: left; vertical-align: top">
           #device
         </td>
@@ -109,7 +109,8 @@
         </td>
       </tr>
       <tr>
-        <td rowspan="2" colspan="2" style="text-align: left; vertical-align: top; border-top: 1px dashed lightgray">
+        <td style="border-top: 0"></td>
+        <td colspan="2" style="text-align: left; vertical-align: top; border-top: 1px dashed lightgray">
           <a class="button" style="float: right" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey&type=apng" target="resultIFrame">
             Stop
           </a>
@@ -158,11 +159,6 @@
           </a>
           </a>
           <span class="recordingIndicator" id="recordingIndicator_webm_@device"></span>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="3">
-          <span class="recordingIndicator" id="recordingSpeed_@device"></span>
         </td>
       </tr>
       <!--repeatEnd-->
