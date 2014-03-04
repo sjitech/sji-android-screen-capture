@@ -588,7 +588,7 @@ function capture(outputStream, q) {
           }
         });
       }
-      provider = dev.liveStreamer;
+      provider = dev.liveStreamer || (dev.liveStreamer = createCaptureProvider());
     } else { //stop current and start new if current live capture is not reusable for me
       forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another incompatible live capture is going to run');
       provider = dev.liveStreamer = createCaptureProvider();
