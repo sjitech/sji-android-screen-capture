@@ -1953,11 +1953,9 @@ function startAdminWeb() {
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
-        q.targetVideoTypeOfBatchMode = (req.headers.cookie || '').match(/targetVideoTypeOfBatchMode=(\w+)\b/);
-        q.targetVideoTypeOfBatchMode = q.targetVideoTypeOfBatchMode ? q.targetVideoTypeOfBatchMode[1] : q.type;
 
         getAllDevInfo(function/*on_complete*/(err, deviceList, infoList) {
-          (deviceList || []).forEach(function (device, i) {
+          (deviceList || (deviceList = [])).forEach(function (device, i) {
             getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
           });
 
@@ -1970,7 +1968,6 @@ function startAdminWeb() {
                   .replace(/@scale\b/g, q.scale)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
-                  .replace(new RegExp('name="type" value="' + q.targetVideoTypeOfBatchMode + '"', 'g'), '$& checked')  //set check mark
                   .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
                   .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
                   .replace(/@logStart\b/g, conf.logStart || -64000)
