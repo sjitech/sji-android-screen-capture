@@ -48,7 +48,11 @@ var re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/;
 
 //************************common *********************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
-  return devMgr[device] || (devMgr[device] = {device: device});
+  if (!devMgr[device]) {
+    devMgr[device] = {device: device};
+    updateAppVer();
+  }
+  return devMgr[device];
 }
 
 function spawn(logHead, _path, args, on_close, options) {
@@ -1184,12 +1188,15 @@ function pushStatus() {
   });
 }
 
-function pushStatusForAppVer() {
-  var json = '{"appVer":"' + status.appVer + '"}';
-  forEachValueIn(status.consumerMap, function (res) {
-    end(res, json); //cause browser to refresh page
-  });
-  status.consumerMap = {};
+function updateAppVer() {
+  status.appVer = getTimestamp();
+  setTimeout(function () {
+    var json = '{"appVer":"' + status.appVer + '"}';
+    forEachValueIn(status.consumerMap, function (res) {
+      end(res, json); //cause browser to refresh page
+    });
+    status.consumerMap = {};
+  }, 50);
 }
 
 var PNG_HEAD_HEX_STR = '89504e470d0a1a0a', APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
@@ -1834,8 +1841,7 @@ function startAdminWeb() {
             q.device.forEach(function (device) {
               getOrCreateDevCtx(device).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
             });
-            status.appVer = getTimestamp();
-            setTimeout(pushStatusForAppVer, 50);
+            updateAppVer();
             end(res, 'OK');
             break;
           case 'startRecording': //---------------------------start recording file for multiple devices-----------------
@@ -2042,8 +2048,7 @@ function startAdminWeb() {
           }
         });
         if (changed) {
-          status.appVer = getTimestamp();
-          setTimeout(pushStatusForAppVer, 50);
+          updateAppVer();
         }
         end(res, 'OK');
         break;
@@ -2053,8 +2058,7 @@ function startAdminWeb() {
         }
         if (conf.ipForHtmlLink !== q.ip) {
           conf.ipForHtmlLink = isAnyIp(q.ip) ? '127.0.0.1' : q.ip;
-          status.appVer = getTimestamp();
-          setTimeout(pushStatusForAppVer, 50);
+          updateAppVer();
         }
         end(res, 'OK');
         break;
@@ -2064,8 +2068,7 @@ function startAdminWeb() {
         }
         if (conf.latestFramesToDump !== q.frames) {
           conf.latestFramesToDump = q.frames;
-          status.appVer = getTimestamp();
-          setTimeout(pushStatusForAppVer, 50);
+          updateAppVer();
         }
         end(res, 'OK');
         break;
@@ -2149,8 +2152,7 @@ function startAdminWeb() {
                 }
                 if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
                   if (okAry.length) {
-                    status.appVer = getTimestamp();
-                    setTimeout(pushStatusForAppVer, 50);
+                    updateAppVer();
                   }
                   end(res, okAry.concat(errAry).join('\n'));
                 }
@@ -2194,8 +2196,7 @@ function loadResourceSync() {
     }
   });
 
-  status.appVer = getTimestamp();
-  pushStatusForAppVer();
+  updateAppVer();
 }
 
 loadResourceSync();
