@@ -23,7 +23,6 @@
   "protectOutputDir": false, //true means you can not view recorded file without correct adminKey querystring
 
   "maxRecordedFileSize": 4096000000, //max recorded file size
-  "tempImageLifeMilliseconds": 0,    //0 means do not dump image file
   "keepAdbAliveIntervalSeconds": 300, //unit: second!!!
 
   "log": {
