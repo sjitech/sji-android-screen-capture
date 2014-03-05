@@ -394,8 +394,8 @@ var ADB_GET_DEV_INFO_CMD_ARGS = [
   'getprop', 'ro.build.version.sdk;',
   'getprop', 'ro.product.cpu.abi;'
 ];
-function getDevInfo(device, on_complete, timeoutMs) {
-  if (!conf.reloadDevInfo && devMgr[device] && devMgr[device].info) {
+function getDevInfo(device, on_complete, timeoutMs, forceReloadDevInfo) {
+  if (!forceReloadDevInfo && !conf.reloadDevInfo && devMgr[device] && devMgr[device].info) {
     on_complete('', devMgr[device].info);
     return;
   }
@@ -412,22 +412,24 @@ function getDevInfo(device, on_complete, timeoutMs) {
   }
 }
 
-function getAllDevInfo(on_complete) {
+function getAllDevInfo(on_complete, forceReloadDevInfo) {
   getAllDev(function/*on_complete*/(err, deviceList) {
     if (err) {
-      on_complete(err);
+      on_complete(err, {});
       return;
     }
-    var infoList = [];
+    var devInfoMap = {};
     (function get_next_device_info() {
-      if (infoList.length < deviceList.length) {
-        getDevInfo(deviceList[infoList.length], function/*on_complete*/(err, info) {
-              infoList.push(info);
+      var i = Object.keys(devInfoMap).length;
+      if (i < deviceList.length) {
+        getDevInfo(deviceList[i], function/*on_complete*/(err, info) {
+              devInfoMap[deviceList[i]] = info;
               get_next_device_info();
             },
-            1000/*timeoutMs*/);
+            1000/*timeoutMs*/, forceReloadDevInfo);
       } else {
-        on_complete('', deviceList, infoList);
+        on_complete('', devInfoMap);
+        getAllDevInfo.devInfoMap = devInfoMap;
       }
     })();
   });
@@ -1189,14 +1191,16 @@ function pushStatus() {
 }
 
 function updateAppVer() {
-  status.appVer = getTimestamp();
+  var ver = status.appVer = getTimestamp();
   setTimeout(function () {
-    var json = '{"appVer":"' + status.appVer + '"}';
-    forEachValueIn(status.consumerMap, function (res) {
-      end(res, json); //cause browser to refresh page
-    });
-    status.consumerMap = {};
-  }, 50);
+    if (ver === status.appVer) {
+      var json = '{"appVer":"' + status.appVer + '"}';
+      forEachValueIn(status.consumerMap, function (res) {
+        end(res, json); //cause browser to refresh page
+      });
+      status.consumerMap = {};
+    }
+  }, 10);
 }
 
 var PNG_HEAD_HEX_STR = '89504e470d0a1a0a', APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
@@ -1957,9 +1961,9 @@ function startAdminWeb() {
           return end(res, chkerr);
         }
 
-        getAllDevInfo(function/*on_complete*/(err, deviceList, infoList) {
-          (deviceList || (deviceList = [])).forEach(function (device, i) {
-            getOrCreateDevCtx(device).info = infoList[i]; //save serial number and info to devMgr
+        getAllDevInfo(function/*on_complete*/(err, devInfoMap) {
+          forEachValueIn(devInfoMap, function (info, device) {
+            getOrCreateDevCtx(device).info = info; //save serial number and info to devMgr
           });
 
           var html = htmlCache['menu.html']
@@ -1992,7 +1996,7 @@ function startAdminWeb() {
               var dev = devMgr[device];
               return joinedStr + htmlBlock
                   .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
-                  .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (deviceList.indexOf(device) >= 0 ? '' : ' disconnected'))
+                  .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (devInfoMap[device] ? '' : ' disconnected'))
                   .replace(/#device\b/g, htmlEncode(device))
                   .replace(/@device\b/g, querystring.escape(device))
                   .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))
@@ -2199,12 +2203,38 @@ function loadResourceSync() {
   updateAppVer();
 }
 
+function keepAdbAlive() {
+  function _keepAdbAlive() {
+    log(('[keepAdbAlive]begin getAllDevInfo'));
+    var oldDevInfoMap = getAllDevInfo.devInfoMap || {};
+
+    getAllDevInfo(function/*on_complete*/(err, newDevInfoMap) {
+      if (!err) {
+        var oldDeviceList = Object.keys(oldDevInfoMap);
+        if (oldDeviceList.length !== Object.keys(newDevInfoMap).length ||
+            oldDeviceList.some(haveDifferentInfo)) {
+          updateAppVer();
+        }
+      }
+      log(('[keepAdbAlive]end'));
+      setTimeout(_keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+
+      function haveDifferentInfo(device) {
+        return oldDevInfoMap[device] !== newDevInfoMap[device];
+      }
+    }, true/*forceLoadDevInfo*/);
+  }
+
+  setTimeout(_keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+}
+
 loadResourceSync();
 
 checkAdb(function/*on_complete*/() {
   checkFfmpeg(function/*on_complete*/() {
     startAdminWeb();
     startStreamWeb();
+    keepAdbAlive();
   });
 });
 
@@ -2212,7 +2242,7 @@ checkAdb(function/*on_complete*/() {
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordedFileSize: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
-    action: 0, logDate: 0, logDownload: 0});
+    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0});
 }
 
 //todo: some device crashes if live view full image
