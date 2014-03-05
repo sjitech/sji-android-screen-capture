@@ -14,29 +14,29 @@
     #typeDisp
   </div>
   <div style="position: fixed; right: 1px; top: 1px; z-index: 2">
-    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename" target="resultIFrame">Download</a>
+    <a href="/downloadRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename" target="resultIFrame">Download</a>
   </div>
   <div style="text-align: center; width: 100%; position: fixed; top:0">
     <div class="toolbar">
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@maxFileindex&fps=@fps">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex&fps=@fps">
         &lt;&lt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@olderFileindex&fps=@fps">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex&fps=@fps">
         &lt;
       </a>
       <span class="fileDesc">@timestamp</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@newerFileindex&fps=@fps">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex&fps=@fps">
         &gt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=0&fps=@fps">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=0&fps=@fps">
         &gt;&gt;
       </a>
     </div>
     <div style="position: absolute; width: 100%; text-align: right">
-      <a class="button" href="/saveImage?device=@device&accessKey=@accessKey&filename=@origFilename&playerId=@playerId" target="resultIFrame" title="Save Current Image To File On Server">
+      <a class="button" href="/saveImage?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename&playerId=@playerId" target="resultIFrame" title="Save Current Image To File On Server">
         Save Image
       </a>
-      <a href="/listSavedImages?device=@device&accessKey=@accessKey&type=@imageType&order=desc" target="list saved images @device" title="List All Saved Images">Saved Images</a>&nbsp;&nbsp;
+      <a href="/listSavedImages?unprotect&device=@device&accessKey=@accessKey&type=@imageType&order=desc" target="list saved images @device" title="List All Saved Images">Saved Images</a>&nbsp;&nbsp;
     </div>
     <iframe class="toolbar" name="resultIFrame"></iframe>
     <div style="float: right; text-align: right">
@@ -46,9 +46,10 @@
         <div style="width: 40px; padding-right: 6px">Rate</div>
         <div>
           <form class="toolbar">
-            <input type="hidden" name="device" value="#device">
-            <input type="hidden" name="accessKey" value="#accessKey">
-            <input type="hidden" name="filename" value="@origFilename">
+            <input type="hidden" name="device" value="#device"/>
+            <input type="hidden" name="accessKey" value="#accessKey"/>
+            <input type="hidden" name="adminKey" value="#adminKey"/>
+            <input type="hidden" name="filename" value="@origFilename"/>
 
             <button type="submit">Using</button>
             <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
@@ -60,7 +61,7 @@
     </div>
   </div>
   <div id="viewerContainer" style="margin-top: 56px">
-    <img id="viewer" src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename&fps=@fps&playerId=@playerId"/>
+    <img id="viewer" src="/playRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename&fps=@fps&playerId=@playerId"/>
   </div>
   <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
 </body>

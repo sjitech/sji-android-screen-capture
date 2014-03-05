@@ -35,13 +35,13 @@
     Saved Images (<b style="color: blue">@count</b>)
     <div class="toolbar">
       Format:
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=jpg&order=@order">JPEG</a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=png&order=@order">PNG</a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=&order=@order">All</a>
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&type=jpg&order=@order">JPEG</a>
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&type=png&order=@order">PNG</a>
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&type=&order=@order">All</a>
       &nbsp;&nbsp;<span style="background-color: darkgray">&nbsp;</span>&nbsp;&nbsp;
       Order by:
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&order=desc" title="New Saved File First">Newer</a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&type=@type&order=asc" title="Old Image Frame First">Older</a> First
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&type=@type&order=desc" title="New Saved File First">Newer</a>
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&type=@type&order=asc" title="Old Image Frame First">Older</a> First
       <span id="expandable" class="infoWithTip" style="float: right">
         <span id="expandableHead">
           &nbsp;&nbsp;<span style="background-color: darkgray">&nbsp;</span>&nbsp;&nbsp;
@@ -53,7 +53,7 @@
   </div>
   <div style="text-align: center; width: 100%; margin-top: 50px">
     <!--repeatBegin-->
-    <img src="/showImage?device=@device&accessKey=@accessKey&filename=@filename"/>
+    <img src="/showImage?unprotect&device=@device&accessKey=@accessKey&filename=@filename"/>
     <!--repeatEnd-->
   </div>
 </body>

@@ -36,6 +36,7 @@ var re_filename = /^((.+)~(?:live|rec)_f(\d+(?:\.\d+)?)[^_]*_(\d{14}\.\d{3}(?:.\
 var allTypeDispNameMap = {apng: 'Animated PNG', ajpg: 'Animated JPG', webm: 'WebM', mp4: 'MP4', jpg: 'JPEG', png: 'PNG'};
 var allTypeMimeMapForDownload = {apng: 'video/apng', ajpg: 'video/ajpg', webm: 'video/webm', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png'}; //safari need jpeg instead of jpg
 var allTypeMimeMapForPlay = {apng: MULTIPART_MIXED_REPLACE, ajpg: MULTIPART_MIXED_REPLACE, webm: 'video/webm', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png'};
+var allVideoTypeOrderMap = {webm: 1, mp4: 2, ajpg: 3, apng: 4};
 var videoTypeSet = {ajpg: 1, apng: 2, webm: 3}; //also as sort order
 var aimgTypeSet = {ajpg: 1, apng: 2}; //also as sort order
 var imageTypeSet = {jpg: 1, png: 2}; //also as sort order
@@ -47,15 +48,7 @@ var re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/;
 
 //************************common *********************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
-  var dev;
-  if (!(dev = devMgr[device])) {
-    devMgr[device] = dev = {device: device};
-    dev.counterMapRoot = {};
-    videoAndImageTypeAry.forEach(function (type) {
-      dev.counterMapRoot[type] = {};
-    });
-  }
-  return dev;
+  return devMgr[device] || (devMgr[device] = {device: device});
 }
 
 function spawn(logHead, _path, args, on_close, options) {
@@ -1009,8 +1002,8 @@ FilenameInfo.parse = function (filename, deviceOrAry, filter) {
 function sortVideoFilenameInfoAryByOrigTimestamp(filenameAry, ascOrDesc) {
   return filenameAry.sort(function (a, b) {
     if (a.origTimestamp === b.origTimestamp) {
-      a = videoTypeSet[a.type];
-      b = videoTypeSet[b.type];
+      a = allVideoTypeOrderMap[a.type];
+      b = allVideoTypeOrderMap[b.type];
     } else {
       a = a.origTimestamp;
       b = b.origTimestamp;
@@ -1621,9 +1614,7 @@ function startStreamWeb() {
             return end(res, chkerr);
           }
         } else {
-          if (chkerrOptional('origType(optional)', q.origType, Object.keys(videoTypeSet)) ||
-              aimgTypeSet[q.origType] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS_PLAY_AIMG, MAX_FPS_PLAY_AIMG) ||
-              chkerrRequired('fileindex', (q.fileindex = Number(q.fileindex || 0)), 0, 0xffffffff)) {
+          if (chkerrRequired('fileindex', (q.fileindex = Number(q.fileindex || 0)), 0, 0xffffffff)) {
             return end(res, chkerr);
           }
         }
@@ -1647,6 +1638,9 @@ function startStreamWeb() {
           }
           if (q.fileindex < 0 || !q.filename) {
             return end(res, 'error: file not found');
+          }
+          if (aimgTypeSet[q.filename.type] && chkerrOptional('fps(optional)', (q.fps = Number(q.fps)), MIN_FPS_PLAY_AIMG, MAX_FPS_PLAY_AIMG)) {
+            return end(res, chkerr);
           }
           var fileGroupCount;
           fileGroupCount = getCountOfOrigTimestamp(filenameAry);
@@ -1675,6 +1669,8 @@ function startStreamWeb() {
               .replace(/#playerId\b/g, getTimestamp.lastValue)
               .replace(/\bshowIfExists_mp4\b/g, fs.existsSync(outputDirSlash + q.filename.origFilename + '.mp4') ? '' : 'style="display:none"')
               .replace(/\bshowIfExists_webm\b/g, fs.existsSync(outputDirSlash + q.filename.origFilename + '.webm') ? '' : 'style="display:none"')
+              .replace(/unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
+              .replace(/name="adminKey" value="#adminKey"/g, q.adminKey ? 'name="adminKey" value="' + htmlEncode(q.adminKey) + '"' : '')
           );
         });
         break;
@@ -1743,6 +1739,7 @@ function startStreamWeb() {
                   .replace(/@order\b/g, q.order || '')
                   .replace(/@realOrder\b/g, isDesc ? 'desc' : 'asc')
                   .replace(/@count\b/g, filenameAry.length)
+                  .replace(/unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               ;
           res.setHeader('Content-Type', 'text/html');
           return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {

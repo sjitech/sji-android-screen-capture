@@ -11,26 +11,26 @@
 </head>
 <body>
   <div style="position: fixed; left: 1px; top: 1px; z-index: 1">
-    #typeDisp
+    H264/MP4 & WebM
   </div>
   <div style="position: fixed; right: 1px; top: 1px; z-index: 1">
     Download:
-    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.mp4" showIfExists_mp4 target="resultIFrame">MP4</a>
-    <a href="/downloadRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.webm" showIfExists_webm target="resultIFrame">WebM</a>
+    <a href="/downloadRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4" showIfExists_mp4 target="resultIFrame">MP4</a>
+    <a href="/downloadRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm" showIfExists_webm target="resultIFrame">WebM</a>
   </div>
   <div style="text-align: center; width: 100%; position: fixed; top:0">
     <div class="toolbar">
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
         &lt;&lt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
         &lt;
       </a>
       <span class="fileDesc">@timestamp</span>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
         &gt;
       </a>
-      <a href="@pathname?device=@device&accessKey=@accessKey&fileindex=0">
+      <a href="@pathname?unprotect&device=@device&accessKey=@accessKey&fileindex=0">
         &gt;&gt;
       </a>
     </div>
@@ -42,8 +42,8 @@
   </div>
   <div id="viewerContainer" style="margin-top: 56px">
     <video id="viewer" autoplay controls>
-      <source src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.mp4" type="video/mp4">
-      <source src="/playRecordedFile?device=@device&accessKey=@accessKey&filename=@origFilename.webm" type="video/webm">
+      <source src="/playRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4" type="video/mp4">
+      <source src="/playRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm" type="video/webm">
       <p>Your browser does not support H264/MP4 or WebM in &lt;video&gt; tag</p>
     </video>
   </div>
