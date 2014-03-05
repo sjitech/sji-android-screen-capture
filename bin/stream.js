@@ -1661,7 +1661,7 @@ function startStreamWeb() {
               .replace(/@imageType\b/g, q.filename.type.slice(1)) //ajpg->jpg
               .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
               .replace(/@fileindex\b/g, q.fileindex)
-              .replace(/@origFilename\b/g, q.filename.origFilename)
+              .replace(/@origFilename\b/g, querystring.escape(q.filename.origFilename))
               .replace(/@timestamp\b/g, stringifyTimestamp(q.filename.origTimestamp))
               .replace(/@maxFileindex\b/g, fileGroupCount - 1)
               .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, fileGroupCount - 1))
@@ -1710,7 +1710,7 @@ function startStreamWeb() {
         if (conf.protectOutputDir && !(conf.adminWeb.adminKey && q.adminKey === conf.adminWeb.adminKey)) {
           return end(res, 'access denied');
         }
-        if (!(q.filename = FilenameInfo.parse(q.filename, q.device, {image: true}))) {
+        if (chkerrRequired('filename', q.filename) || !(q.filename = FilenameInfo.parse(q.filename, q.device, {image: true}))) {
           return end(res, chkerr);
         }
         res.setHeader('Content-Type', allTypeMimeMapForPlay[q.filename.type]);
@@ -1748,7 +1748,7 @@ function startStreamWeb() {
           return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
             htmlBlock = htmlBlock || wholeMatch; //just to avoid compiler warning
             return filenameAry.reduce(function (joinedStr, filename) {
-              return joinedStr + htmlBlock.replace(/@filename\b/g, filename);
+              return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filename));
             }, ''/*initial joinedStr*/);
           }));
         });
