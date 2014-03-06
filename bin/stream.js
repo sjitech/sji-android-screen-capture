@@ -418,12 +418,13 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
       on_complete(err, {});
       return;
     }
+    var i = 0;
     var devInfoMap = {};
     (function get_next_device_info() {
-      var i = Object.keys(devInfoMap).length;
       if (i < deviceList.length) {
         getDevInfo(deviceList[i], function/*on_complete*/(err, info) {
               devInfoMap[deviceList[i]] = info;
+              i++;
               get_next_device_info();
             },
             1000/*timeoutMs*/, forceReloadDevInfo);
