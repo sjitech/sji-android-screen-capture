@@ -418,6 +418,7 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
       on_complete(err, {});
       return;
     }
+    deviceList = uniqueNonEmptyArray(deviceList);
     var i = 0;
     var devInfoMap = {};
     (function get_next_device_info() {
