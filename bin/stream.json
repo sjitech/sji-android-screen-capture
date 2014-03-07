@@ -22,7 +22,7 @@
   "outputDir": "../out", //dir to store recorded file
   "protectOutputDir": false, //true means you can not view recorded file without correct adminKey querystring
 
-  "maxRecordTimeSeconds": 10, //max recorded time (unit: seconds)
+  "maxRecordTimeSeconds": 7200, //max recorded time (unit: seconds)
   "keepAdbAliveIntervalSeconds": 300, //unit: second!!!
 
   "log": {
