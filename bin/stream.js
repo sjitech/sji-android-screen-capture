@@ -266,9 +266,8 @@ function write(res, dataStrOfBuf) {
   res.write(dataStrOfBuf);
 
   if (res.filename) { //FileRecorder
-    res.fileSize = (res.fileSize || 0) + dataStrOfBuf.length;
-    if (res.fileSize >= conf.maxRecordedFileSize) {
-      endCaptureConsumer(res, 'stop recording due to size too big (> ' + conf.maxRecordedFileSize + ' bytes)');
+    if (Date.now() - res.startTimeMs >= conf.maxRecordTimeSeconds * 1000) {
+      endCaptureConsumer(res, 'recording time is too long (>= ' + conf.maxRecordTimeSeconds + ' seconds)');
     }
   }
 }
@@ -1639,15 +1638,7 @@ function startStreamWeb() {
           if (q.filename) {
             q.fileindex = getFileindexOfOrigTimestamp(filenameAry, q.filename.origTimestamp);
           } else {
-            if (q.origType) {
-              var tmpAry = filenameAry.filter(function (filename) {
-                return filename.origType === q.origType;
-              });
-              tmpAry = sortVideoFilenameInfoAryByOrigTimestamp(tmpAry, false/*desc*/);
-              q.filename = getFilenameInfoByOrigTimestampIndex(tmpAry, q.fileindex);
-            } else {
-              q.filename = getFilenameInfoByOrigTimestampIndex(filenameAry, q.fileindex);
-            }
+            q.filename = getFilenameInfoByOrigTimestampIndex(filenameAry, q.fileindex);
           }
           if (q.fileindex < 0 || !q.filename) {
             return end(res, 'error: file not found');
@@ -1667,6 +1658,7 @@ function startStreamWeb() {
               .replace(/#typeDisp\b/g, htmlEncode(allTypeDispNameMap[q.filename.type]))
               .replace(/@imageType\b/g, q.filename.type.slice(1)) //ajpg->jpg
               .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
+              .replace(/@fileCount\b/g, fileGroupCount)
               .replace(/@fileindex\b/g, q.fileindex)
               .replace(/@origFilename\b/g, querystring.escape(q.filename.origFilename))
               .replace(/@timestamp\b/g, stringifyTimestamp(q.filename.origTimestamp))
@@ -2242,7 +2234,7 @@ checkAdb(function/*on_complete*/() {
 
 
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
-  log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordedFileSize: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
+  log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
     action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0});
 }
