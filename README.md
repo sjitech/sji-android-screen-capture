@@ -17,8 +17,6 @@ Live View<br/>
 <img src="doc/screenshot-png.png" /><br/>
 Recorded Videos<br/>
 <img src="doc/recorded.png" /><br/>
-Grabbed Images:<br/>
-<img src="doc/listSaved.png" /><br/>
 
 [How to use]  
   
