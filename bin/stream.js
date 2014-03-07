@@ -2242,7 +2242,7 @@ if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'un
 //todo: some device crashes if live view full image
 //todo: sometimes ScreenshotClient::update just failed
 //todo: screenshot buffer changed frequently, should lock
-//todo: seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit
+//todo: seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit -> use socket to talk to 5037 directly
 //todo: add audio
 //todo: make touchable: forward motion event to android
 //todo: remove dependence of adb
