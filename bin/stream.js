@@ -50,7 +50,7 @@ var re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/;
 function getOrCreateDevCtx(device/*device serial number*/) {
   if (!devMgr[device]) {
     devMgr[device] = {device: device};
-    updateAppVer();
+    updateMainUI();
   }
   return devMgr[device];
 }
@@ -258,10 +258,6 @@ function write(res, dataStrOfBuf) {
     res.__bytesWritten = 0;
   }
   res.__bytesWritten += dataStrOfBuf.length;
-
-  if (!res.filename && status.streaming) {
-    status.streaming.bytes += dataStrOfBuf.length;
-  }
 
   res.write(dataStrOfBuf);
 
@@ -611,11 +607,6 @@ function capture(outputStream, q) {
   provider.consumerMap[res.consumerId] = res;
   res.logHead = res.logHead.slice(0, -1) + ' @ ' + provider.logHead.slice(1, -1) + ']';
   log(res.logHead + 'added capture consumer ' + res.consumerId);
-  if (res.filename) {
-    setTimeout(pushStatus, 0);
-  } else {
-    updateStreamingCounter(+1);
-  }
 
   res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
     endCaptureConsumer(res, 'canceled'/*do not change this string*/);
@@ -719,6 +710,8 @@ function capture(outputStream, q) {
         }
     ); //end of prepareDeviceFile
   }
+
+  updateDeviceStatusUI();
 }
 
 function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
@@ -729,11 +722,6 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   log(res.logHead + 'cleanup capture consumer ' + res.consumerId + (reason ? (' due to ' + reason) : ''));
 
   delete consumerMap[res.consumerId];
-  if (res.filename) {
-    setTimeout(pushStatus, 0);
-  } else {
-    updateStreamingCounter(-1);
-  }
 
   if (reason === 'canceled') {
     if (res.filename) {
@@ -771,6 +759,8 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
       }
     }
   }
+
+  updateDeviceStatusUI();
 }
 
 function startRecording(q/*same as capture*/, on_complete) {
@@ -816,7 +806,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           childProc.stdin.filename = filename + '.mp4' + ' ' + filename + '.webm'; //needed by capture(), deviceControl
           childProc.stdin.logHead = '[FileWriter(RecorderConverter)' + filename + '.mp4&webm' + ')]';
 
-          childProc.stdin.startTimeMs = Date.now(); //also for pushStatus
+          childProc.stdin.startTimeMs = Date.now(); //also for check maxRecordingTime
           capture(childProc.stdin, q); //---------do capture, save output to childProc.stdin----------
           callbackOnce('', childProc.stdin);
 
@@ -831,7 +821,7 @@ function startRecording(q/*same as capture*/, on_complete) {
 
           wfile.on('open', function () {
             log(wfile.logHead + 'opened for write');
-            wfile.startTimeMs = Date.now(); //for pushStatus
+            wfile.startTimeMs = Date.now(); //for check maxRecordingTime
             capture(wfile, q); //---------do capture, save output to wfile----------
             callbackOnce('', wfile);
           });
@@ -917,7 +907,6 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload, range) {
 
   rfile.on('open', function () {
     log(rfile.logHead + 'opened for read');
-    updateStreamingCounter(+1);
 
     rfile.on('data', function (buf) {
       if (forPlayAnimatedImage) { //play apng, ajpg specially, translate it to multipart output
@@ -956,13 +945,9 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload, range) {
   res.on('close', function () { //closed without normal end(res,...). Note: this event DOES NOT means output data have been flushed
     rfile.close(); //stop reading more
     clearTimeout(rfile.timer);
-    updateStreamingCounter(-1);
     if (rfile.aimgDecoder) {
       delete aimgDecoderMap[rfile.aimgDecoder.aimgDecoderId];
     }
-  });
-  res.on('finish', function () { //data have been flushed. This event is not related with 'close' event
-    updateStreamingCounter(-1);
   });
   return ''; //just to avoid compiler warning
 }
@@ -1133,81 +1118,58 @@ function deleteFiles(deviceOrAry, filter) {
   });
 }
 
-function updateStreamingCounter(delta/*1 or -1*/) {
-  //status.streaming.bytes will be set by write(res,...)
-  if (!status.streaming) {
-    status.streaming = {count: 0, bytes: 0, startTimeMs: Date.now()};
-    status.timer = setInterval(pushStatus, 1000);
-  }
-  if ((status.streaming.count += delta) <= 0) { //destroy counter if count is 0
-    status.streaming = null;
-    clearInterval(status.timer);
-    status.timer = null;
-  }
-  setTimeout(pushStatus, 0);
-}
-
-function pushStatus() {
-  if (Object.keys(status.consumerMap).length === 0) {
-    status.needRecalculation = true;
-    return;
-  }
-  status.needRecalculation = false;
-
-  var sd = {}, json;
-
-  sd.streamingSpeed = '';
-  if (status.streaming) {
-    var bytesPerSec = (status.streaming.bytes * 1000 / Math.max(1, Date.now() - status.streaming.startTimeMs)).toFixed();
-    sd.streamingSpeed = 'Network: ' + (bytesPerSec / 1000000).toFixed(3) + ' MB/s';
-  }
-
-  //set individual counter. res.counter.bytes will be set by write(res,...)
-  forEachValueIn(devMgr, function (dev, device) {
-    var qdevice = querystring.escape(device);
-    Object.keys(videoTypeSet).forEach(function (type) {
-      var liveViewerCount = 0, recordingCount = 0;
-      if (dev.liveStreamer && dev.liveStreamer.type === type) {
-        forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
-          if (res.filename) {
-            recordingCount += 1;
-          } else {
-            liveViewerCount += 1;
-          }
-        });
-      }
-      sd['liveViewCount_' + type + '_' + qdevice] = liveViewerCount ? '(' + liveViewerCount + ')' : '';
-      sd['recordingIndicator_' + type + '_' + qdevice] = recordingCount ? 'ing' : '';
-    });
-  });
-
-  if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
-    status.lastDataJson = json;
-    status.ver = getTimestamp();
-  }
-  json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
-
-  forEachValueIn(status.consumerMap, function (res) {
-    if (res.previousVer !== status.ver) {
-      if (!status.timer || !res.previousVer || parseFloat(status.ver) - parseFloat(res.previousVer) >= 1) {
-        end(res, json);
-        delete status.consumerMap[res.consumerId];
-      }
-    }
-  });
-}
-
-function updateAppVer() {
-  var ver = status.appVer = getTimestamp();
+function updateDeviceStatusUI() {
+  var oldVer = status.ver;
   setTimeout(function () {
-    if (ver === status.appVer) {
+    if (oldVer === status.ver && Object.keys(status.consumerMap).length) {
+      var sd = {}, json;
+
+      forEachValueIn(devMgr, function (dev, device) {
+        var qdevice = querystring.escape(device);
+        Object.keys(videoTypeSet).forEach(function (type) {
+          var liveViewerCount = 0, recordingCount = 0;
+          if (dev.liveStreamer && dev.liveStreamer.type === type) {
+            forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
+              if (res.filename) {
+                recordingCount += 1;
+              } else {
+                liveViewerCount += 1;
+              }
+            });
+          }
+          sd['liveViewCount_' + type + '_' + qdevice] = liveViewerCount ? '(' + liveViewerCount + ')' : '';
+          sd['recordingIndicator_' + type + '_' + qdevice] = recordingCount ? 'ing' : '';
+        });
+      });
+
+      if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
+        status.lastDataJson = json;
+        status.ver = getTimestamp();
+      }
+      json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
+
+      forEachValueIn(status.consumerMap, function (res) {
+        if (res.previousVer !== status.ver) {
+          end(res, json);
+          delete status.consumerMap[res.consumerId];
+        }
+      });
+    }
+  }, 0);
+}
+
+function updateMainUI() {
+  var oldVer = status.appVer;
+  setTimeout(function () {
+    if (oldVer === status.appVer) {
+      status.appVer = getTimestamp();
       var json = '{"appVer":"' + status.appVer + '"}';
       forEachValueIn(status.consumerMap, function (res) {
         end(res, json); //cause browser to refresh page
       });
       status.consumerMap = {};
     }
-  }, 10);
+  }, 0);
 }
 
 var PNG_HEAD_HEX_STR = '89504e470d0a1a0a', APNG_STATE_READ_HEAD = 0, APNG_STATE_READ_DATA = 1, APNG_STATE_FIND_TAIL = 2;
@@ -1337,7 +1299,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
     var wholeImageBuf = Buffer.concat(context.bufAry);
     context.bufAry = [];
     if (!context.startTimeMs) {
-      context.startTimeMs = Date.now();
+      context.startTimeMs = Date.now(); //for ajpg/apng playback
     }
 
     forEachValueIn(consumerMap, function (res) {
@@ -1484,6 +1446,13 @@ function setDefaultHttpHeader(res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 
+function logHttpRequest(req, logHead) {
+  log(logHead + 'URL= ' + req.url +
+      (req.headers.range ? '\n' + logHead + 'HEADERS["RANGE"]= ' + req.headers.range + '' : '') +
+      (conf.logHttpReqDetail ? '\n' + logHead + 'SOURCE= ' + req.connection.remoteAddress + ':' + req.connection.remotePort + '' : '') +
+      (conf.logHttpReqDetail ? '\n' + logHead + 'HEADERS["USER-AGENT"]= ' + req.headers['user-agent'] + '' : ''));
+}
+
 function startStreamWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.ip), smark = (conf.ssl.on ? 's' : '');
   conf.ipForHtmlLink = (isAnyIp(conf.ip) ? 'localhost' : conf.ip);
@@ -1526,8 +1495,10 @@ function startStreamWeb() {
     q.qdevice = querystring.escape(q.device);
     var _accessKey = devMgr[q.device] ? devMgr[q.device].accessKey : '';
     if (_accessKey && _accessKey !== q.accessKey || !_accessKey && conf.adminWeb.adminKey) {
+      res.logHead = res.logHeadSimple = '[http' + smark.toLowerCase() + '_' + (res.seq = ++httpSeq) + ']';
+      logHttpRequest(req, res.logHeadSimple);
       res.statusCode = 403; //access denied
-      return res.end('access denied');
+      return end(res, 'access denied');
     }
 
     switch (parsedUrl.pathname) {
@@ -1537,10 +1508,7 @@ function startStreamWeb() {
         return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
       default :
         res.logHead = res.logHeadSimple = '[http' + smark.toLowerCase() + '_' + (res.seq = ++httpSeq) + ']';
-        log(res.logHeadSimple + 'URL= ' + req.url +
-            (req.headers.range ? '\n' + res.logHeadSimple + 'HEADERS["RANGE"]= ' + req.headers.range + '' : '') +
-            (conf.logHttpReqDetail ? '\n' + res.logHeadSimple + 'SOURCE= ' + req.connection.remoteAddress + ':' + req.connection.remotePort + '' : '') +
-            (conf.logHttpReqDetail ? '\n' + res.logHeadSimple + 'HEADERS["USER-AGENT"]= ' + req.headers['user-agent'] + '' : ''));
+        logHttpRequest(req, res.logHeadSimple);
         res.on('close', function () { //closed without normal end(res,...)
           log(res.logHeadSimple + 'CLOSED by peer');
         });
@@ -1575,6 +1543,7 @@ function startStreamWeb() {
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
       case '/downloadRecordedFile': //---------------------download recorded file---------------------------------------
         if (conf.protectOutputDir && !(conf.adminWeb.adminKey && q.adminKey === conf.adminWeb.adminKey)) {
+          res.statusCode = 403; //access denied
           return end(res, 'access denied');
         }
         var forDownload = (parsedUrl.pathname === '/downloadRecordedFile');
@@ -1624,6 +1593,7 @@ function startStreamWeb() {
         break;
       case '/fileViewer':  //---------------------------show recorded file  (Just as a sample)--------------------------
         if (conf.protectOutputDir && !(conf.adminWeb.adminKey && q.adminKey === conf.adminWeb.adminKey)) {
+          res.statusCode = 403; //access denied
           return end(res, 'access denied');
         }
         if (q.filename) {
@@ -1713,6 +1683,7 @@ function startStreamWeb() {
         break;
       case '/showImage': //--------------------------show saved image --------------------------------------------------
         if (conf.protectOutputDir && !(conf.adminWeb.adminKey && q.adminKey === conf.adminWeb.adminKey)) {
+          res.statusCode = 403; //access denied
           return end(res, 'access denied');
         }
         if (chkerrRequired('filename', q.filename) || !(q.filename = FilenameInfo.parse(q.filename, q.device, {image: true}))) {
@@ -1726,6 +1697,7 @@ function startStreamWeb() {
         break;
       case '/listSavedImages': //--------------------list all saved images----------------------------------------------
         if (conf.protectOutputDir && !(conf.adminWeb.adminKey && q.adminKey === conf.adminWeb.adminKey)) {
+          res.statusCode = 403; //access denied
           return end(res, 'access denied');
         }
         if (chkerrOptional('type(optional)', q.type, Object.keys(imageTypeSet)) ||
@@ -1802,8 +1774,10 @@ function startAdminWeb() {
     }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
     if (conf.adminWeb.adminKey && q.adminKey !== conf.adminWeb.adminKey) {
+      res.logHead = res.logHeadSimple = '[HTTP' + smark.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']';
+      logHttpRequest(req, res.logHeadSimple);
       res.statusCode = 403; //access denied
-      return res.end('access denied');
+      return end(res, 'access denied');
     }
 
     switch (parsedUrl.pathname) {
@@ -1817,7 +1791,7 @@ function startAdminWeb() {
         break;
       default :
         res.logHead = res.logHeadSimple = '[HTTP' + smark.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']';
-        log(res.logHeadSimple + 'URL= ' + req.url);
+        logHttpRequest(req, res.logHeadSimple);
         res.on('close', function () { //closed without normal end(res,...)
           log(res.logHeadSimple + 'CLOSED by peer');
         });
@@ -1843,7 +1817,7 @@ function startAdminWeb() {
             q.device.forEach(function (device) {
               getOrCreateDevCtx(device).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
             });
-            updateAppVer();
+            updateMainUI();
             end(res, 'OK');
             break;
           case 'startRecording': //---------------------------start recording file for multiple devices-----------------
@@ -2050,7 +2024,7 @@ function startAdminWeb() {
           }
         });
         if (changed) {
-          updateAppVer();
+          updateMainUI();
         }
         end(res, 'OK');
         break;
@@ -2060,7 +2034,7 @@ function startAdminWeb() {
         }
         if (conf.ipForHtmlLink !== q.ip) {
           conf.ipForHtmlLink = isAnyIp(q.ip) ? 'localhost' : q.ip;
-          updateAppVer();
+          updateMainUI();
         }
         end(res, 'OK');
         break;
@@ -2070,7 +2044,7 @@ function startAdminWeb() {
         }
         if (conf.latestFramesToDump !== q.frames) {
           conf.latestFramesToDump = q.frames;
-          updateAppVer();
+          updateMainUI();
         }
         end(res, 'OK');
         break;
@@ -2078,10 +2052,10 @@ function startAdminWeb() {
         res.setHeader('Content-Type', 'text/json');
         res.previousVer = q.ver;
         status.consumerMap[(res.consumerId = getTimestamp())] = res;
-        pushStatus();
         res.on('close', function () { //closed without normal end(res,...)
           delete status.consumerMap[res.consumerId];
         });
+        updateDeviceStatusUI();
         break;
       case '/getLog':  //----------------------------------------get log------------------------------------------------
         var logFilePath = q.logDate === 'today' ? log.context.todayLogFilePath : log.context.yesterdayLogFilePath;
@@ -2154,7 +2128,7 @@ function startAdminWeb() {
                 }
                 if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
                   if (okAry.length) {
-                    updateAppVer();
+                    updateMainUI();
                   }
                   end(res, okAry.concat(errAry).join('\n'));
                 }
@@ -2198,7 +2172,7 @@ function loadResourceSync() {
     }
   });
 
-  updateAppVer();
+  updateMainUI();
 }
 
 function keepAdbAlive() {
@@ -2211,7 +2185,7 @@ function keepAdbAlive() {
         var oldDeviceList = Object.keys(oldDevInfoMap);
         if (oldDeviceList.length !== Object.keys(newDevInfoMap).length ||
             oldDeviceList.some(haveDifferentInfo)) {
-          updateAppVer();
+          updateMainUI();
         }
       }
       log(('[keepAdbAlive]end'));
