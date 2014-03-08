@@ -485,17 +485,13 @@ function prepareDeviceFile(device, on_complete) {
 function chkerrCaptureParameter(q) {
   if (q.type === undefined && q.fps === undefined && q.scale === undefined && q.rotate === undefined) {
     //try to peek parameter of current live capture if not specified any parameter
-    if (!Object.keys(devMgr).some(function (device) {
-      var provider = devMgr[device].liveStreamer;
-      if (provider) {
-        q.type = provider.type;
-        q.fps = provider.fps;
-        q.scale = provider.scale;
-        q.rotate = provider.rotate;
-        return true;
-      }
-      return false;
-    })) {
+    var provider;
+    if (devMgr[q.device] && (provider = devMgr[q.device].liveStreamer)) {
+      q.type = provider.type;
+      q.fps = provider.fps;
+      q.scale = provider.scale;
+      q.rotate = provider.rotate;
+    } else {
       return setchkerr('error: no any live capture available for reuse');
     }
   }
