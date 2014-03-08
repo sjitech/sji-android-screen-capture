@@ -362,6 +362,10 @@ function checkAdb(on_complete) {
 }
 
 function checkFfmpeg(on_complete) {
+  if (!conf.ffmpeg) {
+    on_complete();
+    return;
+  }
   log('[CheckFfmpeg]Full path of FFMPEG is "' + searchInPath(conf.ffmpeg) + '"');
   spawn('[CheckFfmpeg]', conf.ffmpeg, ['-version'], function/*on_close*/(ret, stdout, stderr) {
     if (ret !== 0 || stderr) {
