@@ -485,19 +485,22 @@ function chkerrCaptureParameter(q) {
     return chkerr;
   }
   var n, match;
+  q.scale_origVal = q.scale;
   if (q.scale) {
     if (!isNaN((n = Number(q.scale)))) { //can convert to a valid number
       if (chkerrRequired('scale(optional) in number format', (q.scale = n), 0.1/*min*/, 1/*max*/)) {
         return chkerr;
       }
     } else { //treat as string format 9999x9999
-      if (!(match = (q.scale = String(q.scale)).match(/^(\d{0,4})x(\d{0,4})$/)) || !match[1] && !match[2]) {
-        return setchkerr('scale(optional) in string format must be in pattern "9999x9999" or "9999x" or "x9999"');
+      if (!(match = (q.scale = String(q.scale)).match(/^(\d{0,4}|(?:auto)?)x(\d{0,4}|(?:Auto)?)$/i))) {
+        return setchkerr('scale(optional) in string format must be in pattern "9999x9999" or "9999xAuto" or "Autox9999"');
       }
-      q.scale_w = match[1] ? Number(match[1]) : 0;
-      q.scale_h = match[2] ? Number(match[2]) : 0;
+      q.scale_w = Number(match[1]);
+      q.scale_h = Number(match[2]);
       if (!q.scale_w && !q.scale_h) {
         q.scale = '';
+      } else {
+        q.scale = q.scale.replace(/Auto/ig, '');
       }
     }
   }
@@ -514,10 +517,13 @@ function stringifyFpsScaleRotate(q) {
   if (q.scale) {
     if (typeof(q.scale) === 'number') {
       fps_scale_rotate += 's' + q.scale;
-    } else if (q.scale_w) {
-      fps_scale_rotate += 'w' + q.scale_w;
-    } else if (q.scale_h) {
-      fps_scale_rotate += 'h' + q.scale_h;
+    } else {
+      if (q.scale_w) {
+        fps_scale_rotate += 'w' + q.scale_w;
+      }
+      if (q.scale_h) {
+        fps_scale_rotate += 'h' + q.scale_h;
+      }
     }
   }
   if (q.rotate) {
@@ -539,7 +545,7 @@ function makeFilenameByCaptureParameter(q, forRecord) { //should respect re_file
       device : device serial number
       type:    'apng', 'ajpg', 'webm', 'png', 'jpg'
       fps:     [optional] rate for apng, ajpg, webm. Must be in range MIN_FPS~MAX_FPS
-      scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999x or x9999
+      scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999xAuto or Autox9999
       rotate:  [optional] 0, 90, 270
     }
  */
@@ -1480,7 +1486,7 @@ function setDefaultHttpHeader(res) {
 
 function startStreamWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.ip), smark = (conf.ssl.on ? 's' : '');
-  conf.ipForHtmlLink = (isAnyIp(conf.ip) ? '127.0.0.1' : conf.ip);
+  conf.ipForHtmlLink = (isAnyIp(conf.ip) ? 'localhost' : conf.ip);
   if (conf.ssl.on) {
     log('load SSL server certificate and private key from PKCS12 file: ' + conf.ssl.certificateFilePath);
     var options;
@@ -1604,11 +1610,10 @@ function startStreamWeb() {
                   .replace(/@type\b/g, q.type)
                   .replace(/@imageType\b/g, q.type.slice(1)) //ajpg->jpg
                   .replace(/#typeDisp\b/g, htmlEncode(allTypeDispNameMap[q.type]))
-                  .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
                   .replace(/@MIN_FPS\b/g, MIN_FPS)
                   .replace(/@MAX_FPS\b/g, MAX_FPS)
                   .replace(/@fps\b/g, q.fps)
-                  .replace(/@scale\b/g, q.scale)
+                  .replace(/@scale\b/g, q.scale_origVal)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
                   .replace(new RegExp('<option value="' + q.recordOption + '"', 'g'), '$& selected') //set selected
@@ -1657,7 +1662,6 @@ function startStreamWeb() {
               .replace(/#type\b/g, q.filename.type)
               .replace(/#typeDisp\b/g, htmlEncode(allTypeDispNameMap[q.filename.type]))
               .replace(/@imageType\b/g, q.filename.type.slice(1)) //ajpg->jpg
-              .replace(/@stream_web\b/g, 'http' + smark + '://' + req.headers.host)// http[s]://host:port
               .replace(/@fileCount\b/g, fileGroupCount)
               .replace(/@fileindex\b/g, q.fileindex)
               .replace(/@origFilename\b/g, querystring.escape(q.filename.origFilename))
@@ -1785,7 +1789,7 @@ function startAdminWeb() {
   });
   log(httpServer.logHead + 'listen on ' + ( _isAnyIp ? '*' : conf.adminWeb.ip) + ':' + conf.adminWeb.port);
   httpServer.listen(conf.adminWeb.port, _isAnyIp ? undefined : conf.adminWeb.ip, function/*on_complete*/() {
-    log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? '127.0.0.1' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + '/?adminKey=' + querystring.escape(conf.adminWeb.adminKey), {stderr: true});
+    log(httpServer.logHead + 'OK. You can start from http' + smark + '://' + (_isAnyIp ? 'localhost' : conf.adminWeb.ip) + ':' + conf.adminWeb.port + '/?adminKey=' + querystring.escape(conf.adminWeb.adminKey), {stderr: true});
   });
 
   function handler(req, res) {
@@ -1950,7 +1954,7 @@ function startAdminWeb() {
       case '/': //---------------------------------------show menu of all devices---------------------------------------
         q.fps = q.fps || 8;
         q.type = q.type || 'ajpg';
-        q.scale = (q.scale === undefined) ? '320x' : q.scale;
+        q.scale = (q.scale === undefined) ? '320xAuto' : q.scale;
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
@@ -1966,7 +1970,7 @@ function startAdminWeb() {
                   .replace(/@MIN_FPS\b/g, String(MIN_FPS))
                   .replace(/@MAX_FPS\b/g, String(MAX_FPS))
                   .replace(/@fps\b/g, q.fps)
-                  .replace(/@scale\b/g, q.scale)
+                  .replace(/@scale\b/g, q.scale_origVal)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
                   .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
@@ -2055,7 +2059,7 @@ function startAdminWeb() {
           return end(res, chkerr);
         }
         if (conf.ipForHtmlLink !== q.ip) {
-          conf.ipForHtmlLink = isAnyIp(q.ip) ? '127.0.0.1' : q.ip;
+          conf.ipForHtmlLink = isAnyIp(q.ip) ? 'localhost' : q.ip;
           updateAppVer();
         }
         end(res, 'OK');
