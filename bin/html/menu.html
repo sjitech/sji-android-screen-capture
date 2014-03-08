@@ -90,75 +90,81 @@
           #accessKey_disp
         </td>
         <td style="text-align: left; vertical-align: top; white-space: nowrap; border-bottom: 1px dashed lightgray">
-          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device">
+          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="live view $device"
+             class="liveCaptureRelatedCommand_$device" onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours.'+ String.fromCharCode(10) + 'YOU'+ String.fromCharCode(39) + 'd BETTER CLICK THE COUNTER LINK such as (1) to WATCH CURRENT LIVE CAPTURE without the risk of interrupting current live view or recording')">
             Live View
           </a>
-          <span class="liveViewIndicator" id="liveViewCount_ajpg_@device"></span>
+          <a class="liveViewIndicator" id="liveViewCount_ajpg_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; white-space: nowrap; border-bottom: 1px dashed lightgray">
-          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device">
+          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="live view $device"
+             class="liveCaptureRelatedCommand_$device" onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours.'+ String.fromCharCode(10) + 'YOU'+ String.fromCharCode(39) + 'd BETTER CLICK THE COUNTER LINK such as (1) to WATCH CURRENT LIVE CAPTURE without the risk of interrupting current live view or recording')">
             Live View
           </a>
-          <span class="liveViewIndicator" id="liveViewCount_apng_@device"></span>
+          <a class="liveViewIndicator" id="liveViewCount_apng_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; white-space: nowrap; border-bottom: 1px dashed lightgray" class="underWorking">
-          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="live view #device" title="Show live view. Caution: Can not be live viewed by multiple client at same time. This action will interrupt any WebM live viewing or WebM recording on this device due to technique reason(on working)">
+          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="live view $device"
+             title="Show live view. Caution: Can not be live viewed by multiple client at same time. This action will interrupt any WebM live viewing or WebM recording on this device due to technique reason(on working)"
+             class="liveCaptureRelatedCommand_$device" onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours.'+ String.fromCharCode(10) + 'YOU'+ String.fromCharCode(39) + 'd BETTER CLICK THE COUNTER LINK such as (1) to WATCH CURRENT LIVE CAPTURE without the risk of interrupting current live view or recording')">
             Live View
           </a>
-          <span class="liveViewIndicator" id="liveViewCount_webm_@device"></span>
+          <a class="liveViewIndicator" id="liveViewCount_webm_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
       </tr>
       <tr>
         <td style="border-top: 0"></td>
         <td colspan="2" style="text-align: left; vertical-align: top; border-top: 1px dashed lightgray">
-          <a class="button" style="float: right" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey&type=apng" target="resultIFrame">
+          <a class="button" style="float: right" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey&type=apng" target="resultIFrame" onclick="return confirm('Sure?')">
             Stop
           </a>
           <div class="#devinfo_class" title="Gray means disconnected device. &quot;Unknown&quot; means timeout or device is offline or not authenticated(Please check whether there is a popup displaying in android) or just an invalid serial number">
             #devinfo
           </div>
-          <a href="@stream_web/fileViewer?device=@device&accessKey=@accessKey&fileindex=0" target="recorded #device">
+          <a href="@stream_web/fileViewer?device=@device&accessKey=@accessKey&fileindex=0" target="recorded $device">
             Recorded Videos
           </a>
-          <a href="@stream_web/listSavedImages?device=@device&accessKey=@accessKey&type=&order=desc" target="screenshot #device" title="List Images you extracted from live view or recorded Animated JPEG/PNG">
+          <a href="@stream_web/listSavedImages?device=@device&accessKey=@accessKey&type=&order=desc" target="screenshot $device" title="List Images you extracted from live view or recorded Animated JPEG/PNG">
             Saved Images
           </a>
           <span style="background-color: darkgray">&nbsp;</span>
-          <a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=jpg&scale=@scale&rotate=@rotate" target="screenshot #device" class="caution" title="Just take one snapshot of Android device. This action is slow! Do NOT use this frequently when Recording or Live Viewing!">
+          <a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=jpg&scale=@scale&rotate=@rotate" target="screenshot $device" class="caution" title="Just take one snapshot of Android device. This action is slow! Do NOT use this frequently when Recording or Live Viewing!">
             1 JPEG
           </a>
-          <a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=png&scale=@scale&rotate=@rotate" target="screenshot #device" class="caution" title="Just take one snapshot of Android device. This action is slow! Do NOT use this frequently when Recording or Live Viewing!">
+          <a href="@stream_web/capture?device=@device&accessKey=@accessKey&type=png&scale=@scale&rotate=@rotate" target="screenshot $device" class="caution" title="Just take one snapshot of Android device. This action is slow! Do NOT use this frequently when Recording or Live Viewing!">
             1 PNG
           </a>
           <a href="/downloadRawScreenshot?adminKey=@adminKey&device=@device" target="resultIFrame" title="Download Raw Screenshot of Android Device" class="internal">
             1 RAW
           </a>
           <span style="background-color: darkgray">&nbsp;</span>
-          <a href="/getDeviceLog?adminKey=@adminKey&device=@device" target="asc_log_#device" title="Android-Side Utility Log" class="internal">
+          <a href="/getDeviceLog?adminKey=@adminKey&device=@device" target="asc_log_$device" title="Android-Side Utility Log" class="internal">
             Log
           </a>
-          <a href="/getDeviceCpuMemTop?adminKey=@adminKey&device=@device" target="asc_top_#device" title="Android CPU/Memory Usage" class="internal">
+          <a href="/getDeviceCpuMemTop?adminKey=@adminKey&device=@device" target="asc_top_$device" title="Android CPU/Memory Usage" class="internal">
             CPU/Mem
           </a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px">
-          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
+          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
+             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
             Record
           </a>
-          <span class="recordingIndicator" id="recordingIndicator_ajpg_@device"></span>
+          <a class="recordingIndicator" id="recordingIndicator_ajpg_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px">
-          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
+          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
+             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
             Record
           </a>
-          <span class="recordingIndicator" id="recordingIndicator_apng_@device"></span>
+          <a class="recordingIndicator" id="recordingIndicator_apng_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px" class="underWorking">
-          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
+          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
+             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
             Record
           </a>
-          </a>
-          <span class="recordingIndicator" id="recordingIndicator_webm_@device"></span>
+          <a class="recordingIndicator" id="recordingIndicator_webm_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
       </tr>
       <!--repeatEnd-->
@@ -367,11 +373,9 @@
       $('#darkMask').hide();
       $.ajax('/status?adminKey=@adminKey&ver=' + ver, {timeout: 60 * 1000})
         .done(function (status) {
-          if (status.appVer != appVer) {
+          if (status.appVer !== appVer) {
             $statusBar.text('Refresh...');
-            setTimeout(function(){
-              document.location.reload(true);
-            }, 250);
+            document.location.reload(true);
             return;
           }
           //otherwise, update some html elements
@@ -381,7 +385,17 @@
           $.each(status.data, function (elementId, text) {
             var theElement = document.getElementById(elementId);
             if (theElement) {
-              $(document.getElementById(elementId)).text(text);
+              $(theElement).text(text);
+            } else {
+              var match = elementId.match(/^hasLiveCapture_(.+)$/);
+              if (match) {
+                var cls = 'liveCaptureRelatedCommand_' + match[1]/*SN*/;
+                if (text) {
+                  $('.' + cls).addClass('unrecommended');
+                } else {
+                  $('.' + cls).removeClass('unrecommended');
+                }
+              }
             }
           });
 

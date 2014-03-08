@@ -34,7 +34,6 @@ div.expandable:hover {z-index: 99}
     overflow-x: auto;
     border: 1px solid black;
 
-    box-sizing: border-box;
     -webkit-box-sizing: border-box;
     -moz-box-sizing: border-box;
     -ms-box-sizing: border-box;
@@ -51,7 +50,6 @@ iframe.toolbar{
     height: 28px;
     border: 1px solid lightgray;
 
-    box-sizing: border-box;
     -webkit-box-sizing: border-box;
     -moz-box-sizing: border-box;
     -ms-box-sizing: border-box;
@@ -59,8 +57,8 @@ iframe.toolbar{
 label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: center}
 
 #viewer {
-    user-select: none;
     -webkit-user-select: none;
+    -moz-user-select: none;
     -ms-user-select: none;
     min-height: 300px;
 }
@@ -69,7 +67,6 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
     background-color: #A0A0A0;
     text-align: center;
 
-    user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
@@ -127,9 +124,10 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
     font-size: large;
 }
 
-.liveViewIndicator {background-color: blue; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
-.recordingIndicator {background-color: #0000A0; color: yellow; font-family: "courier new", courier, monospace; font-size: 100%; white-space: pre; z-index: 98}
+.liveViewIndicator {background-color: blue; color: yellow}
+.recordingIndicator {background-color: blue; color: yellow}
 #totalRecordedFileSize.highlight {color: blue; font-weight: bold}
 .disconnected {background-color: #ededf4}
 
 .underWorking {background-color: #EEEEEE; font-size: xx-small}
+.unrecommended {background-color: #EEEEEE; color:darkgray}

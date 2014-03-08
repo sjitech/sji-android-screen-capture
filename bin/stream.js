@@ -21,7 +21,7 @@ log('use configuration: ' + JSON.stringify(conf, null, '  '));
 
 //************************global var  ****************************************************
 var outputDirSlash = conf.outputDir + '/';
-var MIN_FPS = 0.1, MAX_FPS = 40, MIN_FPS_PLAY_AIMG = 0.1, MAX_FPS_PLAY_AIMG = 100;
+var DEFAULT_FPS = 4, MIN_FPS = 0.1, MAX_FPS = 40, MIN_FPS_PLAY_AIMG = 0.1, MAX_FPS_PLAY_AIMG = 100;
 var UPLOAD_LOCAL_DIR = './android', ANDROID_WORK_DIR = '/data/local/tmp/sji-asc';
 var MULTIPART_BOUNDARY = 'MULTIPART_BOUNDARY', MULTIPART_MIXED_REPLACE = 'multipart/x-mixed-replace;boundary=' + MULTIPART_BOUNDARY;
 var CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = BUF_CR2.slice(0, 1);
@@ -156,8 +156,20 @@ function removeNullChar(s) {
   return !s ? '' : s.replace(/\0/g, '');
 }
 
+htmlEncode.metaCharMap = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'};
 function htmlEncode(text) {
-  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  log('****htmlEncode input  ['+text + ']');
+  var result = String(text).replace(/[^0-9a-zA-Z]/g, function (match) {
+    return htmlEncode.metaCharMap[match] || ('&#' + match.charCodeAt(0).toString() + ';');
+  });
+  log('****htmlEncode output ['+result+']');
+  return result;
+}
+
+function htmlIdEncode(text) {
+  return text.replace(/[^0-9a-zA-Z]/g, function (match) {
+    return ('_' + match.charCodeAt(0).toString(16) + '_');
+  });
 }
 
 function uniqueNonEmptyArray(ary) {
@@ -474,6 +486,22 @@ function prepareDeviceFile(device, on_complete) {
 }
 
 function chkerrCaptureParameter(q) {
+  if (q.type === undefined && q.fps === undefined && q.scale === undefined && q.rotate === undefined) {
+    //try to peek parameter of current live capture if not specified any parameter
+    if (!Object.keys(devMgr).some(function (device) {
+      var provider = devMgr[device].liveStreamer;
+      if (provider) {
+        q.type = provider.type;
+        q.fps = provider.fps;
+        q.scale = provider.scale;
+        q.rotate = provider.rotate;
+        return true;
+      }
+      return false;
+    })) {
+      return setchkerr('error: no any live capture available for reuse');
+    }
+  }
   if (chkerrRequired('type', q.type, videoAndImageTypeAry) ||
       videoTypeSet[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
       imageTypeSet[q.type] && (q.fps = 0) && false ||
@@ -1125,21 +1153,26 @@ function updateDeviceStatusUI() {
       var sd = {}, json;
 
       forEachValueIn(devMgr, function (dev, device) {
-        var qdevice = querystring.escape(device);
+        var qdevice = htmlIdEncode(device);
+        var haveLiveCapture = 0;
         Object.keys(videoTypeSet).forEach(function (type) {
           var liveViewerCount = 0, recordingCount = 0;
-          if (dev.liveStreamer && dev.liveStreamer.type === type) {
-            forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
-              if (res.filename) {
-                recordingCount += 1;
-              } else {
-                liveViewerCount += 1;
-              }
-            });
+          if (dev.liveStreamer) {
+            haveLiveCapture = true;
+            if (dev.liveStreamer.type === type) {
+              forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
+                if (res.filename) {
+                  recordingCount += 1;
+                } else {
+                  liveViewerCount += 1;
+                }
+              });
+            }
           }
           sd['liveViewCount_' + type + '_' + qdevice] = liveViewerCount ? '(' + liveViewerCount + ')' : '';
-          sd['recordingIndicator_' + type + '_' + qdevice] = recordingCount ? 'ing' : '';
+          sd['recordingIndicator_' + type + '_' + qdevice] = recordingCount ? '(1)' : '';
         });
+        sd['hasLiveCapture_' + qdevice] = haveLiveCapture;
       });
 
       if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
@@ -1574,6 +1607,7 @@ function startStreamWeb() {
               return end(res, htmlCache[aimgTypeSet[q.type] ? 'aimg_liveViewer.html' : 'video_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
                   .replace(/@device\b/g, q.qdevice)
                   .replace(/#device\b/g, htmlEncode(q.device))
+                  .replace(/\$device\b/g, htmlIdEncode(q.device))
                   .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
                   .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
                   .replace(/@type\b/g, q.type)
@@ -1627,6 +1661,7 @@ function startStreamWeb() {
           return end(res, htmlCache[aimgTypeSet[q.filename.type] ? 'aimg_fileViewer.html' : 'video_fileViewer.html'] //this html will in turn open URL /playRecordedFile?....
               .replace(/@device\b/g, q.qdevice)
               .replace(/#device\b/g, htmlEncode(q.device))
+              .replace(/\$device\b/g, htmlIdEncode(q.device))
               .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
               .replace(/#accessKey\b/g, htmlEncode(q.accessKey || ''))
               .replace(/#type\b/g, q.filename.type)
@@ -1714,6 +1749,7 @@ function startStreamWeb() {
           var html = htmlCache['imageList.html']
                   .replace(/@device\b/g, q.qdevice)
                   .replace(/#device\b/g, htmlEncode(q.device))
+                  .replace(/\$device\b/g, htmlIdEncode(q.device))
                   .replace(/@accessKey\b/g, querystring.escape(q.accessKey || ''))
                   .replace(/@type\b/g, q.type || '')
                   .replace(/@pathname\b/g, parsedUrl.pathname)
@@ -1926,7 +1962,7 @@ function startAdminWeb() {
         );
         break;
       case '/': //---------------------------------------show menu of all devices---------------------------------------
-        q.fps = q.fps || 8;
+        q.fps = q.fps || conf.defaultFps || DEFAULT_FPS;
         q.type = q.type || 'ajpg';
         q.scale = (q.scale === undefined) ? '320xAuto' : q.scale;
         if (chkerrCaptureParameter(q)) {
@@ -1969,8 +2005,9 @@ function startAdminWeb() {
               return joinedStr + htmlBlock
                   .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
                   .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (devInfoMap[device] ? '' : ' disconnected'))
-                  .replace(/#device\b/g, htmlEncode(device))
                   .replace(/@device\b/g, querystring.escape(device))
+                  .replace(/#device\b/g, htmlEncode(device))
+                  .replace(/\$device\b/g, htmlIdEncode(device))
                   .replace(/#accessKey\b/g, htmlEncode(dev.accessKey || ''))
                   .replace(/@accessKey\b/g, querystring.escape(dev.accessKey || ''))
                   .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey ? dev.accessKey : conf.adminWeb.adminKey ? '<None> Please "Set Access Key" for this device' : '<None>'))
@@ -2214,7 +2251,7 @@ checkAdb(function/*on_complete*/() {
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
-    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0});
+    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0});
 }
 
 //todo: some device crashes if live view full image
