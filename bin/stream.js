@@ -158,12 +158,9 @@ function removeNullChar(s) {
 
 htmlEncode.metaCharMap = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'};
 function htmlEncode(text) {
-  log('****htmlEncode input  ['+text + ']');
-  var result = String(text).replace(/[^0-9a-zA-Z]/g, function (match) {
+  return String(text).replace(/[^0-9a-zA-Z]/g, function (match) {
     return htmlEncode.metaCharMap[match] || ('&#' + match.charCodeAt(0).toString() + ';');
   });
-  log('****htmlEncode output ['+result+']');
-  return result;
 }
 
 function htmlIdEncode(text) {
