@@ -49,8 +49,8 @@ var re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/;
 //************************common *********************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   if (!devMgr[device]) {
-    devMgr[device] = {device: device};
-    updateMainUI();
+    devMgr[device] = {device: device, err: '', info: ''};
+    updateWholeUI();
   }
   return devMgr[device];
 }
@@ -262,6 +262,9 @@ function chkerrOptional(name, value /*,arrayOrMinValue, maxValue*/) {
 }
 
 function write(res, dataStrOfBuf) {
+  if (res.__isEnded || res.__isClosed) {
+    return;
+  }
   if (res.__bytesWritten === undefined) {
     log(res.logHead + 'start output......');
     res.__bytesWritten = 0;
@@ -271,14 +274,18 @@ function write(res, dataStrOfBuf) {
   res.write(dataStrOfBuf);
 
   if (res.filename) { //FileRecorder
-    if (Date.now() - res.startTimeMs >= conf.maxRecordTimeSeconds * 1000) {
-      endCaptureConsumer(res, 'recording time is too long (>= ' + conf.maxRecordTimeSeconds + ' seconds)');
+    if (res.startTimeMs) {
+      if (Date.now() - res.startTimeMs >= conf.maxRecordTimeSeconds * 1000) {
+        endCaptureConsumer(res, 'recording time is too long (>= ' + conf.maxRecordTimeSeconds + ' seconds)');
+      }
+    } else {
+      res.startTimeMs = Date.now();
     }
   }
 }
 
 function end(res, dataStrOfBuf) {
-  if (res.__isEnded) {
+  if (res.__isEnded || res.__isClosed) { //__isClosed is used for case when prepareDeviceFile complete, it maybe call end(res,...) but maybe res have been closed by peer.
     return;
   }
   res.__isEnded = true;
@@ -328,6 +335,9 @@ function containsDir(filename) {
 }
 
 function searchInPath(filename) {
+  if (process.platform === 'win32' && !re_extName.test(filename)) {
+    filename += '.exe';
+  }
   if (containsDir(filename)) {
     return Path.resolve(filename); //prepend working dir
   }
@@ -387,7 +397,10 @@ function getAllDev(on_complete) {
     var deviceList = [], parts;
     stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
       if ((parts = lineStr.split('\t')).length > 1) {
-        deviceList.push(parts[0]);
+        var device = parts[0];
+        if (/[^?]/.test(device)) { //exclude SN such as ??????
+          deviceList.push(device);
+        }
       }
     });
     return on_complete('', deviceList);
@@ -403,43 +416,54 @@ var ADB_GET_DEV_INFO_CMD_ARGS = [
   'getprop', 'ro.product.cpu.abi;'
 ];
 function getDevInfo(device, on_complete, timeoutMs, forceReloadDevInfo) {
-  if (!forceReloadDevInfo && !conf.reloadDevInfo && devMgr[device] && devMgr[device].info) {
+  if (!forceReloadDevInfo && !conf.reloadDevInfo && devMgr[device] && devMgr[device].info && !devMgr[device].err) {
     on_complete('', devMgr[device].info);
     return;
   }
   var childProc = spawn('[GetDevInfo]', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('`'), function/*on_close*/(ret, stdout, stderr) {
-        clearTimeout(childProc.myTimer);
-        on_complete('', (ret === 0 && !stderr) ? stdout.replace(re_adbNewLineSeq, '') : '');
+        var err;
+        if (childProc.myTimer) {
+          clearTimeout(childProc.myTimer);
+          err = (ret === 0 && !stderr) ? '' : stderr ? toErrSentence(stderr) : 'unknown error: failed to get device info';
+        } else {
+          err = 'error: timeout when try to get device info';
+        }
+        var info = stdout.trim();
+        var dev = getOrCreateDevCtx(device);
+        if (dev.info !== info || dev.err !== err) {
+          dev.info = info;
+          dev.err = err;
+          updateWholeUI();
+        }
+        on_complete(err, info);
       }
   );
-  if (childProc.pid) {
-    childProc.myTimer = setTimeout(function () {
+  childProc.myTimer = setTimeout(function () {
+    childProc.myTimer = null;
+    if (childProc.pid > 0) {
       log(childProc.logHead + 'kill due to timeout');
       childProc.kill('SIGKILL');
-    }, timeoutMs);
-  }
+    }
+  }, timeoutMs);
 }
 
 function getAllDevInfo(on_complete, forceReloadDevInfo) {
   getAllDev(function/*on_complete*/(err, deviceList) {
     if (err) {
-      on_complete(err, {});
+      on_complete(err, []);
       return;
     }
     deviceList = uniqueNonEmptyArray(deviceList);
     var i = 0;
-    var devInfoMap = {};
     (function get_next_device_info() {
       if (i < deviceList.length) {
-        getDevInfo(deviceList[i], function/*on_complete*/(err, info) {
-              devInfoMap[deviceList[i]] = info;
+        getDevInfo(deviceList[i], function/*on_complete*/() {
               i++;
               get_next_device_info();
             },
             1000/*timeoutMs*/, forceReloadDevInfo);
       } else {
-        on_complete('', devInfoMap);
-        getAllDevInfo.devInfoMap = devInfoMap;
+        on_complete('', deviceList);
       }
     })();
   });
@@ -449,25 +473,36 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
  * upload all necessary files to android
  */
 function prepareDeviceFile(device, on_complete) {
-  if (devMgr[device] && devMgr[device].didPrepare) {
+  if (devMgr[device] && devMgr[device].didPrepare && !devMgr[device].err) {
     on_complete();
     return;
   }
   spawn('[CheckDevice ' + device + ']', conf.adb, ['-s', device, 'shell', 'echo', '`'].concat(ADB_GET_DEV_INFO_CMD_ARGS).concat('echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null', '`'), function/*on_close*/(ret, stdout, stderr) {
-    if (ret !== 0 || stderr || !stdout) {
-      return on_complete(toErrSentence(stderr) || 'unknown error: failed to check device');
+    var dev;
+    var err = (ret === 0 && !stderr && stdout) ? '' : stderr ? toErrSentence(stderr) : 'unknown error: failed to get device info';
+    if (err) {
+      if ((dev = devMgr[device]) && dev.err !== err) {
+        dev.err = err;
+        updateWholeUI();
+      }
+      return on_complete(err);
     }
     var stdoutNoCRLF = stdout.replace(re_adbNewLineSeq, '');
     var parts = stdoutNoCRLF.split('====');
-    var _ver = parts[1].trim(); //get remote version file content
+    var ver = parts[1].trim(); //get remote version file content
+    var info = parts[0].trim(); //get device info
 
-    var dev = getOrCreateDevCtx(device);
-    dev.info = parts[0].trim(); //save device info for later use
+    dev = getOrCreateDevCtx(device);
+    if (dev.info !== info || dev.err !== err) {
+      dev.info = info;
+      dev.err = err;
+      updateWholeUI();
+    }
     // BTW, detect new line sequence returned by adb, Usually CrCount=0 (means need not convert), But for Windows OS, at least=1
     dev.CrCount = (stdout.length - stdoutNoCRLF.length) - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
 
     //compare to local version
-    if (_ver === prepareDeviceFile.ver) {
+    if (ver === prepareDeviceFile.ver) {
       dev.didPrepare = true;
       return on_complete();
     }
@@ -569,174 +604,207 @@ function makeFilenameByCaptureParameter(q, forRecord) { //should respect re_file
       scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999xAuto or Autox9999
       rotate:  [optional] 0, 90, 270
     }
+ * @param on_captureBeginOrFailed
  */
-function capture(outputStream, q) {
-  var res = outputStream, dev = getOrCreateDevCtx(q.device), provider;
-
-  function createCaptureProvider() {
-    createCaptureProvider.called = true;
-    var provider = {consumerMap: {}, dev: dev, type: q.type, fps: q.fps, scale: q.scale, rotate: q.rotate,
-      logHead: '[Capture ' + q.device + ' ' + q.type + ' ' + stringifyFpsScaleRotate(q) + ']'};
-    if (aimgTypeSet[q.type]) {
-      var origFilename = makeFilenameByCaptureParameter(q, false/*for live*/);
-      provider.aimgDecoder = aimgCreateContext(origFilename, null);
-    }
-    return provider;
-  }
-
-  function didOutput(consumerId) {
-    return dev.liveStreamer.consumerMap[consumerId].__bytesWritten > 0;
-  }
-
-  if (res.setHeader) {
-    res.setHeader('Content-Type', allTypeMimeMapForPlay[q.type]);
-  }
-
-  if (imageTypeSet[q.type]) { //-------------------capture a single image ---------------------------------------
-    //try to use a shared live capture
-    if (dev.liveStreamer && dev.liveStreamer.aimgDecoder && dev.liveStreamer.aimgDecoder.lastImage &&
-        dev.liveStreamer.type === 'a' + q.type && dev.liveStreamer.fps >= 4 &&
-        dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate) {
-      write(res, dev.liveStreamer.aimgDecoder.lastImage.data);
-      end(res);
+function capture(outputStream, q, on_captureBeginOrFailed) {
+  var res = outputStream;
+  prepareDeviceFile(q.device, function/*on_complete*/(err) {
+    if (err) {
+      end(res, err);
+      if (on_captureBeginOrFailed) {
+        on_captureBeginOrFailed(err);
+      }
       return;
     }
-    provider = createCaptureProvider(); //can not share, so create new capture process
-  }
-  else if (dev.liveStreamer) { //there is an existing capture running or preparing
-    //share existing stream provider (Animated PNG,JPG or webm if have not output yet)
-    if (dev.liveStreamer.type === q.type && dev.liveStreamer.fps === q.fps &&
-        dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate &&
-        (aimgTypeSet[dev.liveStreamer.type] || !Object.keys(dev.liveStreamer.consumerMap).some(didOutput))) {
-      if (res.filename) { //stop other recording
-        forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
-          if (_res.filename) {
-            endCaptureConsumer(_res, 'another recording is going to run');
-          }
-        });
+    if (res.__isClosed) {
+      if (on_captureBeginOrFailed) {
+        on_captureBeginOrFailed('canceled');
       }
-      provider = dev.liveStreamer || (dev.liveStreamer = createCaptureProvider());
-    } else { //stop current and start new if current live capture is not reusable for me
-      forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another incompatible live capture is going to run');
-      provider = dev.liveStreamer = createCaptureProvider();
+      return;
     }
-  } else { //there is no existing capture running or preparing
-    provider = dev.liveStreamer = createCaptureProvider();
-  }
+    var dev = devMgr[q.device], provider;
 
-  /*
-   * add consumer
-   */
-  res.captureProvider = provider;
-  res.consumerId = getTimestamp();
-  provider.consumerMap[res.consumerId] = res;
-  res.logHead = res.logHead.slice(0, -1) + ' @ ' + provider.logHead.slice(1, -1) + ']';
-  log(res.logHead + 'added capture consumer ' + res.consumerId);
+    function createCaptureProvider() {
+      createCaptureProvider.called = true;
+      var provider = {consumerMap: {}, dev: dev, type: q.type, fps: q.fps, scale: q.scale, rotate: q.rotate,
+        logHead: '[Capture ' + q.device + ' ' + q.type + ' ' + stringifyFpsScaleRotate(q) + ']'};
+      if (aimgTypeSet[q.type]) {
+        var origFilename = makeFilenameByCaptureParameter(q, false/*for live*/);
+        provider.aimgDecoder = aimgCreateContext(origFilename, null);
+      }
+      return provider;
+    }
 
-  res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
-    endCaptureConsumer(res, 'canceled'/*do not change this string*/);
-  });
+    if (res.setHeader) {
+      res.setHeader('Content-Type', allTypeMimeMapForPlay[q.type]);
+    }
 
-  if (!createCaptureProvider.called) {
-    log(res.logHead + 'use existing capture process ' + (provider.pid ? 'pid_' + provider.pid : '?(still in preparing)'));
-  } else {
-    prepareDeviceFile(q.device, function/*on_complete*/(err) {
-          if (Object.keys(provider.consumerMap).length === 0) {
-            return; //abort
-          } else if (err) {
-            forEachValueIn(provider.consumerMap, endCaptureConsumer, err);
-            return;
-          }
-          var opt;
-          if (!(opt = conf.ffmpegOption[q.device]) && dev.info) {
-            Object.keys(conf.ffmpegOption).some(function (key) {
-              if (dev.info.match(key)) {
-                opt = conf.ffmpegOption[key];
-                return true;
-              }
-              return false;
-            });
-          }
-          opt = opt || {};
-          opt.in = opt.in || '';
-          opt.out = opt.out || '';
-
-          var FFMPEG_PARAM = '';
-          //------------------------now make global parameters------------------------
-          if (conf.ffmpegStatistics !== true) {
-            FFMPEG_PARAM += ' -nostats';
-          }
-          if (conf.ffmpegDebugLog === true) {
-            FFMPEG_PARAM += ' -loglevel debug';
-          }
-          //------------------------now make input parameters------------------------
-          FFMPEG_PARAM += ' -r ' + (q.fps || 1);
-          FFMPEG_PARAM += ' ' + opt.in + ' -i -'; //"-i -" means read from stdin
-          //------------------------now make output parameters------------------------
-          if (q.scale || q.rotate) {
-            var filter = '';
-            if (typeof(q.scale) === 'number') {
-              filter += ',scale=iw*' + q.scale + ':-1';
-            } else {
-              filter += ',scale=' + (q.scale_w || '-1') + ':' + (q.scale_h || '-1');
+    if (imageTypeSet[q.type]) { //-------------------capture a single image ---------------------------------------
+      //try to use a shared live capture
+      if (dev.liveStreamer && dev.liveStreamer.aimgDecoder && dev.liveStreamer.aimgDecoder.lastImage &&
+          dev.liveStreamer.type === 'a' + q.type && dev.liveStreamer.fps >= 4 &&
+          dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate) {
+        write(res, dev.liveStreamer.aimgDecoder.lastImage.data);
+        end(res);
+        if (on_captureBeginOrFailed) {
+          on_captureBeginOrFailed();
+        }
+        return;
+      }
+      provider = createCaptureProvider(); //can not share, so create new capture process
+    }
+    else if (dev.liveStreamer) { //there is an existing capture running or preparing
+      //share existing stream provider (Animated PNG,JPG or webm if have not output yet)
+      if (dev.liveStreamer.type === q.type && dev.liveStreamer.fps === q.fps &&
+          dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate &&
+          (aimgTypeSet[dev.liveStreamer.type] || !dev.liveStreamer.didOutput)) {
+        if (res.filename) { //stop other recording
+          forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
+            if (_res.filename) {
+              endCaptureConsumer(_res, 'another recording is going to run');
             }
-            if (q.rotate === 90) {
-              filter += ',transpose=1';
-            } else if (q.rotate === 270) {
-              filter += ',transpose=2';
-            }
-
-            if (filter) {
-              FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
-            }
-          }
-          if (q.type === 'webm') { //webm video
-            FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0';
-          } else if (q.type === 'apng') { //animated png image
-            FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
-          } else if (q.type === 'ajpg') { //animated jpg image
-            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -update 1 -q:v 1';
-          } else if (q.type === 'png') {    //single png image
-            FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
-          } else if (q.type === 'jpg') {    //single jpg image
-            FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1 -q:v 1';
-          } else {
-            log('unknown type');
-          }
-          FFMPEG_PARAM += ' ' + opt.out + ' -'; //means output to stdout
-          /*
-           * ------------------------------------start new capture process ---------------------------------------------
-           */
-          var childProc = spawn(provider.logHead, conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
-            'sh', './capture.sh',
-            conf.forceUseFbFormat ? 'forceUseFbFormat' : 'autoDetectFormat',
-            q.fps, FFMPEG_PARAM,
-            (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
-
-          provider.pid = childProc.pid;
-          childProc.stdout.on('data', function (buf) {
-            convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
-              if (aimgTypeSet[provider.type]) { //broadcast animated image to multiple client
-                aimgDecode(provider.aimgDecoder, provider.consumerMap, buf, 0, buf.length);
-              } else {
-                forEachValueIn(provider.consumerMap, write, buf);
-              }
-            });
-          });
-          childProc.stderr.on('data', function (buf) {
-            log(buf, {noNewLine: true, head: childProc.logHead});
-            forEachValueIn(provider.consumerMap, endCaptureConsumer, toErrSentence(buf.toString()));
-          });
-
-          childProc.on('close', function () { //exited or failed to spawn
-            provider.pid = 0; //prevent from killing me again
-            forEachValueIn(provider.consumerMap, endCaptureConsumer, childProc.didGetStdoutData ? '' : 'capture process had internal error, exited without any output');
           });
         }
-    ); //end of prepareDeviceFile
-  }
+        provider = dev.liveStreamer || (dev.liveStreamer = createCaptureProvider());
+      } else { //stop current and start new if current live capture is not reusable for me
+        forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another incompatible live capture is going to run');
+        provider = dev.liveStreamer = createCaptureProvider();
+      }
+    } else { //there is no existing capture running or preparing
+      provider = dev.liveStreamer = createCaptureProvider();
+    }
 
-  updateDeviceStatusUI();
+    /*
+     * add consumer
+     */
+    res.captureProvider = provider;
+    res.consumerId = getTimestamp();
+    res.on_captureBeginOrFailed = on_captureBeginOrFailed;
+    provider.consumerMap[res.consumerId] = res;
+    res.logHead = res.logHead.slice(0, -1) + ' @ ' + provider.logHead.slice(1, -1) + ']';
+    log(res.logHead + 'added capture consumer ' + res.consumerId);
+
+    res.on('close', function () { //http connection is closed without normal end(res,...) or file is closed
+      endCaptureConsumer(res, 'canceled'/*do not change this string*/);
+    });
+
+    if (!createCaptureProvider.called) {
+      log(res.logHead + 'use existing capture process ' + (provider.pid ? 'pid_' + provider.pid : '?(still in preparing)'));
+      if (on_captureBeginOrFailed && provider.didGetStdoutData) {
+        if (on_captureBeginOrFailed) {
+          on_captureBeginOrFailed();
+          res.on_captureBeginOrFailed = null;
+        }
+      }
+    } else {
+      var opt;
+      if (!(opt = conf.ffmpegOption[q.device]) && dev.info) {
+        Object.keys(conf.ffmpegOption).some(function (key) {
+          if (dev.info.match(key)) {
+            opt = conf.ffmpegOption[key];
+            return true;
+          }
+          return false;
+        });
+      }
+      opt = opt || {};
+      opt.in = opt.in || '';
+      opt.out = opt.out || '';
+
+      var FFMPEG_PARAM = '';
+      //------------------------now make global parameters------------------------
+      if (conf.ffmpegStatistics !== true) {
+        FFMPEG_PARAM += ' -nostats';
+      }
+      if (conf.ffmpegDebugLog === true) {
+        FFMPEG_PARAM += ' -loglevel debug';
+      }
+      //------------------------now make input parameters------------------------
+      FFMPEG_PARAM += ' -r ' + (q.fps || 1);
+      FFMPEG_PARAM += ' ' + opt.in + ' -i -'; //"-i -" means read from stdin
+      //------------------------now make output parameters------------------------
+      if (q.scale || q.rotate) {
+        var filter = '';
+        if (typeof(q.scale) === 'number') {
+          filter += ',scale=iw*' + q.scale + ':-1';
+        } else {
+          filter += ',scale=' + (q.scale_w || '-1') + ':' + (q.scale_h || '-1');
+        }
+        if (q.rotate === 90) {
+          filter += ',transpose=1';
+        } else if (q.rotate === 270) {
+          filter += ',transpose=2';
+        }
+
+        if (filter) {
+          FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
+        }
+      }
+      if (q.type === 'webm') { //webm video
+        FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0';
+      } else if (q.type === 'apng') { //animated png image
+        FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
+      } else if (q.type === 'ajpg') { //animated jpg image
+        FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -update 1 -q:v 1';
+      } else if (q.type === 'png') {    //single png image
+        FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
+      } else if (q.type === 'jpg') {    //single jpg image
+        FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1 -q:v 1';
+      } else {
+        log('unknown type');
+      }
+      FFMPEG_PARAM += ' ' + opt.out + ' -'; //means output to stdout
+      /*
+       * ------------------------------------start new capture process ---------------------------------------------
+       */
+      var childProc = spawn(provider.logHead, conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
+        'sh', './capture.sh',
+        conf.forceUseFbFormat ? 'forceUseFbFormat' : 'autoDetectFormat',
+        q.fps, FFMPEG_PARAM,
+        (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
+
+      provider.pid = childProc.pid;
+      childProc.stdout.on('data', function (buf) {
+        if (!provider.didGetStdoutData) {
+          provider.didGetStdoutData = true;
+          forEachValueIn(provider.consumerMap, function (res) {
+            if (res.on_captureBeginOrFailed) {
+              res.on_captureBeginOrFailed(); //notify caller of capture() just once
+              res.on_captureBeginOrFailed = null;
+            }
+          });
+        }
+        convertCRLFToLF(provider/*context*/, dev.CrCount, buf).forEach(function (buf) {
+          if (aimgTypeSet[provider.type]) { //broadcast animated image to multiple client
+            aimgDecode(provider.aimgDecoder, provider.consumerMap, buf, 0, buf.length);
+          } else {
+            forEachValueIn(provider.consumerMap, write, buf);
+          }
+        });
+        provider.didOutput = true;
+      });
+      childProc.stderr.on('data', function (buf) {
+        log(buf, {noNewLine: true, head: childProc.logHead});
+        var err = toErrSentence(buf.toString());
+        forEachValueIn(provider.consumerMap, endCaptureConsumer, err);
+        if (dev.err !== err) {
+          updateWholeUI();
+        }
+      });
+
+      childProc.on('close', function () { //exited or failed to spawn
+        if (Object.keys(provider.consumerMap).length) { //if not exit by endCaptureConsumer, then maybe device is disconnected
+          updateWholeUI();
+        }
+        provider.pid = 0; //prevent from killing me again
+        forEachValueIn(provider.consumerMap, endCaptureConsumer, provider.didOutput ? '' : childProc.__err ? childProc.__err : 'capture process had internal error, exited without any output');
+      });
+    } //end of condition [createCaptureProvider.called]
+
+    if (provider === dev.liveStreamer) {
+      updateLiveCaptureStatusUI();
+    }
+  }); //end of prepareDeviceFile
 }
 
 function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
@@ -748,24 +816,27 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
 
   delete consumerMap[res.consumerId];
 
-  if (reason === 'canceled') {
-    if (res.filename) {
-      res.filename.split(' ').forEach(function (filename) {
-        log('delete "' + outputDirSlash + filename + '" due to canceled');
-        try {
-          fs.unlinkSync(outputDirSlash + filename);
-        } catch (err) {
-          log('failed to delete "' + outputDirSlash + filename + '". ' + stringifyError(err));
-        }
-      });
-    }
-  } else {
+  if (reason !== 'canceled') { //end(res, reason) only if not already closed
     end(res, reason);
   }
 
-  (res.childConsumerAry || []).forEach(function (childConsumerId) {
-    endCaptureConsumer(consumerMap[childConsumerId], reason);
-  });
+  if (res.on_captureBeginOrFailed) {
+    res.on_captureBeginOrFailed(toErrSentence(reason));
+    res.on_captureBeginOrFailed = null;
+  }
+
+  if (res.filename && (reason === 'canceled' || !res.__bytesWritten)) {
+    setTimeout(function () {
+      res.filename.split(' ').forEach(function (filename) {
+        log('delete "' + outputDirSlash + filename + '" due to ' + (reason === 'canceled' ? reason : 'empty file'));
+        try {
+          fs.unlinkSync(outputDirSlash + filename);
+        } catch (err) {
+          logIf(err.code !== 'ENOENT', 'failed to delete "' + outputDirSlash + filename + '". ' + stringifyError(err));
+        }
+      });
+    }, 0);
+  }
 
   if (Object.keys(consumerMap).length === 0) {
     if (provider === provider.dev.liveStreamer) {
@@ -783,9 +854,11 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
         logIf(err.code !== 'ENOENT', 'failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
       }
     }
+  } else {
+    endCaptureConsumer(consumerMap[res.childConsumerId], reason);
   }
 
-  updateDeviceStatusUI();
+  updateLiveCaptureStatusUI();
 }
 
 function startRecording(q/*same as capture*/, on_complete) {
@@ -831,9 +904,9 @@ function startRecording(q/*same as capture*/, on_complete) {
           childProc.stdin.filename = filename + '.mp4' + ' ' + filename + '.webm'; //needed by capture(), deviceControl
           childProc.stdin.logHead = '[FileWriter(RecorderConverter)' + filename + '.mp4&webm' + ')]';
 
-          childProc.stdin.startTimeMs = Date.now(); //also for check maxRecordingTime
-          capture(childProc.stdin, q); //---------do capture, save output to childProc.stdin----------
-          callbackOnce('', childProc.stdin);
+          capture(childProc.stdin, q, function/*on_captureBeginOrFailed*/(err) { //---------do capture, save output to childProc.stdin----------
+            callbackOnce(err, childProc.stdin);
+          });
 
           childProc.stdin.on('error', function (err) {
             log(childProc.stdin.logHead + stringifyError(err));
@@ -841,14 +914,15 @@ function startRecording(q/*same as capture*/, on_complete) {
         }
         else { //------------------------if local ffmpeg is not available, then record as animated image----------------
           var wfile = fs.createWriteStream(outputDirSlash + filename);
-          wfile.filename = filename;
+          wfile.filename = filename;  //needed by capture(), deviceControl
           wfile.logHead = '[FileWriter(Record) ' + filename + ']';
 
           wfile.on('open', function () {
             log(wfile.logHead + 'opened for write');
-            wfile.startTimeMs = Date.now(); //for check maxRecordingTime
-            capture(wfile, q); //---------do capture, save output to wfile----------
-            callbackOnce('', wfile);
+
+            capture(wfile, q, function/*on_captureBeginOrFailed*/(err) { //---------do capture, save output to wfile----------
+              callbackOnce(err, wfile);
+            });
           });
           wfile.on('close', function () { //file's 'close' event will always be fired. If have pending output, it will be fired after 'finish' event which means flushed.
             log(wfile.logHead + 'closed');
@@ -1136,14 +1210,14 @@ function deleteFiles(deviceOrAry, filter) {
       try {
         fs.unlinkSync(outputDirSlash + filename);
       } catch (err) {
-        log('failed to delete "' + outputDirSlash + filename + '". ' + stringifyError(err));
+        logIf(err.code !== 'ENOENT', 'failed to delete "' + outputDirSlash + filename + '". ' + stringifyError(err));
       }
     });
     loadResourceSync();
   });
 }
 
-function updateDeviceStatusUI() {
+function updateLiveCaptureStatusUI() {
   var oldVer = status.ver;
   setTimeout(function () {
     if (oldVer === status.ver && Object.keys(status.consumerMap).length) {
@@ -1179,7 +1253,7 @@ function updateDeviceStatusUI() {
       json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
 
       forEachValueIn(status.consumerMap, function (res) {
-        if (res.previousVer !== status.ver) {
+        if (res.previousVer !== status.ver || res.previousAppVer !== status.appVer) {
           end(res, json);
           delete status.consumerMap[res.consumerId];
         }
@@ -1188,7 +1262,7 @@ function updateDeviceStatusUI() {
   }, 0);
 }
 
-function updateMainUI() {
+function updateWholeUI() {
   var oldVer = status.appVer;
   setTimeout(function () {
     if (oldVer === status.appVer) {
@@ -1541,6 +1615,7 @@ function startStreamWeb() {
         logHttpRequest(req, res.logHeadSimple);
         res.on('close', function () { //closed without normal end(res,...)
           log(res.logHeadSimple + 'CLOSED by peer');
+          res.__isClosed = true;
         });
         res.on('finish', function () { //response stream have been flushed and ended without log
           logIf(!res.__isEnded, res.logHeadSimple + 'END');
@@ -1555,20 +1630,20 @@ function startStreamWeb() {
             q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
           return end(res, chkerr);
         }
-        if (q.type === 'webm' && q.recordOption) { //need record webm video at same time
-          startRecording(q, function/*on_complete*/(err, wfile) {
-                if (err) {
-                  return end(res, err);
+        capture(res, q, function (err) { //send live capture to browser
+          if (!err && q.type === 'webm' && q.recordOption) { //need record webm video at same time
+            startRecording(q, function/*on_complete*/(err, wfile) {
+                  if (err) {
+                    end(res, err);
+                    return;
+                  }
+                  if (q.recordOption === 'sync') {
+                    res.childConsumerId = wfile.consumerId; //remember the file so that end it with res together
+                  }
                 }
-                if (q.recordOption === 'sync') {
-                  res.childConsumerAry = [wfile.consumerId]; //remember the file so that end it with res together
-                } //else 'async'
-                return capture(res, q); //also send capture result to browser
-              }
-          );
-        } else {
-          capture(res, q); //only send to browser
-        }
+            );
+          }
+        });
         break;
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
       case '/downloadRecordedFile': //---------------------download recorded file---------------------------------------
@@ -1827,6 +1902,7 @@ function startAdminWeb() {
         logHttpRequest(req, res.logHeadSimple);
         res.on('close', function () { //closed without normal end(res,...)
           log(res.logHeadSimple + 'CLOSED by peer');
+          res.__isClosed = true;
         });
         res.on('finish', function () { //response stream have been flushed and ended without log
           logIf(!res.__isEnded, res.logHeadSimple + 'END');
@@ -1850,7 +1926,7 @@ function startAdminWeb() {
             q.device.forEach(function (device) {
               getOrCreateDevCtx(device).accessKey = (q.action === 'setAccessKey' ? q.accessKey : '');
             });
-            updateMainUI();
+            updateWholeUI();
             end(res, 'OK');
             break;
           case 'startRecording': //---------------------------start recording file for multiple devices-----------------
@@ -1868,7 +1944,7 @@ function startAdminWeb() {
                     if (err) {
                       errAry.push(devAry.length > 1 ? device + ': ' + err : err);
                     } else {
-                      okAry.push((devAry.length > 1 ? device + ' OK: ' : 'OK: ') + wfile.filename);
+                      okAry.push((devAry.length > 1 ? device + ': OK: ' : 'OK: ') + wfile.filename);
                     }
                     if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
                       end(res, okAry.concat(errAry).join('\n'));
@@ -1966,11 +2042,7 @@ function startAdminWeb() {
           return end(res, chkerr);
         }
 
-        getAllDevInfo(function/*on_complete*/(err, devInfoMap) {
-          forEachValueIn(devInfoMap, function (info, device) {
-            getOrCreateDevCtx(device).info = info; //save serial number and info to devMgr
-          });
-
+        getAllDevInfo(function/*on_complete*/(err, realDeviceList) {
           var html = htmlCache['menu.html']
                   .replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey))
                   .replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''))
@@ -1999,9 +2071,11 @@ function startAdminWeb() {
             htmlBlock = htmlBlock || wholeMatch; //just to avoid compiler warning
             return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
               var dev = devMgr[device];
+              var hasDevice = realDeviceList.indexOf(device) >= 0;
               return joinedStr + htmlBlock
-                  .replace(/#devinfo\b/g, htmlEncode(dev.info || 'Unknown'))
-                  .replace(/#devinfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (devInfoMap[device] ? '' : ' disconnected'))
+                  .replace(/#devInfo\b/g, htmlEncode(dev.info))
+                  .replace(/#devInfo_class\b/g, (dev.info ? '' : 'errorWithTip') + (hasDevice ? '' : ' disconnected'))
+                  .replace(/#devErr\b/g, htmlEncode(hasDevice ? dev.err : (dev.err = 'error: device not found')))
                   .replace(/@device\b/g, querystring.escape(device))
                   .replace(/#device\b/g, htmlEncode(device))
                   .replace(/\$device\b/g, htmlIdEncode(device))
@@ -2058,7 +2132,7 @@ function startAdminWeb() {
           }
         });
         if (changed) {
-          updateMainUI();
+          updateWholeUI();
         }
         end(res, 'OK');
         break;
@@ -2068,7 +2142,7 @@ function startAdminWeb() {
         }
         if (conf.ipForHtmlLink !== q.ip) {
           conf.ipForHtmlLink = isAnyIp(q.ip) ? 'localhost' : q.ip;
-          updateMainUI();
+          updateWholeUI();
         }
         end(res, 'OK');
         break;
@@ -2078,18 +2152,19 @@ function startAdminWeb() {
         }
         if (conf.latestFramesToDump !== q.frames) {
           conf.latestFramesToDump = q.frames;
-          updateMainUI();
+          updateWholeUI();
         }
         end(res, 'OK');
         break;
-      case '/status':  //-----------------------------------push javascript to browser----------------------------------
+      case '/status':  //-----------------------------------push live capture status to browser-------------------------
         res.setHeader('Content-Type', 'text/json');
         res.previousVer = q.ver;
+        res.previousAppVer = q.appVer;
         status.consumerMap[(res.consumerId = getTimestamp())] = res;
         res.on('close', function () { //closed without normal end(res,...)
           delete status.consumerMap[res.consumerId];
         });
-        updateDeviceStatusUI();
+        updateLiveCaptureStatusUI();
         break;
       case '/getLog':  //----------------------------------------get log------------------------------------------------
         var logFilePath = q.logDate === 'today' ? log.context.todayLogFilePath : log.context.yesterdayLogFilePath;
@@ -2146,29 +2221,33 @@ function startAdminWeb() {
             }).pipe(res);
         break;
       case '/prepareDeviceFile':  //--------------------------prepare device file forcibly -----------------------------
-        if (Object.keys(devMgr).length === 0) {
+        q.device = q.device ? uniqueNonEmptyArray(q.device) : Object.keys(devMgr);
+        if (!q.device.length) {
           end(res, 'OK');
         }
         okAry = [];
         errAry = [];
         prepareDeviceFile.ver = getLocalToolFileHashSync();
-        Object.keys(devMgr).forEach(function (device, i, devAry) {
-          devMgr[device].didPrepare = false;
-          prepareDeviceFile(device, function/*on_complete*/(err) {
-                if (err) {
-                  errAry.push(devAry.length > 1 ? device + ': ' + err : err);
-                } else {
-                  okAry.push(devAry.length > 1 ? device + ' OK: ' : 'OK: ');
-                }
-                if (errAry.length + okAry.length === devAry.length) { //loop completed, now write response
-                  if (okAry.length) {
-                    updateMainUI();
-                  }
-                  end(res, okAry.concat(errAry).join('\n'));
-                }
+        var i = 0;
+        (function prepare_next_device() {
+          if (i < q.device.length) {
+            var device = q.device[i];
+            if (devMgr[device]) {
+              devMgr[device].didPrepare = false;
+            }
+            prepareDeviceFile(device, function/*on_complete*/(err) {
+              if (err) {
+                errAry.push(q.device.length > 1 ? device + ': ' + err : err);
+              } else {
+                okAry.push(q.device.length > 1 ? device + ': OK' : 'OK');
               }
-          );
-        });
+              i++;
+              prepare_next_device();
+            });
+          } else {
+            end(res, okAry.concat(errAry).join('\n'));
+          }
+        })();
         break;
       default:
         end(res, 'bad request');
@@ -2206,32 +2285,13 @@ function loadResourceSync() {
     }
   });
 
-  updateMainUI();
+  updateWholeUI();
 }
 
 function keepAdbAlive() {
-  function _keepAdbAlive() {
-    log(('[keepAdbAlive]begin getAllDevInfo'));
-    var oldDevInfoMap = getAllDevInfo.devInfoMap || {};
-
-    getAllDevInfo(function/*on_complete*/(err, newDevInfoMap) {
-      if (!err) {
-        var oldDeviceList = Object.keys(oldDevInfoMap);
-        if (oldDeviceList.length !== Object.keys(newDevInfoMap).length ||
-            oldDeviceList.some(haveDifferentInfo)) {
-          updateMainUI();
-        }
-      }
-      log(('[keepAdbAlive]end'));
-      setTimeout(_keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
-
-      function haveDifferentInfo(device) {
-        return oldDevInfoMap[device] !== newDevInfoMap[device];
-      }
-    }, true/*forceLoadDevInfo*/);
-  }
-
-  setTimeout(_keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+  getAllDevInfo(function/*on_complete*/() {
+    setTimeout(keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+  }, true/*forceLoadDevInfo*/);
 }
 
 loadResourceSync();
@@ -2248,7 +2308,7 @@ checkAdb(function/*on_complete*/() {
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
-    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0});
+    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0});
 }
 
 //todo: some device crashes if live view full image

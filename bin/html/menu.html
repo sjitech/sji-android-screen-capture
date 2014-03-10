@@ -118,9 +118,10 @@
           <a class="button" style="float: right" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey&type=apng" target="resultIFrame" onclick="return confirm('Sure?')">
             Stop
           </a>
-          <div class="#devinfo_class" title="Gray means disconnected device. &quot;Unknown&quot; means timeout or device is offline or not authenticated(Please check whether there is a popup displaying in android) or just an invalid serial number">
-            #devinfo
+          <div class="#devInfo_class" title="Gray means disconnected device. &quot;Unknown&quot; means timeout or device is offline or not authenticated(Please check whether there is a popup displaying in android) or just an invalid serial number">
+            #devInfo
           </div>
+          <div class="deviceErr">#devErr</div>
           <a href="@stream_web/fileViewer?device=@device&accessKey=@accessKey&fileindex=0" target="recorded $device">
             Recorded Videos
           </a>
@@ -366,12 +367,14 @@
       $device_chkAll.prop('checked', chkSum === $device_chk.length);
       $device_chkAll.prop('indeterminate', chkSum !== $device_chk.length && chkSum !== 0);
     });
+
     var appVer = '@appVer';
     var ver = '';
     var $statusBar = $('#statusBar');
+
     function queryStatus() {
       $('#darkMask').hide();
-      $.ajax('/status?adminKey=@adminKey&ver=' + ver, {timeout: 60 * 1000})
+      $.ajax('/status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
         .done(function (status) {
           if (status.appVer !== appVer) {
             $statusBar.text('Refresh...');

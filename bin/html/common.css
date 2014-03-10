@@ -1,4 +1,4 @@
-body {padding: 0; margin: 0}
+body {margin: 0; padding-left: 1px; padding-right: 1px; padding-bottom: 0; padding-top: 0}
 table {border-collapse: collapse}
 button {font-size: 1em}
 a {margin-left: 2px; margin-right: 2px; display: inline-block}
@@ -128,6 +128,7 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
 .recordingIndicator {background-color: blue; color: yellow}
 #totalRecordedFileSize.highlight {color: blue; font-weight: bold}
 .disconnected {background-color: #ededf4}
+.deviceErr {background-color: #ededf4; color: red}
 
 .underWorking {background-color: #EEEEEE; font-size: xx-small}
 .unrecommended {background-color: #EEEEEE; color:darkgray}
