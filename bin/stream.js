@@ -413,7 +413,7 @@ function getAllDev(on_complete) {
     stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
       if ((parts = lineStr.split('\t')).length > 1) {
         var device = parts[0];
-        if (/[^?]/.test(device)) { //exclude SN such as ??????
+        if (/[^?]/.test(device) && deviceList.indexOf(device) < 0) { //exclude SN such as ??????
           deviceList.push(device);
         }
       }
@@ -468,7 +468,6 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
       on_complete(err, []);
       return;
     }
-    deviceList = uniqueNonEmptyArray(deviceList);
     var i = 0;
     (function get_next_device_info() {
       if (i < deviceList.length) {
@@ -840,10 +839,10 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
     res.on_captureBeginOrFailed = null;
   }
 
-  if (res.filename && (reason === 'canceled' || !res.__bytesWritten)) {
+  if (res.filename && !res.__bytesWritten) {
     setTimeout(function () {
       res.filename.split(' ').forEach(function (filename) {
-        log('delete "' + outputDirSlash + filename + '" due to ' + (reason === 'canceled' ? reason : 'empty file'));
+        log('delete "' + outputDirSlash + filename + '" due to empty file');
         try {
           fs.unlinkSync(outputDirSlash + filename);
         } catch (err) {
