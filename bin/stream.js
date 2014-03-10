@@ -327,7 +327,22 @@ function end(res, dataStrOfBuf) {
 }
 
 function isAnyIp(ip) {
-  return !ip || ip === '0.0.0.0' || ip === '*';
+  return !ip || ip === '0.0.0.0' || ip === '*' || ip === '::1' || ip === 'fe80::1';
+}
+
+function getFirstIp() {
+  var niMap = require('os').networkInterfaces();
+  var ip = '';
+  Object.keys(niMap).some(function (name) {
+    return niMap[name].some(function (addr) {
+      if (!addr['internal'] && addr['family'] === 'IPv4') {
+        ip = addr.address;
+        return true;
+      }
+      return false;
+    });
+  });
+  return ip || 'localhost';
 }
 
 function containsDir(filename) {
@@ -1559,7 +1574,7 @@ function logHttpRequest(req, logHead) {
 
 function startStreamWeb() {
   var httpServer, httpSeq = 0, _isAnyIp = isAnyIp(conf.ip), smark = (conf.ssl.on ? 's' : '');
-  conf.ipForHtmlLink = (isAnyIp(conf.ip) ? 'localhost' : conf.ip);
+  conf.ipForHtmlLink = (isAnyIp(conf.ip) ? getFirstIp() : conf.ip);
   if (conf.ssl.on) {
     log('load SSL server certificate and private key from PKCS12 file: ' + conf.ssl.certificateFilePath);
     var options;
@@ -1623,6 +1638,10 @@ function startStreamWeb() {
     }
 
     setDefaultHttpHeader(res);
+
+    if (!q.adminKey && req.headers.cookie && (q.adminKey = req.headers.cookie.match(/adminKey=([^;]+)/))) {
+      q.adminKey = querystring.unescape(q.adminKey[1]);
+    }
 
     switch (parsedUrl.pathname) {
       case '/capture': //---------------------------send capture result to browser & optionally save to file------------
@@ -2066,6 +2085,10 @@ function startAdminWeb() {
             html = html.replace('@' + k + '_negVal', (conf[k] ? 'false' : 'true')).replace('#' + k + '_negBtn', (conf[k] ? 'Disable' : 'Enable'));
           });
 
+
+          if (conf.adminWeb.adminKey) {
+            res.setHeader('Set-Cookie', 'adminKey=' + querystring.escape(conf.adminWeb.adminKey) + '; HttpOnly');
+          }
           res.setHeader('Content-Type', 'text/html');
           end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
             htmlBlock = htmlBlock || wholeMatch; //just to avoid compiler warning
@@ -2140,8 +2163,9 @@ function startAdminWeb() {
         if (chkerrRequired('ip', q.ip)) {
           return end(res, chkerr);
         }
+        q.ip = isAnyIp(q.ip) ? getFirstIp() : q.ip;
         if (conf.ipForHtmlLink !== q.ip) {
-          conf.ipForHtmlLink = isAnyIp(q.ip) ? 'localhost' : q.ip;
+          conf.ipForHtmlLink = q.ip;
           updateWholeUI();
         }
         end(res, 'OK');
