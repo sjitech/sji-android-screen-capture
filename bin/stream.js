@@ -1904,7 +1904,8 @@ function startAdminWeb() {
       res.logHead = res.logHeadSimple = '[HTTP' + smark.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']';
       logHttpRequest(req, res.logHeadSimple);
       res.statusCode = 403; //access denied
-      return end(res, 'access denied');
+      res.setHeader('Content-Type', 'text/html');
+      return end(res, htmlCache['login.html']);
     }
 
     switch (parsedUrl.pathname) {
