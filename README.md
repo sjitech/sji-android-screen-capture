@@ -7,7 +7,7 @@ Support Chrome, Firefox, Safari. Windows/Linux/Unix
 <pre><code><a href="http://youtu.be/CWcOjzAJ6Sg">recorded video sample( converted by youtube)</a>  
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
 
-<b>New</b>: Recorded file can be viewed or downloaded as mp4 or webm.<br/>
+<b>New</b>: Recorded file can be auto converted to <b>H.264/MP4</b> and <b>WebM</b> video format if you'v installed ffmpeg in local PC.<br/>
 
 [Screenshot]
 
@@ -24,7 +24,10 @@ Recorded Videos<br/>
 <pre><code><a href="http://developer.android.com/sdk/index.html">Install Android SDK</a> (at least "Platform Tools" which include adb(Android Debug Bridge)).  
 <a href="http://nodejs.org/download/">install node.js</a>.  
 Install android USB driver automatically or manually when you first plug Android into PC.  
+If you want to always record as H.264/MP4 or WebM video format, you need <a href="http://www.ffmpeg.org/download.html">install FFMPEG into PC</a>.
 </code></pre>
+To simplify other settings, you'd better put the directory of adb and local ffmpeg into PATH environment variable otherwise you need put the fullpath of them into "adb" and "ffmpeg" settings in stream.json file.
+
 
 3.<b>Start Android Screen Capture (include a video stream server) on PC</b>  
 <pre><code>cd path_of_this_project/bin  
@@ -32,9 +35,9 @@ node stream.js
 </code></pre>
 You can edit configuration file <a href="https://raw.github.com/sjitech/sji-android-screen-capture/master/bin/stream.json">stream.json</a> to change IP, port, SSL...  
 <br/><br/>
-4.<b>Show video/image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br/>
-For video, support <a href="http://www.webmproject.org/">WebM</a> video and H.264/MP4, so recommend <a href="http://www.google.com/chrome">Google Chrome Browser</a>.
-For image, currently support animated JPEG or PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">multi-part http response</a>. Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
+4.<b>Show video/animated image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br/>
+Support <a href="http://www.webmproject.org/">WebM</a> video and <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
+Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
 <br/><br/>
 To embed Animated JPEG image into your html page:
 <pre><code>&lt;img src="http://localhost:33333/capture?device=yourDeviceSerialNumber&type=ajpg&fps=4" /&gt;
@@ -68,9 +71,9 @@ PNG:
 All above URLs can specify scale and rotate optionally by append following querystring:
 <pre>
 &scale=0.5&rotate=270 or  
-&scale=300x or  
+&scale=300xAuto or
 &scale=300x200 or  
-&scale=x200 ...  
+&scale=Autox200 ...
 </pre>  
   
 For advanced usage, please start menu page, move mouse to link and button to see URL.  
@@ -116,4 +119,4 @@ For webm format, just change apng to webm and img tag to video tag in above step
     Host OS can be Windows/Mac/Linux (Unix should also be OK, but not tested).  
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.  
-    bin/android/run.sh_/busybox is download from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.  
+    bin/android/busybox is downloaded from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.
