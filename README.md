@@ -27,8 +27,7 @@ Install android USB driver automatically or manually when you first plug Android
 If you want to always record as H.264/MP4 or WebM video format, you need <a href="http://www.ffmpeg.org/download.html">install FFMPEG into PC</a>.
 </code></pre>
 To simplify other settings, you'd better put the directory of adb and local ffmpeg into PATH environment variable otherwise you need put the fullpath of them into "adb" and "ffmpeg" settings in stream.json file.
-<br/>
-
+<br/><br/>
 3.<b>Start Android Screen Capture (include a video stream server) on PC</b>  
 <pre><code>cd path_of_this_project/bin  
 node stream.js
