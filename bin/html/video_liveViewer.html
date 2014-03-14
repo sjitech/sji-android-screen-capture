@@ -19,11 +19,14 @@
       <label class="infoWithTip" title="Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
         Scale<input type="text" name="scale" size="10" value="@scale"/>
       </label>
-      <span>Rotate
-        <label><input type="radio" name="rotate" value=""/>0°</label>
-        <label><input type="radio" name="rotate" value="90"/>90°</label>
-        <label><input type="radio" name="rotate" value="270"/>270°</label>
-      </span>
+      <label>Rotate
+        <select name="rotate">
+          <option value="">0°</option>
+          <option value="90">90°</option>
+          <option value="180">180°</option>
+          <option value="270">270°</option>
+        </select>
+      </label>
       <label>
         <select name="recordOption">
           <option value="">Do Not Record</option>

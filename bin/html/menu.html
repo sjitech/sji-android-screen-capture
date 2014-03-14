@@ -26,11 +26,14 @@
     <label class="infoWithTip" title="Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
       Scale<input type="text" name="scale" size="10" value="@scale"/>
     </label>
-    <span>Rotate
-      <label><input type="radio" name="rotate" value=""/>0°</label>
-      <label><input type="radio" name="rotate" value="90"/>90°</label>
-      <label><input type="radio" name="rotate" value="270"/>270°</label>
-    </span>
+    <label>Rotate
+      <select name="rotate">
+        <option value="">0°</option>
+        <option value="90">90°</option>
+        <option value="180">180°</option>
+        <option value="270">270°</option>
+      </select>
+    </label>
   </form>
   <form action="/deviceControl" style="width: 100%; text-align: center; margin-top:85px; margin-bottom: 30px" target="resultIFrame">
     <input type="hidden" name="adminKey" value="#adminKey"/>

@@ -551,7 +551,7 @@ function chkerrCaptureParameter(q) {
   if (chkerrRequired('type', q.type, videoAndImageTypeAry) ||
       videoTypeSet[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
       imageTypeSet[q.type] && (q.fps = 0) && false ||
-      chkerrOptional('rotate(optional)', (q.rotate = Number(q.rotate)), [0, 90, 270])) {
+      chkerrOptional('rotate(optional)', (q.rotate = Number(q.rotate)), [0, 90, 180, 270])) {
     return chkerr;
   }
   var n, match;
@@ -616,7 +616,7 @@ function makeFilenameByCaptureParameter(q, forRecord) { //should respect re_file
       type:    'apng', 'ajpg', 'webm', 'png', 'jpg'
       fps:     [optional] rate for apng, ajpg, webm. Must be in range MIN_FPS~MAX_FPS
       scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999xAuto or Autox9999
-      rotate:  [optional] 0, 90, 270
+      rotate:  [optional] 0, 90, 180, 270
     }
  * @param on_captureBeginOrFailed
  */
@@ -746,6 +746,8 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         }
         if (q.rotate === 90) {
           filter += ',transpose=1';
+        } else if (q.rotate === 180) {
+          filter += ',transpose=1,transpose=1';
         } else if (q.rotate === 270) {
           filter += ',transpose=2';
         }
@@ -1708,8 +1710,8 @@ function startStreamWeb() {
                   .replace(/@fps\b/g, q.fps)
                   .replace(/@scale\b/g, q.scale_origVal)
                   .replace(/@rotate\b/g, q.rotate)
-                  .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
-                  .replace(new RegExp('<option value="' + q.recordOption + '"', 'g'), '$& selected') //set selected
+                  .replace(new RegExp('<option value="' + q.rotate + '"', 'g'), '$& selected')  //set selected rotate angle
+                  .replace(new RegExp('<option value="' + q.recordOption + '"', 'g'), '$& selected') //set selected record option
                   .replace(/@recordOption\b/g, q.recordOption)
               );
             }
@@ -2070,7 +2072,7 @@ function startAdminWeb() {
                   .replace(/@fps\b/g, q.fps)
                   .replace(/@scale\b/g, q.scale_origVal)
                   .replace(/@rotate\b/g, q.rotate)
-                  .replace(new RegExp('name="rotate" value="' + q.rotate + '"', 'g'), '$& checked')  //set check mark
+                  .replace(new RegExp('<option value="' + q.rotate + '"', 'g'), '$& selected')  //set selected rotate angle
                   .replace(/@stream_web\b/g, 'http' + (conf.ssl.on ? 's' : '') + '://' + conf.ipForHtmlLink + ':' + conf.port)
                   .replace(/@streamWebIP\b/g, conf.ipForHtmlLink)
                   .replace(/@logStart\b/g, conf.logStart || -64000)
