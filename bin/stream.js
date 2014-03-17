@@ -2315,7 +2315,13 @@ function loadResourceSync() {
 }
 
 function keepAdbAlive() {
-  getAllDevInfo(function/*on_complete*/() {
+  getAllDevInfo(function/*on_complete*/(deviceList) {
+    forEachValueIn(devMgr, function(dev){
+      if (deviceList.indexOf(dev.device) < 0) {
+        dev.err = 'error: device not found';
+        updateWholeUI();
+      }
+    });
     setTimeout(keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
   }, true/*forceLoadDevInfo*/);
 }
