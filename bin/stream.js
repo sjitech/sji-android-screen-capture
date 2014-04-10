@@ -1928,29 +1928,31 @@ function startStreamWeb() {
     var cmd = '';
 
     if (q.type === 'd') { //down
-      cmd += '/system/bin/sendevent /dev/input/event1 3 57 77777' + '\n';
-      cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '\n';
-      cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '\n';
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 3 57 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      cmd += '/system/bin/sendevent /dev/input/event1 3 48 13; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      cmd += '/system/bin/sendevent /dev/input/event1 3 58 136; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0';
       dev.touchLastX = q.x;
       dev.touchLastY = q.y;
     }
     else if (q.type === 'm') { //move
       if (q.x !== dev.touchLastX) {
-        cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '\n';
+        cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
         dev.touchLastX = q.x;
       }
       if (q.y !== dev.touchLastY || cmd === '') {
-        cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '\n';
+        cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
         dev.touchLastY = q.y;
       }
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0'; //SYN_MT_REPORT
     } else { //up, out
-      cmd += '/system/bin/sendevent /dev/input/event1 3 57 -1\n';
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 3 57 -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0'; //SYN_MT_REPORT
     }
-    //log('[touch]exec: \n' + cmd);
-    dev.touchShellStdin.write(cmd);
+    log('[touch]exec: ' + cmd);
+    dev.touchShellStdin.write(cmd+'\n');
   }
 } //end of startStreamWeb()
 
