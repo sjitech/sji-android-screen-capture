@@ -1884,7 +1884,9 @@ function startStreamWeb() {
 
           var childProc = spawn('[touch]', conf.adb, ['-s', q.device, 'shell'], null, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
           if (childProc.pid > 0) {
-            var cmd = 'cd ' + ANDROID_WORK_DIR + '; ./busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH + '; /system/bin/getevent -iS | ./busybox grep -Eo \'INPUT_PROP_DIRECT|/dev/input/event[0-9]+\' | ./busybox grep -B 1 INPUT_PROP_DIRECT | ./busybox sort; echo ==finish==';
+            //[I] and "==" is just to avoid match NPUT_PROP_DIRECT and ==finish== in input echo
+            var cmd = 'cd ' + ANDROID_WORK_DIR + '; ./busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH +
+                '; /system/bin/getevent -iS | ./busybox grep -Eo \'[I]NPUT_PROP_DIRECT|/dev/input/event[0-9]+\' | ./busybox grep -B 1 [I]NPUT_PROP_DIRECT | ./busybox sort; echo "=="finish==';
             log('[touch]exec: ' + cmd);
             childProc.stdin.write(cmd + '\n');
             dev.touchShellStdin = childProc.stdin;
