@@ -30,6 +30,7 @@
       <w>fileindex</w>
       <w>fname</w>
       <w>fstat</w>
+      <w>getevent</w>
       <w>getprop</w>
       <w>hhmmss</w>
       <w>iframe</w>

@@ -1884,7 +1884,7 @@ function startStreamWeb() {
 
           var childProc = spawn('[touch]', conf.adb, ['-s', q.device, 'shell'], null, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
           if (childProc.pid > 0) {
-            var cmd = ANDROID_WORK_DIR + '/busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH;
+            var cmd = 'cd ' + ANDROID_WORK_DIR + '; ./busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH + '; /system/bin/getevent -iS | ./busybox grep -Eo \'INPUT_PROP_DIRECT|/dev/input/event[0-9]+\' | ./busybox grep -B 1 INPUT_PROP_DIRECT | ./busybox sort; echo ==finish==';
             log('[touch]exec: ' + cmd);
             childProc.stdin.write(cmd + '\n');
             dev.touchShellStdin = childProc.stdin;
@@ -1894,11 +1894,30 @@ function startStreamWeb() {
               if (dev.touchServerStatus !== true) {
                 bufAry.push(buf);
                 var totalStr = Buffer.concat(bufAry).toString();
-                var match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
-                if (match) {
-                  dev.w = Number(match[1]);
-                  dev.h = Number(match[2]);
-                  log('got device width: ' + dev.w + ' height: ' + dev.h);
+                var match;
+
+                //get screen width/height
+                if (!dev.w && !dev.h) {
+                  match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
+                  if (match) {
+                    dev.w = Number(match[1]);
+                    dev.h = Number(match[2]);
+                    log('got device width: ' + dev.w + ' height: ' + dev.h);
+                  }
+                }
+
+                //get touch screen device id
+                if (!dev.touchDevID) {
+                  match = totalStr.match(/\/dev\/input\/event([0-9]+)/);
+                  if (match) {
+                    dev.touchDevID = match[1];
+                    log('got input device: /dev/input/event' + dev.touchDevID);
+                  } else if (!/==finish==/.test(totalStr)) { //almost impossible
+                    dev.touchDevID = '1';
+                  }
+                }
+
+                if (dev.touchDevID && dev.w && dev.h) {
                   bufAry = [];
                   dev.touchServerStatus = true;
                   sendTouchEvent(dev, q);
@@ -1935,28 +1954,28 @@ function startStreamWeb() {
     var cmd = '';
 
     if (q.type === 'd') { //down
-      cmd += '/system/bin/sendevent /dev/input/event1 3 57 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      cmd += '/system/bin/sendevent /dev/input/event1 3 48 13; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      cmd += '/system/bin/sendevent /dev/input/event1 3 58 136; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
-      cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0';
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 57 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 48 13; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 58 136; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 0 0 0';
       dev.touchLastX = q.x;
       dev.touchLastY = q.y;
     }
     else if (q.type === 'm') { //move
       if (q.x !== dev.touchLastX) {
-        cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
         dev.touchLastX = q.x;
       }
       if (q.y !== dev.touchLastY || cmd === '') {
-        cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
         dev.touchLastY = q.y;
       }
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0'; //SYN_MT_REPORT
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 0 0 0'; //SYN_MT_REPORT
     } else { //up, out
-      cmd += '/system/bin/sendevent /dev/input/event1 3 57 -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0'; //SYN_MT_REPORT
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 57 -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 0 0 0'; //SYN_MT_REPORT
     }
     log('[touch]exec: ' + cmd);
     dev.touchShellStdin.write(cmd + '\n');
