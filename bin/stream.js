@@ -1897,7 +1897,7 @@ function startStreamWeb() {
                 var match;
 
                 //get screen width/height
-                if (!dev.w && !dev.h) {
+                if (!dev.w || !dev.h) {
                   match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
                   if (match) {
                     dev.w = Number(match[1]);
@@ -1908,11 +1908,11 @@ function startStreamWeb() {
 
                 //get touch screen device id
                 if (!dev.touchDevID) {
-                  match = totalStr.match(/\/dev\/input\/event([0-9]+)/);
+                  match = totalStr.match(/event([0-9]+)/);
                   if (match) {
                     dev.touchDevID = match[1];
                     log('got input device: /dev/input/event' + dev.touchDevID);
-                  } else if (!/==finish==/.test(totalStr)) { //almost impossible
+                  } else if (/==finish==/.test(totalStr)) { //almost impossible
                     dev.touchDevID = '1';
                   }
                 }
