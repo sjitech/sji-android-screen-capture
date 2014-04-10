@@ -55,6 +55,7 @@
       <w>newctx</w>
       <w>noop</w>
       <w>nostats</w>
+      <w>nput</w>
       <w>oncr</w>
       <w>pkcs</w>
       <w>preload</w>
