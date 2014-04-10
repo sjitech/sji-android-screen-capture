@@ -13,7 +13,7 @@
   <style>
     th {background-color: #e8e8e8; font-size: small}
   </style>
-  <link rel="stylesheet" type="text/css" href="common.css?adminKey=@adminKey">
+  <link rel="stylesheet" type="text/css" href="common.css">
 </head>
 <body onunload="">
   <form class="toolbar" style="width: 100%; text-align: center; position: fixed; top: 0; left: 0">
@@ -150,22 +150,19 @@
           </a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px">
-          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
-             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
+          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=ajpg&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
             Record
           </a>
           <a class="recordingIndicator" id="recordingIndicator_ajpg_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px">
-          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
-             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
+          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=apng&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
             Record
           </a>
           <a class="recordingIndicator" id="recordingIndicator_apng_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
         <td style="text-align: left; vertical-align: top; height: 1px" class="underWorking">
-          <a class="button liveCaptureRelatedCommand_$device" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame"
-             onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours')">
+          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
             Record
           </a>
           <a class="recordingIndicator" id="recordingIndicator_webm_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
@@ -357,7 +354,7 @@
     </tr>
   </table>
 
-  <script src="jquery-2.0.3.js?adminKey=@adminKey" type="text/javascript"></script>
+  <script src="jquery-2.0.3.js" type="text/javascript"></script>
 
   <script>
     var $device_chk = $('.device_chk'), $device_chkAll = $('#device_chkAll'), chkSum = $device_chk.length;

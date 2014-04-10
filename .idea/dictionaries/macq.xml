@@ -15,13 +15,17 @@
       <w>autox</w>
       <w>axxx</w>
       <w>busybox</w>
+      <w>charcode</w>
       <w>chkerr</w>
       <w>crcrlf</w>
       <w>crlf</w>
       <w>decice</w>
       <w>disp</w>
+      <w>dragstart</w>
       <w>eacces</w>
       <w>eaddrinuse</w>
+      <w>evtlog</w>
+      <w>ffffffff</w>
       <w>ffmpeg</w>
       <w>fileindex</w>
       <w>fname</w>
@@ -36,6 +40,10 @@
       <w>logpipe</w>
       <w>lookahead</w>
       <w>maxage</w>
+      <w>mousedown</w>
+      <w>mousemove</w>
+      <w>mouseout</w>
+      <w>mouseup</w>
       <w>mpeg</w>
       <w>mpng</w>
       <w>multiline</w>
@@ -56,9 +64,11 @@
       <w>readdir</w>
       <w>revalidate</w>
       <w>rfile</w>
+      <w>rotatescale</w>
       <w>safarai</w>
       <w>screenshot</w>
       <w>seekable</w>
+      <w>sendevent</w>
       <w>setchkerr</w>
       <w>sigkill</w>
       <w>sigpipe</w>
@@ -74,6 +84,7 @@
       <w>vframes</w>
       <w>webm</w>
       <w>wfile</w>
+      <w>xxxxx</w>
     </words>
   </dictionary>
 </component>

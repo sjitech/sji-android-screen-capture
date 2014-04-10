@@ -8,6 +8,7 @@ Support Chrome, Firefox, Safari. Windows/Linux/Unix
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
 
 <b>New</b>: Recorded file can be auto converted to <b>H.264/MP4</b> and <b>WebM</b> video format if you'v installed ffmpeg in local PC.<br/>
+<b>New</b>: Support Remote Control by mouse click/move/drag on live view UI.<br/>
 
 [Screenshot]
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <title>Live @type of #device</title>
-  <link rel="stylesheet" type="text/css" href="common.css?device=@device&accessKey=@accessKey">
+  <link rel="stylesheet" type="text/css" href="common.css">
 </head>
 <body>
   <div style="text-align: center; width: 100%; position: fixed; top:0">
@@ -36,8 +36,8 @@
       </label>
     </form>
     <div style="float: right; text-align: right">
-      <div><button onclick="rotateLocally()">Rotate</button></div>
-      <div><button onclick="scaleLocally()">Scale</button></div>
+      <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate</button></div>
+      <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale</button></div>
     </div>
   </div>
   <div id="viewerContainer" style="margin-top: 28px">
@@ -74,6 +74,10 @@
       </li>
     </ul>
   </div>
-  <script src="common.js?device=@device&accessKey=@accessKey" type="text/javascript"></script>
+  <script src="jquery-2.0.3.js" type="text/javascript"></script>
+  <script src="common.js" type="text/javascript"></script>
+  <script>
+    setTouchHandler(document.getElementById('viewer'), '/touch?device=@device&accessKey=@accessKey');
+  </script>
 </body>
 </html>

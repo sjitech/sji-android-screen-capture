@@ -22,7 +22,7 @@ log('use configuration: ' + JSON.stringify(conf, null, '  '));
 //************************global var  ****************************************************
 var outputDirSlash = conf.outputDir + '/';
 var DEFAULT_FPS = 4, MIN_FPS = 0.1, MAX_FPS = 40, MIN_FPS_PLAY_AIMG = 0.1, MAX_FPS_PLAY_AIMG = 100;
-var UPLOAD_LOCAL_DIR = './android', ANDROID_WORK_DIR = '/data/local/tmp/sji-asc';
+var UPLOAD_LOCAL_DIR = './android', ANDROID_WORK_DIR = '/data/local/tmp/sji-asc', ANDROID_ASC_LOG_PATH = '/data/local/tmp/sji-asc.log';
 var MULTIPART_BOUNDARY = 'MULTIPART_BOUNDARY', MULTIPART_MIXED_REPLACE = 'multipart/x-mixed-replace;boundary=' + MULTIPART_BOUNDARY;
 var CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = BUF_CR2.slice(0, 1);
 var re_adbNewLineSeq = /\r?\r?\n$/; // CR LF or CR CR LF
@@ -124,6 +124,12 @@ function spawn(logHead, _path, args, on_close, options) {
     });
     childProc.stdout.on('end', function () {
       log(childProc.logHead + 'stdout read end');
+    });
+    childProc.stderr.on('data', function (buf) {
+      if (!childProc.didGetStderrData) {
+        childProc.didGetStderrData = true;
+        log(childProc.logHead + 'got stderr data first time. ' + buf.length + ' bytes');
+      }
     });
   }
 
@@ -777,7 +783,7 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         'sh', './capture.sh',
         conf.forceUseFbFormat ? 'forceUseFbFormat' : 'autoDetectFormat',
         q.fps, FFMPEG_PARAM,
-        (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
+        (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH]);
 
       provider.pid = childProc.pid;
       childProc.stdout.on('data', function (buf) {
@@ -1609,6 +1615,15 @@ function startStreamWeb() {
       return res.end();
     }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
+    switch (parsedUrl.pathname) {
+      case '/common.css':
+      case '/rotatescale.css':
+      case '/common.js':
+      case '/jquery-2.0.3.js':
+        res.setHeader('Content-Type', parsedUrl.pathname.match(re_extName)[0] === '.css' ? 'text/css' : 'text/javascript');
+        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
+        break;
+    }
     if (chkerrRequired('device', q.device)) {
       return res.end(chkerr);
     }
@@ -1621,22 +1636,15 @@ function startStreamWeb() {
       return end(res, 'access denied');
     }
 
-    switch (parsedUrl.pathname) {
-      case '/common.css':
-      case '/common.js':
-        res.setHeader('Content-Type', parsedUrl.pathname.match(re_extName)[0] === '.css' ? 'text/css' : 'text/javascript');
-        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
-      default :
-        res.logHead = res.logHeadSimple = '[http' + smark.toLowerCase() + '_' + (res.seq = ++httpSeq) + ']';
-        logHttpRequest(req, res.logHeadSimple);
-        res.on('close', function () { //closed without normal end(res,...)
-          log(res.logHeadSimple + 'CLOSED by peer');
-          res.__isClosed = true;
-        });
-        res.on('finish', function () { //response stream have been flushed and ended without log
-          logIf(!res.__isEnded, res.logHeadSimple + 'END');
-        });
-    }
+    res.logHead = res.logHeadSimple = '[http' + smark.toLowerCase() + '_' + (res.seq = ++httpSeq) + ']';
+    logHttpRequest(req, res.logHeadSimple);
+    res.on('close', function () { //closed without normal end(res,...)
+      log(res.logHeadSimple + 'CLOSED by peer');
+      res.__isClosed = true;
+    });
+    res.on('finish', function () { //response stream have been flushed and ended without log
+      logIf(!res.__isEnded, res.logHeadSimple + 'END');
+    });
 
     setDefaultHttpHeader(res);
 
@@ -1859,11 +1867,91 @@ function startStreamWeb() {
           }));
         });
         break;
+      case '/touch':
+        res.setHeader('Content-Type', 'text/json');
+        if (chkerrRequired('type', q.type, ['d', 'u', 'o', 'm']) ||
+            chkerrRequired('x', q.x = Number(q.x), 0, 1) ||
+            chkerrRequired('x', q.y = Number(q.y), 0, 1)) {
+          return end(res, JSON.stringify(chkerr));
+        }
+        var dev = devMgr[q.device];
+        if (!dev || !dev.liveStreamer) {
+          return end(res, JSON.stringify('device is not being live viewed'));
+        }
+
+        if (dev.touchServerStatus === undefined) {
+          dev.touchServerStatus = false;
+
+          var childProc = spawn('[touch]', conf.adb, ['-s', q.device, 'shell'], null, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
+          if (childProc.pid > 0) {
+            var cmd = ANDROID_WORK_DIR + '/busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH;
+            log('[touch]exec: ' + cmd);
+            childProc.stdin.write(cmd + '\n');
+            dev.touchShellStdin = childProc.stdin;
+
+            var bufAry = [];
+            childProc.stdout.on('data', function (buf) {
+              if (dev.touchServerStatus !== true) {
+                bufAry.push(buf);
+                var totalStr = Buffer.concat(bufAry).toString();
+                var match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
+                if (match) {
+                  dev.w = Number(match[1]);
+                  dev.h = Number(match[2]);
+                  log('got device width: ' + dev.w + ' height: ' + dev.h);
+                  bufAry = [];
+                  dev.touchServerStatus = true;
+                  sendTouchEvent(dev, q);
+                  end(res, JSON.stringify('0'));
+                }
+              }
+            });
+            childProc.stderr.on('data', function (buf) {
+            });
+          }
+        }
+        else if (dev.touchServerStatus === true) {
+          sendTouchEvent(dev, q);
+          end(res, JSON.stringify('0'));
+        }
+        else {// dev.touchServerStatus === false
+          return end(res, JSON.stringify('preparing'));
+        }
+        break;
       default:
         end(res, 'bad request');
     }
     return ''; //just to avoid compiler warning
   } //end of handler(req, res)
+
+  function sendTouchEvent(dev, q) {
+    var cmd = '';
+
+    if (q.type === 'd') { //down
+      cmd += '/system/bin/sendevent /dev/input/event1 3 57 77777' + '\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+      dev.touchLastX = q.x;
+      dev.touchLastY = q.y;
+    }
+    else if (q.type === 'm') { //move
+      if (q.x !== dev.touchLastX) {
+        cmd += '/system/bin/sendevent /dev/input/event1 3 53 ' + (q.x * dev.w).toFixed() + '\n';
+        dev.touchLastX = q.x;
+      }
+      if (q.y !== dev.touchLastY || cmd === '') {
+        cmd += '/system/bin/sendevent /dev/input/event1 3 54 ' + (q.y * dev.h).toFixed() + '\n';
+        dev.touchLastY = q.y;
+      }
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+    } else { //up, out
+      cmd += '/system/bin/sendevent /dev/input/event1 3 57 -1\n';
+      cmd += '/system/bin/sendevent /dev/input/event1 0 0 0\n';
+    }
+    //log('[touch]exec: \n' + cmd);
+    dev.touchShellStdin.write(cmd);
+  }
 } //end of startStreamWeb()
 
 function startAdminWeb() {
@@ -1901,6 +1989,15 @@ function startAdminWeb() {
       return res.end();
     }
     var parsedUrl = url.parse(req.url, true/*querystring*/), q = parsedUrl.query;
+    switch (parsedUrl.pathname) {
+      case '/common.css':
+      case '/rotatescale.css':
+      case '/common.js':
+      case '/jquery-2.0.3.js':
+        res.setHeader('Content-Type', parsedUrl.pathname.match(re_extName)[0] === '.css' ? 'text/css' : 'text/javascript');
+        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
+        break;
+    }
     if (conf.adminWeb.adminKey && q.adminKey !== conf.adminWeb.adminKey) {
       res.logHead = res.logHeadSimple = '[HTTP' + smark.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']';
       logHttpRequest(req, res.logHeadSimple);
@@ -1910,11 +2007,6 @@ function startAdminWeb() {
     }
 
     switch (parsedUrl.pathname) {
-      case '/common.css':
-      case '/common.js':
-      case '/jquery-2.0.3.js':
-        res.setHeader('Content-Type', parsedUrl.pathname.match(re_extName)[0] === '.css' ? 'text/css' : 'text/javascript');
-        return res.end(htmlCache[parsedUrl.pathname.slice(1)]);
       case '/status':
       case '/getLog':
         break;
@@ -2003,7 +2095,7 @@ function startAdminWeb() {
         if (chkerrRequired('device', q.device)) {
           return end(res, chkerr);
         }
-        spawn('[GetDeviceLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_WORK_DIR + '/log'], function/*on_close*/(ret, stdout, stderr) {
+        spawn('[GetDeviceLog]', conf.adb, ['-s', q.device, 'shell', 'cat', ANDROID_ASC_LOG_PATH], function/*on_close*/(ret, stdout, stderr) {
           res.end(removeNullChar(stdout) || toErrSentence(stderr) || (ret !== 0 ? 'unknown error' : ''));
         }, {noLogStdout: true});
         break;
@@ -2033,8 +2125,8 @@ function startAdminWeb() {
               res.setHeader('Content-Disposition', 'attachment;filename=' + q.qdevice + '~' + getTimestamp() + '.raw');
 
               var childProc = spawn('[RawCapture]', conf.adb, ['-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
-                'sh', ANDROID_WORK_DIR + '/capture_raw.sh',
-                (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_WORK_DIR + '/log']);
+                'sh', 'capture_raw.sh',
+                (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH]);
 
               childProc.stdout.on('data', function (buf) {
                 convertCRLFToLF(childProc/*as context*/, devMgr[q.device].CrCount, buf).forEach(function (buf) {
@@ -2316,7 +2408,7 @@ function loadResourceSync() {
 
 function keepAdbAlive() {
   getAllDevInfo(function/*on_complete*/(deviceList) {
-    forEachValueIn(devMgr, function(dev){
+    forEachValueIn(devMgr, function (dev) {
       if (deviceList.indexOf(dev.device) < 0) {
         dev.err = 'error: device not found';
         updateWholeUI();
@@ -2340,7 +2432,7 @@ checkAdb(function/*on_complete*/() {
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
-    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0});
+    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0, x: 0, y: 0});
 }
 
 //todo: some device crashes if live view full image
