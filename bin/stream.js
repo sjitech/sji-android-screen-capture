@@ -1918,6 +1918,13 @@ function startStreamWeb() {
           return end(res, JSON.stringify('preparing'));
         }
         break;
+      case '/sendKey':
+        dev = devMgr[q.device];
+        if (!dev || !dev.liveStreamer) {
+          return end(res, JSON.stringify('device is not being live viewed'));
+        }
+        spawn('[sendKey]', conf.adb, ['-s', q.device, 'shell', '/system/bin/input', 'keyevent', q.keyCode]);
+        return end(res, JSON.stringify('OK'));
       default:
         end(res, 'bad request');
     }
@@ -1952,7 +1959,7 @@ function startStreamWeb() {
       cmd += '/system/bin/sendevent /dev/input/event1 0 0 0'; //SYN_MT_REPORT
     }
     log('[touch]exec: ' + cmd);
-    dev.touchShellStdin.write(cmd+'\n');
+    dev.touchShellStdin.write(cmd + '\n');
   }
 } //end of startStreamWeb()
 
