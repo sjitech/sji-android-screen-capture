@@ -1882,16 +1882,20 @@ function startStreamWeb() {
           return end(res, JSON.stringify(chkerr));
         }
 
-        if (dev.touchServerStatus === true) {
+        if (dev.touchShellStdin === undefined) {
+          end(res, JSON.stringify("re preparing"));
+          return prepareTouchServer();
+        } else if (dev.touchShellStdin === 0) {
+          end(res, JSON.stringify('preparing'));
+        } else if (dev.touchShellStdin === null) {
+          end(res, JSON.stringify('failed to get touch device'));
+        } else {
           sendTouchEvent();
           end(res, JSON.stringify('OK'));
-        } else if (dev.touchServerStatus === false) {
-          end(res, JSON.stringify('preparing'));
-        } else {
-          end(res, JSON.stringify('not prepared'));
         }
         break;
       case '/sendKey':
+        res.setHeader('Content-Type', 'text/json');
         if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
           return end(res, JSON.stringify('device is not being live viewed'));
         }
@@ -1903,60 +1907,75 @@ function startStreamWeb() {
     return ''; //just to avoid compiler warning
 
     function prepareTouchServer() {
-      if (dev.touchServerStatus === undefined) {
-        dev.touchServerStatus = false;
+      if (dev.touchShellStdin === undefined) {
+        dev.touchShellStdin = 0;
 
         var childProc = spawn('[touch]', conf.adb, ['-s', q.device, 'shell'], null, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
         if (childProc.pid > 0) {
           //get screen size from log and get touch screen device path
           //[I] and "==" is just to avoid match INPUT_PROP_DIRECT and ==finish== in input echo
           var cmd = 'export PS1=; cd ' + ANDROID_WORK_DIR + '; ./busybox grep -Eo -m 1 \'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)\' ' + ANDROID_ASC_LOG_PATH +
-              '; /system/bin/getevent -iS | ./busybox grep -Eo \'[I]NPUT_PROP_DIRECT|/dev/input/event[0-9]+\' | ./busybox grep -B 1 [I]NPUT_PROP_DIRECT | ./busybox sort; echo "=="finish==';
+              '; /system/bin/getevent -iS | ./busybox grep -Eo \'[I]NPUT_PROP_DIRECT|/dev/input/event[0-9]+\' | ./busybox grep -B 1 [I]NPUT_PROP_DIRECT; echo "=="finish==';
           log(cmd, {head: '[touch]prepare by exec: '});
-          childProc.stdin.write(cmd + '\n');
-          dev.touchShellStdin = childProc.stdin;
+
+          childProc.on('close', function () {
+            log("[touch]touch server closed");
+            end(res, JSON.stringify('touch server closed'));
+            dev.touchShellStdin = undefined;
+          });
+
+          childProc.stdin.on('error', function (err) {
+            log("[touch]failed to prepare when write to childProc.stdin. Error: " + err);
+            end(res, JSON.stringify('failed to call touch server'));
+            dev.touchShellStdin = undefined;
+          });
 
           var bufAry = [];
           childProc.stdout.on('data', function (buf) {
-            if (dev.touchServerStatus !== true) {
-              bufAry.push(buf);
-              var totalStr = Buffer.concat(bufAry).toString();
-              if (/==finish==/.test(totalStr)) {
-                bufAry = [];
-                logIf(conf.logTouchCmdDetail, totalStr.replace(/ +<\u0008+/g, '__SPACE...<BACKSPACE...__'), {head: '[touch]result: '});
+            if (dev.touchShellStdin !== 0) {
+              return;
+            }
+            bufAry.push(buf);
+            var totalStr = Buffer.concat(bufAry).toString();
+            if (/==finish==/.test(totalStr)) {
+              bufAry = [];
+              logIf(conf.logTouchCmdDetail, totalStr.replace(/ +<\u0008+/g, '__SPACE...<BACKSPACE...__'), {head: '[touch]result: '});
 
-                //get screen width/height
-                var match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
-                if (match) {
-                  dev.w = Number(match[1]);
-                  dev.h = Number(match[2]);
-                  log('[touch]******** got device width: ' + dev.w + ' height: ' + dev.h + ' ********');
-                }
-                else {
-                  end(res, JSON.stringify('failed to get screen size'));
-                  return;
-                }
-
-                //get touch screen device id
-                match = totalStr.match(/event([0-9]+)/);
-                if (match) {
-                  dev.touchDevID = match[1];
-                  log('[touch]******** got input device: /dev/input/event' + dev.touchDevID + ' ********');
-                } else { //almost impossible
-                  log('[touch]******** failed to get input device of touch screen, use /dev/input/event1 ********');
-                  dev.touchDevID = '1';
-                }
-
-                dev.touchServerStatus = true;
-                end(res, JSON.stringify('OK'));
+              //get screen width/height
+              var match = totalStr.match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
+              if (match) {
+                dev.w = Number(match[1]);
+                dev.h = Number(match[2]);
+                log('[touch]******** got device width: ' + dev.w + ' height: ' + dev.h + ' ********');
               }
-            } //end of (dev.touchServerStatus !== true)
+              else {
+                end(res, JSON.stringify('failed to get screen size'));
+                return;
+              }
+
+              //get touch screen device id
+              match = totalStr.match(/event([0-9]+)/);
+              if (match) {
+                dev.touchDevID = match[1];
+                log('[touch]******** got input device: /dev/input/event' + dev.touchDevID + ' ********');
+                dev.touchShellStdin = childProc.stdin;
+                end(res, JSON.stringify('OK'));
+              } else { //almost impossible
+                log('[touch]******** failed to get input device of touch screen');
+                dev.touchShellStdin = null;
+                end(res, JSON.stringify('failed to get touch device'));
+              }
+            }
           });
+
+          childProc.stdin.write(cmd + '\n');
         } //end of (childProc.pid > 0)
-      } else if (dev.touchServerStatus === true) {
-        end(res, JSON.stringify('OK'));
-      } else {
+      } else if (dev.touchShellStdin === 0) {
         end(res, JSON.stringify('preparing'));
+      } else if (dev.touchShellStdin === null) {
+        end(res, JSON.stringify('failed to get touch device'));
+      } else {
+        end(res, JSON.stringify('OK'));
       }
     }
 
@@ -1965,8 +1984,8 @@ function startStreamWeb() {
 
       if (q.type === 'd') { //down
         cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 57 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 48 13; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 58 136; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 48 30; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 58 200; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
         cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 53 ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
         cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 3 54 ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
         cmd += '/system/bin/sendevent /dev/input/event' + dev.touchDevID + ' 0 0 0; ';
@@ -2473,10 +2492,15 @@ checkAdb(function/*on_complete*/() {
 });
 
 
+process.on('uncaughtException', function (err) {
+  log('uncaughtException: ' + err + "\n" + err.stack);
+  process.abort();
+});
+
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0, logTouchCmdDetail: 0,
     playerId: 0, range: 0, as: 0, asHtml5Video: 0,
-    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0, x: 0, y: 0});
+    action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0, x: 0, y: 0, stack: 0});
 }
 
 //todo: some device crashes if live view full image
