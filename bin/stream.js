@@ -2018,8 +2018,8 @@ function startStreamWeb() {
     function sendTouchEvent() {
       var cmd = '';
 
-      if (q.type === 'd') { //down
-        if (dev.touchModernStyle) { //android > 2.3
+      if (dev.touchModernStyle) { //android > 2.3
+        if (q.type === 'd') { //down
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
           if (dev.touchAvgPressure) {
@@ -2031,20 +2031,7 @@ function startStreamWeb() {
           dev.touchLastX = q.x;
           dev.touchLastY = q.y;
         }
-        else { //android <= 2.3
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x35 + ' ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x36 + ' ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-          if (dev.touchAvgParam0x32) {
-            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgParam0x32 + '; '; //0x32 ?
-          }
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_MT_REPORT
-        }
-      }
-      else { //move, up, out
-        if (dev.touchModernStyle) { //android > 2.3
+        else { //move, up, out
           if (q.x !== dev.touchLastX) {
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x35 + ' ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
             dev.touchLastX = q.x;
@@ -2061,18 +2048,23 @@ function startStreamWeb() {
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_MT_REPORT
           }
         }
-        else { //android <= 2.3
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x35 + ' ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x36 + ' ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-          if (dev.touchAvgParam0x32) {
-            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgParam0x32 + '; '; //0x32 ?
-          }
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_MT_REPORT
-        }
       }
+      else { //android <= 2.3
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x35 + ' ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x36 + ' ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+        if (q.type === 'd' || q.type === 'm') { //down, move
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        } else { //up, out
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        }
+        if (dev.touchAvgParam0x32) {
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgParam0x32 + '; '; //0x32 ?
+        }
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_MT_REPORT
+      }
+
       if (cmd !== '') {
         logIf(conf.logTouchCmdDetail, cmd, {head: '[touch]exec: '});
         dev.touchShellStdin.write(cmd + '\n');
