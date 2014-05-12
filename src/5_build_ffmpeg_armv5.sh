@@ -13,11 +13,6 @@ export  CFLAGS="-O3 --sysroot=$SYS_ROOT -I$SYS_ROOT/usr/include -I$LIBGCC_DIR/in
 export LDFLAGS="-B$SYS_ROOT/usr/lib -B$LIBGCC_DIR -B$TOOL_CHAIN_DIR/arm-linux-androideabi/bin -B$LIBEXEC_DIR -B$CPP_ROOT/libs/armeabi"
 export PATH="$TOOL_CHAIN_DIR/arm-linux-androideabi/bin:$LIBEXEC_DIR:$MAKE_DIR:$PATH"
 
-echo ---------------make cpu-features lib--------------------
-mkdir ./otherlib
-gcc -c $CFLAGS $LDFLAGS $ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c  -o ./otherlib/cpu-features.o || exit 1
-echo ""; echo ok; echo ""
-
 echo ---------------patch some files--------------------
 cp -fv $OLD_DIR/patch_ffmpeg_file.c ./libavformat/file.c || exit 1
 cp -fv $OLD_DIR/patch_ffmpeg_cmdutils.c ./cmdutils.c || exit 1
@@ -25,9 +20,6 @@ cp -fv $OLD_DIR/patch_ffmpeg_log.c ./libavutil/log.c || exit 1
 echo ""; echo ok; echo ""
 
 echo ---------------config ffmpeg [armv5]--------------------
-#extra flags for webm/vp8
-export  CFLAGS="$CFLAGS  -I./libvpx_src/qj_armv5/include"
-export LDFLAGS="$LDFLAGS -B./libvpx_src/qj_armv5/lib ./otherlib/cpu-features.o"
 export CPPFLAGS="--sysroot=$SYS_ROOT"   #ubuntu NDK need this flag when check assembler by gcc \$CPPFLAGS \$ASFLAGS xxx.S which in turn cause "GNU assembler not found, install gas-preprocessor" due to "No include path for stdc-predef.h"
 
 ./configure --arch=arm --cpu=armv5te --target-os=linux --enable-cross-compile --enable-static --prefix=./qj_armv5 --disable-doc \
@@ -39,8 +31,6 @@ export CPPFLAGS="--sysroot=$SYS_ROOT"   #ubuntu NDK need this flag when check as
 	\
 	--enable-demuxer=rawvideo --enable-decoder=rawvideo \
 	\
-	--enable-libvpx \
-	--enable-muxer=webm --enable-encoder=libvpx* \
 	--enable-filter=scale \
 	--enable-filter=transpose \
 	\
