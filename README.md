@@ -1,4 +1,4 @@
-Android Screen Capture & Recorder & Remote Controller From PC's Browser
+Android Fast Screen Capture & Recorder & Remote Controller From PC's Browser
 ===================
 This project is aimed to provide a fast way to capture android screen and view,record,remote control it in PC just by HTML5 video capable browser.
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second).
