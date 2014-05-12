@@ -6,7 +6,7 @@ function setTouchHandler(htmlImgElement, touchServerUrl) {
         htmlImgElement.didInitEventHandler = true;
         __setTouchHandler(htmlImgElement);
       }
-    }, 5/*retry times*/);
+    }, 10/*retry times*/);
   }, 100);
 }
 
