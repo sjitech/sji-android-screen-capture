@@ -34,16 +34,19 @@
           <option value="async">Record in background</option>
         </select>
       </label>
+      <iframe class="toolbar" name="resultIFrame"></iframe>
     </form>
     <div style="float: right; text-align: right">
-      <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate</button></div>
-      <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale</button></div>
+      <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate Locally</button></div>
+      <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
       <div>&nbsp;</div>
       <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=3" target="resultIFrame">Home Key</a></div>
+      <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=4" target="resultIFrame">Back Key</a></div>
+      <div>&nbsp;</div>
       <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=26" target="resultIFrame">Power Key</a></div>
     </div>
   </div>
-  <div id="viewerContainer" style="margin-top: 28px">
+  <div id="viewerContainer" style="margin-top: 60px">
     <video id="viewer" autoplay controls>
       <source src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate&recordOption=@recordOption" type="video/@type">
       Your browser does not support @type video format. Recommend you use Google Chrome Browser.

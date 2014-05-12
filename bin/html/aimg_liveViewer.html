@@ -37,10 +37,12 @@
     <iframe class="toolbar" name="resultIFrame"></iframe>
   </div>
   <div style="position: fixed; right: 0; top: 62px; text-align: right">
-    <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate</button></div>
-    <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale</button></div>
+    <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate Locally</button></div>
+    <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
     <div>&nbsp;</div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=3" target="resultIFrame">Home Key</a></div>
+    <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=4" target="resultIFrame">Back Key</a></div>
+    <div>&nbsp;</div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=26" target="resultIFrame">Power Key</a></div>
   </div>
   <div id="viewerContainer" style="margin-top: 62px">
