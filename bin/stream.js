@@ -912,7 +912,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           if (q.type === 'apng') {
             args.push('-f', 'image2pipe', '-vcodec', 'png');
           } else if (q.type === 'ajpg') {
-            args.push('-f', 'mjpeg', '-vcodec', 'mjpeg');
+            args.push('-f', 'image2pipe', '-vcodec', 'mjpeg');
           } else if (q.type === 'webm') {
             args.push('-f', 'webm', '-vcodec', 'libvpx');
           }
