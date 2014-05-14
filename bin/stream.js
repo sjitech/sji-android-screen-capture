@@ -32,15 +32,14 @@ var chkerr = ''; //for chkerrXxx() to save error info
 var htmlCache = {}; //key:filename
 var status = { consumerMap: {}};
 var childProcPidMap = {}; //key: pid
-var re_filename = /^((.+)~(?:live|rec)_f(\d+(?:\.\d+)?)[^_]*_(\d{14}\.\d{3}(?:.\d+)?)\.(ajpg|apng|webm))(?:\.(webm|mp4))?(?:[~-]frame(\d+)\.(jpg|png))?$/;
+var re_filename = /^((.+)~(?:live|rec)_f(\d+(?:\.\d+)?)[^_]*_(\d{14}\.\d{3}(?:.\d+)?)\.(ajpg|apng))(?:\.(webm|mp4))?(?:[~-]frame(\d+)\.(jpg|png))?$/;
 var allTypeDispNameMap = {apng: 'Animated PNG', ajpg: 'Animated JPG', webm: 'WebM', mp4: 'MP4', jpg: 'JPEG', png: 'PNG'};
 var allTypeMimeMapForDownload = {apng: 'video/apng', ajpg: 'video/ajpg', webm: 'video/webm', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png'}; //safari need jpeg instead of jpg
 var allTypeMimeMapForPlay = {apng: MULTIPART_MIXED_REPLACE, ajpg: MULTIPART_MIXED_REPLACE, webm: 'video/webm', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png'};
 var allVideoTypeOrderMap = {webm: 1, mp4: 2, ajpg: 3, apng: 4};
-var videoTypeSet = {ajpg: 1, apng: 2, webm: 3}; //also as sort order
 var aimgTypeSet = {ajpg: 1, apng: 2}; //also as sort order
 var imageTypeSet = {jpg: 1, png: 2}; //also as sort order
-var videoAndImageTypeAry = Object.keys(videoTypeSet).concat(Object.keys(imageTypeSet));
+var aimgAndImageTypeAry = Object.keys(aimgTypeSet).concat(Object.keys(imageTypeSet));
 var html5videoTypeAry = ['mp4', 'webm'];
 var aimgDecoderMap = {}; //key: filename+'~'+playerId. value: aimgDecoder
 var dynamicConfKeyList = ['ffmpegDebugLog', 'ffmpegStatistics', 'remoteLogAppend', 'logHttpReqDetail', 'reloadDevInfo', 'logImageDumpFile', 'logImageDecoderDetail', 'latestFramesToDump', 'forceUseFbFormat', 'logTouchCmdDetail'];
@@ -562,11 +561,13 @@ function chkerrCaptureParameter(q) {
       return setchkerr('error: no any live capture available for reuse');
     }
   }
-  if (chkerrRequired('type', q.type, videoAndImageTypeAry) ||
-      videoTypeSet[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
-      imageTypeSet[q.type] && (q.fps = 0) && false ||
+  if (chkerrRequired('type', q.type, aimgAndImageTypeAry) ||
+      aimgTypeSet[q.type] && chkerrRequired('fps', (q.fps = Number(q.fps)), MIN_FPS, MAX_FPS) ||
       chkerrOptional('rotate(optional)', (q.rotate = Number(q.rotate)), [0, 90, 180, 270])) {
     return chkerr;
+  }
+  if (imageTypeSet[q.type]) {
+    q.fps = 0;
   }
   var n, match;
   q.scale_origVal = q.scale;
@@ -627,8 +628,8 @@ function makeFilenameByCaptureParameter(q, forRecord) { //should respect re_file
  * @param q option, Must have been checked by !chkerrCaptureParameter(q)
  *  {
       device : device serial number
-      type:    'apng', 'ajpg', 'webm', 'png', 'jpg'
-      fps:     [optional] rate for apng, ajpg, webm. Must be in range MIN_FPS~MAX_FPS
+      type:    'apng', 'ajpg', 'png', 'jpg'
+      fps:     [optional] rate for apng, ajpg. Must be in range MIN_FPS~MAX_FPS
       scale:   [optional] 0.1 - 1 or string in format 9999x9999 or 9999xAuto or Autox9999
       rotate:  [optional] 0, 90, 180, 270
     }
@@ -682,10 +683,9 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
       provider = createCaptureProvider(); //can not share, so create new capture process
     }
     else if (dev.liveStreamer) { //there is an existing capture running or preparing
-      //share existing stream provider (Animated PNG,JPG or webm if have not output yet)
+      //share existing stream provider (Animated PNG,JPG)
       if (dev.liveStreamer.type === q.type && dev.liveStreamer.fps === q.fps &&
-          dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate &&
-          (aimgTypeSet[dev.liveStreamer.type] || !dev.liveStreamer.didOutput)) {
+          dev.liveStreamer.scale === q.scale && dev.liveStreamer.rotate === q.rotate) {
         if (res.filename) { //stop other recording
           forEachValueIn(dev.liveStreamer.consumerMap, function (_res) {
             if (_res.filename) {
@@ -719,10 +719,8 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
     if (!createCaptureProvider.called) {
       log(res.logHead + 'use existing capture process ' + (provider.pid ? 'pid_' + provider.pid : '?(still in preparing)'));
       if (on_captureBeginOrFailed && provider.didGetStdoutData) {
-        if (on_captureBeginOrFailed) {
-          on_captureBeginOrFailed();
-          res.on_captureBeginOrFailed = null;
-        }
+        on_captureBeginOrFailed();
+        res.on_captureBeginOrFailed = null;
       }
     } else {
       var opt;
@@ -770,16 +768,15 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
           FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
         }
       }
-      if (q.type === 'webm') { //webm video
-        FFMPEG_PARAM += ' -f webm -vcodec libvpx -rc_lookahead 0';
+
+      if (q.type === 'ajpg') { //animated jpg image
+        FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -update 1 -q:v 1';
       } else if (q.type === 'apng') { //animated png image
         FFMPEG_PARAM += ' -f image2 -vcodec png -update 1';
-      } else if (q.type === 'ajpg') { //animated jpg image
-        FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -update 1 -q:v 1';
-      } else if (q.type === 'png') {    //single png image
-        FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
       } else if (q.type === 'jpg') {    //single jpg image
         FFMPEG_PARAM += ' -f image2 -vcodec mjpeg -vframes 1 -q:v 1';
+      } else if (q.type === 'png') {    //single png image
+        FFMPEG_PARAM += ' -f image2 -vcodec png -vframes 1';
       } else {
         log('unknown type');
       }
@@ -884,8 +881,6 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
         logIf(err.code !== 'ENOENT', 'failed to kill process pid_' + provider.pid + '. ' + stringifyError(err));
       }
     }
-  } else {
-    endCaptureConsumer(consumerMap[res.childConsumerId], reason);
   }
 
   updateLiveCaptureStatusUI();
@@ -909,12 +904,10 @@ function startRecording(q/*same as capture*/, on_complete) {
             args.push('-loglevel', 'debug');
           }
           //------------------------now make input parameters------------------------
-          if (q.type === 'apng') {
-            args.push('-f', 'image2pipe', '-vcodec', 'png');
-          } else if (q.type === 'ajpg') {
+          if (q.type === 'ajpg') {
             args.push('-f', 'image2pipe', '-vcodec', 'mjpeg');
-          } else if (q.type === 'webm') {
-            args.push('-f', 'webm', '-vcodec', 'libvpx');
+          } else if (q.type === 'apng') {
+            args.push('-f', 'image2pipe', '-vcodec', 'png');
           }
           if (q.fps) {
             args.push('-r', q.fps); //rate
@@ -1256,7 +1249,7 @@ function updateLiveCaptureStatusUI() {
       forEachValueIn(devMgr, function (dev, device) {
         var qdevice = htmlIdEncode(device);
         var haveLiveCapture = 0;
-        Object.keys(videoTypeSet).forEach(function (type) {
+        Object.keys(aimgTypeSet).forEach(function (type) {
           var liveViewerCount = 0, recordingCount = 0;
           if (dev.liveStreamer) {
             haveLiveCapture = true;
@@ -1663,24 +1656,10 @@ function startStreamWeb() {
 
     switch (parsedUrl.pathname) {
       case '/capture': //---------------------------send capture result to browser & optionally save to file------------
-        if (chkerrCaptureParameter(q) ||
-            q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
+        if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
-        capture(res, q, function (err) { //send live capture to browser
-          if (!err && q.type === 'webm' && q.recordOption) { //need record webm video at same time
-            startRecording(q, function/*on_complete*/(err, wfile) {
-                  if (err) {
-                    end(res, err);
-                    return;
-                  }
-                  if (q.recordOption === 'sync') {
-                    res.childConsumerId = wfile.consumerId; //remember the file so that end it with res together
-                  }
-                }
-            );
-          }
-        });
+        capture(res, q, null/*on_captureBeginOrFailed=null*/);
         break;
       case '/playRecordedFile': //---------------------------replay recorded file---------------------------------------
       case '/downloadRecordedFile': //---------------------download recorded file---------------------------------------
@@ -1704,16 +1683,15 @@ function startStreamWeb() {
         playOrDownloadRecordedFile(res, q, forDownload, range);
         break;
       case '/liveViewer':  //------------------------------show live capture (Just as a sample) ------------------------
-        if (chkerrCaptureParameter(q) || q.type === 'webm' && chkerrOptional('recordOption(optional)', q.recordOption, ['sync', 'async'])) {
+        if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
-        q.recordOption = q.recordOption || '';
         prepareDeviceFile(q.device, function/*on_complete*/(err) {
               if (err) {
                 return end(res, err);
               }
               res.setHeader('Content-Type', 'text/html');
-              return end(res, htmlCache[aimgTypeSet[q.type] ? 'aimg_liveViewer.html' : 'video_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
+              return end(res, htmlCache['aimg_liveViewer.html'] //this html will in turn open URL /playRecordedFile?....
                   .replace(/@device\b/g, q.qdevice)
                   .replace(/#device\b/g, htmlEncode(q.device))
                   .replace(/\$device\b/g, htmlIdEncode(q.device))
@@ -1728,8 +1706,6 @@ function startStreamWeb() {
                   .replace(/@scale\b/g, q.scale_origVal)
                   .replace(/@rotate\b/g, q.rotate)
                   .replace(new RegExp('<option value="' + q.rotate + '"', 'g'), '$& selected')  //set selected rotate angle
-                  .replace(new RegExp('<option value="' + q.recordOption + '"', 'g'), '$& selected') //set selected record option
-                  .replace(/@recordOption\b/g, q.recordOption)
               );
             }
         );
@@ -2550,7 +2526,7 @@ checkAdb(function/*on_complete*/() {
 
 process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack);
-  process.abort();
+  throw err;
 });
 
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'

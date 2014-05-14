@@ -79,9 +79,6 @@
         <th title="Use multipart/x-mixed-replace response. Supported by Chrome, Firefox, Safari, IE10+. And it will be auto converted both to MP4 and WebM if you have installed ffmpeg locally">
           Animated PNG
         </th>
-        <th class="underWorking" title="Use google VP8 video format. Supported by Chrome(Fast), Firefox(slow). And it will be converted both to MP4 if you have installed ffmpeg locally">
-          WebM
-        </th>
       </tr>
       <!--repeatBegin-->
       <tr>
@@ -105,14 +102,6 @@
             Live View
           </a>
           <a class="liveViewIndicator" id="liveViewCount_apng_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
-        </td>
-        <td style="text-align: left; vertical-align: top; white-space: nowrap; border-bottom: 1px dashed lightgray" class="underWorking">
-          <a href="@stream_web/liveViewer?device=@device&accessKey=@accessKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="live view $device"
-             title="Show live view. Caution: Can not be live viewed by multiple client at same time. This action will interrupt any WebM live viewing or WebM recording on this device due to technique reason(on working)"
-             class="liveCaptureRelatedCommand_$device" onclick="return !$(this).hasClass('unrecommended') || confirm('Sure?'+ String.fromCharCode(10) + 'This action maybe interrupting current live view or recording because their parameter maybe different with yours.'+ String.fromCharCode(10) + 'YOU'+ String.fromCharCode(39) + 'd BETTER CLICK THE COUNTER LINK such as (1) to WATCH CURRENT LIVE CAPTURE without the risk of interrupting current live view or recording')">
-            Live View
-          </a>
-          <a class="liveViewIndicator" id="liveViewCount_webm_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
       </tr>
       <tr>
@@ -160,12 +149,6 @@
             Record
           </a>
           <a class="recordingIndicator" id="recordingIndicator_apng_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
-        </td>
-        <td style="text-align: left; vertical-align: top; height: 1px" class="underWorking">
-          <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&type=webm&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame">
-            Record
-          </a>
-          <a class="recordingIndicator" id="recordingIndicator_webm_$device" href="@stream_web/liveViewer?device=@device&accessKey=@accessKey" target="live view $device" title="Watch Current Live Capture without the risk of interrupting current live viewing or recording"></a>
         </td>
       </tr>
       <!--repeatEnd-->
