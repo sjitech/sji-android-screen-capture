@@ -1960,6 +1960,14 @@ function startStreamWeb() {
                   if ((match = devInfo.match(/\n +0032.*max *(\d+)/))) { //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
                     dev.touchAvgABS_MT_WIDTH_MAJOR = Math.max(Math.ceil(match[1] / 2), 1);
                   }
+                  if ((match = devInfo.match(/\n +0035.*max *(\d+)/))) { //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+                    dev.w = Number(match[1]) + 1;
+                    log('[touch]******** USE device width: ' + dev.w + ' ********');
+                  }
+                  if ((match = devInfo.match(/\n +0036.*max *(\d+)/))) { //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+                    dev.h = Number(match[1]) + 1;
+                    log('[touch]******** USE device height: ' + dev.h + ' ********');
+                  }
                   dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
                 }
                 break;
