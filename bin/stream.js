@@ -1957,6 +1957,9 @@ function startStreamWeb() {
                   if ((match = devInfo.match(/\n +003a.*max *(\d+)/))) { //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
                     dev.touchAvgPressure = Math.max(Math.ceil(match[1] / 2), 1);
                   }
+                  if ((match = devInfo.match(/\n +0032.*max *(\d+)/))) { //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+                    dev.touchAvgABS_MT_WIDTH_MAJOR = Math.max(Math.ceil(match[1] / 2), 1);
+                  }
                   dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
                 }
                 break;
@@ -1964,8 +1967,8 @@ function startStreamWeb() {
             } else { // android <= 2.3
               if ((match = devInfo.match(re_ABS_MT_TOUCH_MAJOR))) {
                 dev.touchAvgContactSize = Math.max(Math.ceil(match[1] / 2), 1);
-                if ((match = devInfo.match(/\n +0032.*max *(\d+)/))) {
-                  dev.touchAvgParam0x32 = Math.max(Math.ceil(match[1] / 2), 1);
+                if ((match = devInfo.match(/\n +0032.*max *(\d+)/))) { //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+                  dev.touchAvgFingerSize = Math.max(Math.ceil(match[1] / 2), 1);
                 }
                 dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
                 break;
@@ -1974,7 +1977,7 @@ function startStreamWeb() {
           }
 
           if (dev.touchDevPath) {
-            log('[touch]******** got input device: ' + dev.touchDevPath + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + (dev.touchModernStyle ? (' touchAvgPressure=' + dev.touchAvgPressure) : (' touchAvgParam0x32=' + dev.touchAvgParam0x32)) + ' ********');
+            log('[touch]******** got input device: ' + dev.touchDevPath + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + (dev.touchModernStyle ? (' touchAvgPressure=' + dev.touchAvgPressure) : '') + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' ********');
             return end(res, JSON.stringify('OK'));
           } else { //almost impossible
             dev.touchDevPath = null;
@@ -1998,6 +2001,11 @@ function startStreamWeb() {
         if (q.type === 'd') { //down
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+
+          if (dev.touchAvgFingerSize) {
+            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+          }
+
           if (dev.touchAvgPressure) {
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x3a + ' ' + dev.touchAvgPressure + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
           }
@@ -2033,8 +2041,8 @@ function startStreamWeb() {
         } else { //up, out
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
         }
-        if (dev.touchAvgParam0x32) {
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgParam0x32 + '; '; //0x32 ?
+        if (dev.touchAvgFingerSize) {
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
         }
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT
