@@ -1968,6 +1968,10 @@ function startStreamWeb() {
                     dev.h = Number(match[1]) + 1;
                     log('[touch]******** USE device height: ' + dev.h + ' ********');
                   }
+                  if ((match = devInfo.match(/\n +KEY.*:.*014a/))) { //BTN_TOUCH for sumsung devices
+                    dev.touchNeedBtnTouchEvent = true;
+                    log('[touch]******** this device need BTN_TOUCH(0x014a) event ********');
+                  }
                   dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
                 }
                 break;
@@ -2008,14 +2012,14 @@ function startStreamWeb() {
       if (dev.touchModernStyle) { //android > 2.3
         if (q.type === 'd') { //down
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-
-          if (dev.touchAvgFingerSize) {
-            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+          if (dev.touchNeedBtnTouchEvent) {
+            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 1 ' + 0x014a + ' 1; '; //BTN_TOUCH DOWN for sumsung devices
           }
-
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
           if (dev.touchAvgPressure) {
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x3a + ' ' + dev.touchAvgPressure + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+          } else if (dev.touchAvgFingerSize) {
+            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x32 + ' ' + dev.touchAvgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
           }
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x35 + ' ' + (q.x * dev.w).toFixed() + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x36 + ' ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
@@ -2037,6 +2041,9 @@ function startStreamWeb() {
           }
           if (q.type === 'u' || q.type === 'o') { //up, out
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+            if (dev.touchNeedBtnTouchEvent) {
+              cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 1 ' + 0x014a + ' 0; ';  //BTN_TOUCH UP for sumsung devices
+            }
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_MT_REPORT
           }
         }
