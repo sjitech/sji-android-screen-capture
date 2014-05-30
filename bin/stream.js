@@ -2004,7 +2004,7 @@ function startStreamWeb() {
     function sendTouchEvent() {
       var cmd = '';
 
-      if (dev.touchModernStyle || dev.touchAvgPressure) {
+      if (dev.touchModernStyle || dev.touchAvgPressure/*todo: determine SYN_MT_REPORT by "sync: ..." property ?*/) {
         if (q.type === 'd') { //down
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
           if (dev.touchNeedBtnTouchEvent) {
