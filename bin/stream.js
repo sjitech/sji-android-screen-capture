@@ -1977,6 +1977,9 @@ function startStreamWeb() {
                 if ((match = devInfo.match(/\n +KEY.*:.*014a/))) { //BTN_TOUCH for sumsung devices
                   dev.touchNeedBtnTouchEvent = true;
                 }
+                if ((match = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/))) { //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+                  dev.touchMaxTrackId = Number(match[1]);
+                }
                 dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
                 break;
               }
@@ -1984,7 +1987,7 @@ function startStreamWeb() {
           }
 
           if (dev.touchDevPath) {
-            log('[touch]******** got input device: ' + dev.touchDevPath + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' ********');
+            log('[touch]******** got input device: ' + dev.touchDevPath + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
             return end(res, JSON.stringify('OK'));
           } else { //almost impossible
             dev.touchDevPath = null;
@@ -2004,7 +2007,7 @@ function startStreamWeb() {
     function sendTouchEvent() {
       var cmd = '';
 
-      if (dev.touchModernStyle || dev.touchAvgPressure/*todo: determine SYN_MT_REPORT by "sync: ..." property ?*/) {
+      if (dev.touchMaxTrackId === 65535) {
         if (q.type === 'd') { //down
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
           if (dev.touchNeedBtnTouchEvent) {
@@ -2037,8 +2040,17 @@ function startStreamWeb() {
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x36 + ' ' + (q.y * dev.h).toFixed() + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
         if (q.type === 'd' || q.type === 'm') { //down, move
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + dev.touchAvgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+          if (dev.touchAvgPressure) {
+            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x3a + ' ' + dev.touchAvgPressure + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+          }
         } else { //up, out
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+          if (dev.touchAvgPressure) {
+            cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x3a + ' ' + 0 + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+          }
+        }
+        if (dev.touchNeedBtnTouchEvent) {
+          cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 1 ' + 0x014a + ' ' + (q.type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
         }
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT   this is very important
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_REPORT
