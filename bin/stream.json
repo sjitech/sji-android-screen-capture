@@ -34,9 +34,8 @@
   //key should be regular expression to match the device info which displayed in main menu page,
   // or just a serial number.
   "ffmpegOption": {
-    "SCL22": {
+//    "SCL22": {
 //      "in": "-f rawvideo -s 1920x1080 -pix_fmt 0bgr"
-      "in": "-f rawvideo -s 1920x1080"
-    }
+//    }
   }
 }
