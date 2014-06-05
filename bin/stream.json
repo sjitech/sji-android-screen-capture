@@ -1,5 +1,6 @@
 {
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
+  //"adbOption": ["-H", "remoteAdbHostIp"],
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
 
   "port": 33333, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege.
