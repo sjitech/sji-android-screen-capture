@@ -23,7 +23,7 @@
   "protectOutputDir": false, //true means you can not view recorded file without correct adminKey querystring
 
   "maxRecordTimeSeconds": 7200, //max recorded time (unit: seconds)
-  "keepAdbAliveIntervalSeconds": 300, //unit: second!!!
+  "keepAdbAliveIntervalSeconds": 240, //unit: second!!!
 
   "log": {
     "filePath": "../log/log.txt", //Deleting this option or set to null or empty string both means log to stderr(usually means console)
