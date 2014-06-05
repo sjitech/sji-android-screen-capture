@@ -752,9 +752,9 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
       if (q.scale || q.rotate) {
         var filter = '';
         if (typeof(q.scale) === 'number') {
-          filter += ',scale=iw*' + q.scale + ':-1';
+          filter += ',scale=' + 'ceil(iw*' + q.scale + '/2)*2' + ':' + 'ceil(ih*' + q.scale + '/2)*2';
         } else {
-          filter += ',scale=' + (q.scale_w || '-1') + ':' + (q.scale_h || '-1');
+          filter += ',scale=' + 'ceil(' + (q.scale_w || ('iw/ih*' + q.scale_h) ) + '/2)*2' + ':' + 'ceil(' + (q.scale_h || ('ih/iw*' + q.scale_w) ) + '/2)*2';
         }
         if (q.rotate === 90) {
           filter += ',transpose=1';
@@ -914,8 +914,6 @@ function startRecording(q/*same as capture*/, on_complete) {
           }
           args.push('-i', '-'); //from stdin
           //------------------------now make output parameters------------------------
-          args.push('-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2'); //for MP4, w, h must be even integer otherwise cause error!
-          //args.push('-profile:v', 'baseline');
           args.push(outputDirSlash + filename + '.mp4');
           args.push(outputDirSlash + filename + '.webm');
 
