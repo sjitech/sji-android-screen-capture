@@ -2049,10 +2049,10 @@ function startStreamWeb() {
             cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 3 ' + 0x3a + ' ' + 0 + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
           }
         }
-        if (dev.touchNeedBtnTouchEvent) {
+        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT   this is very important
+        if (dev.touchNeedBtnTouchEvent && (q.type === 'd' || q.type === 'u' || q.type === 'o')) {
           cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 1 ' + 0x014a + ' ' + (q.type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
         }
-        cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 2 0; '; //SYN_MT_REPORT   this is very important
         cmd += '/system/bin/sendevent ' + dev.touchDevPath + ' 0 0 0; '; //SYN_REPORT
       }
 
