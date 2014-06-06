@@ -100,14 +100,10 @@ function __setTouchHandler(htmlImgElement) {
 function rotateLocally(viewer) {
   'use strict';
   var j, clsAry = viewer.className.split(/ +/);
-  if ((j = clsAry.indexOf('rotate90')) >= 0) {
-    clsAry[j] = 'rotate270';
-  } else if ((j = clsAry.indexOf('rotate270')) >= 0) {
-    clsAry[j] = 'rotate180';
-  } else if ((j = clsAry.indexOf('rotate180')) >= 0) {
+  if ((j = clsAry.indexOf('rotate270')) >= 0) {
     clsAry[j] = '';
   } else {
-    clsAry.push('rotate90');
+    clsAry.push('rotate270');
   }
   viewer.style.display = 'none';
   viewer.className = clsAry.join(' ');
