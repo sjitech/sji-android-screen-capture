@@ -19,14 +19,14 @@
   <form class="toolbar" style="width: 100%; text-align: center; position: fixed; top: 0; left: 0">
     <input type="hidden" name="adminKey" value="#adminKey"/>
 
-    <button type="submit">Using</button>
+    <button type="submit">Set Video</button>
     <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
       Rate<input type="text" name="fps" size="2" value="@fps"/>
     </label>
     <label class="infoWithTip" title="Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
       Scale<input type="text" name="scale" size="10" value="@scale"/>
     </label>
-    <label>Rotate
+    <label title="live view or recording at this degree">Rotate
       <select name="rotate">
         <option value="" title="portrait">0°</option>
         <option value="270" title="landscape">-90°</option>
