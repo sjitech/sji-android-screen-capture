@@ -52,6 +52,7 @@ function __setTouchHandler(htmlImgElement) {
   ;
 
   var evtAry = [];
+  var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
 
   function saveOrSendMouseAction(e) {
     if (e.offsetX === undefined) {
@@ -62,12 +63,32 @@ function __setTouchHandler(htmlImgElement) {
     }
     var vw = $htmlImgElement.outerWidth();
     var vh = $htmlImgElement.outerHeight();
-    if (vw < vh) {
-      e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
-      e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+    if (isFirefox) {
+      if (htmlImgElement.className.split(/ +/).indexOf('rotate270') < 0) {
+        if (vw < vh) {
+          e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+          e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+        } else {
+          e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+          e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+        }
+      } else {
+        if (vw < vh) {
+          e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+          e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
+        } else {
+          e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
+          e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+        }
+      }
     } else {
-      e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
-      e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+      if (vw < vh) {
+        e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+        e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+      } else {
+        e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+        e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+      }
     }
     if (evtAry.length) {
       evtAry.push(e);
