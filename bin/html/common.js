@@ -60,8 +60,15 @@ function __setTouchHandler(htmlImgElement) {
     if (e.offsetY === undefined) {
       e.offsetY = e.clientY - $htmlImgElement.offset().top;
     }
-    e.xPer = Math.max(0, e.offsetX / $htmlImgElement.outerWidth());
-    e.yPer = Math.min(1, e.offsetY / $htmlImgElement.outerHeight());
+    var vw = $htmlImgElement.outerWidth();
+    var vh = $htmlImgElement.outerHeight();
+    if (vw < vh) {
+      e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+      e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+    } else {
+      e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+      e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+    }
     if (evtAry.length) {
       evtAry.push(e);
     } else {

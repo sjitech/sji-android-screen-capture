@@ -1887,12 +1887,11 @@ function startStreamWeb() {
         }
         break;
       case '/sendKey':
-        res.setHeader('Content-Type', 'text/json');
         if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
-          return end(res, JSON.stringify('device is not being live viewed'));
+          return end(res, 'error: device is not being live viewed');
         }
         spawn('[sendKey]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', '/system/bin/input', 'keyevent', q.keyCode));
-        return end(res, JSON.stringify('OK'));
+        return end(res, 'OK');
       default:
         end(res, 'bad request');
     }
