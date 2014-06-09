@@ -72,7 +72,7 @@ function spawn(logHead, _path, args, on_close, options) {
   childProc.once('error', function (err) {
     if (err.code === 'ENOENT') {
       var hasDir = containsDir(_path);
-      var hint = hasDir ? '' : ', Please use full path or add adb\'s dir to `PATH` environment variable';
+      var hint = hasDir ? '' : ', Please use full path or add the executable file\'s dir to `PATH` environment variable';
       err = 'Error ENOENT(file is not found' + (hasDir ? '' : ' in dir list defined by PATH environment variable') + '). File: ' + _path + hint;
       childProc.__processNotStarted = true;
     } else if (err.code === 'EACCES') {
@@ -392,7 +392,7 @@ function checkAdb(on_complete) {
   log('[CheckAdb]Full path of "Android Debug Bridge" is "' + searchInPath(conf.adb) + '"');
   spawn('[CheckAdb]', conf.adb, ['version'], function/*on_close*/(ret, stdout, stderr) {
     if (ret !== 0 || stderr) {
-      log('Failed to check "Android Debug Bridge". Please check log', {stderr: true});
+      log('Failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add adb\'s dir into PATH env var or set full path of ffmpeg to stream.json conf.adb', {stderr: true});
       return process.exit(1);
     }
     return on_complete();
@@ -409,7 +409,7 @@ function checkFfmpeg(on_complete) {
     if (ret !== 0 || stderr) {
       log('Failed to check FFMPEG (for this machine, not for Android device).' +
           ' You will not be able to convert recorded video to other format.' +
-          ' Please install it from "http://www.ffmpeg.org/download.html". Please check log', {stderr: true});
+          ' Please install it from "http://www.ffmpeg.org/download.html" and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to stream.json conf.ffmpeg', {stderr: true});
     } else {
       checkFfmpeg.success = true;
     }
