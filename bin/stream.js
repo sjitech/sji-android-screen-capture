@@ -1890,8 +1890,23 @@ function startStreamWeb() {
         if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
           return end(res, 'error: device is not being live viewed');
         }
+        if (chkerrRequired('keyCode', q.keyCode, ['3', '4', '82', '26'])) {
+          return end(res, chkerr);
+        }
         spawn('[sendKey]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', '/system/bin/input', 'keyevent', q.keyCode));
         return end(res, 'OK');
+        break;
+      case '/setOrientation':
+        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
+          return end(res, 'error: device is not being live viewed');
+        }
+        if (chkerrRequired('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
+          return end(res, chkerr);
+        }
+        spawn('[setOrientation]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd ' + ANDROID_WORK_DIR + '; (pm path jp.sji.sumatium.tool.screenorientation | ./busybox grep -qF package:) || (pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk | ./busybox grep -xF Success) && (am 2>&1 | ./busybox grep -qF -- --user && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ' --user 0 || am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ')'), function/*on_close*/(ret, stdout, stderr) {
+          end(res, (ret !== 0 || stderr) ? (toErrSentence(stderr) || 'internal error') : stdout.match(/Starting service: Intent/i) ? 'OK' : (toErrSentence(stdout) || 'unknown error'));
+        });
+        break;
       default:
         end(res, 'bad request');
     }
@@ -2563,7 +2578,7 @@ process.on('uncaughtException', function (err) {
 
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0, logTouchCmdDetail: 0,
-    playerId: 0, range: 0, as: 0, asHtml5Video: 0,
+    playerId: 0, range: 0, as: 0, asHtml5Video: 0, orientation: 0,
     action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0, x: 0, y: 0, stack: 0});
 }
 

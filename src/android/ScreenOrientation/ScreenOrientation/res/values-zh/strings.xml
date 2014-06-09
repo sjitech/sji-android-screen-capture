@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">屏幕方向</string>
+    <string name="notify_title">屏幕方向锁定中</string>
+    <string name="notify_content">点击一下就可以解除。</string>
+    
+</resources>

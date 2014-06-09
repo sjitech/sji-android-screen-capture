@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Screen orientation</string>
+    <string name="notify_title">Screen orientation is being locked</string>
+    <string name="notify_content">Tap to unlock.</string>
+    
+</resources>

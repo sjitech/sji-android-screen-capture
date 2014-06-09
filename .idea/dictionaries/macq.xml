@@ -69,6 +69,7 @@
       <w>rfile</w>
       <w>rotatescale</w>
       <w>safarai</w>
+      <w>screenorientation</w>
       <w>screenshot</w>
       <w>seekable</w>
       <w>sendevent</w>
@@ -77,8 +78,10 @@
       <w>sigpipe</w>
       <w>sjiasc</w>
       <w>smark</w>
+      <w>startservice</w>
       <w>stdin</w>
       <w>stty</w>
+      <w>sumatium</w>
       <w>sumsung</w>
       <w>typemark</w>
       <w>unregister</w>
