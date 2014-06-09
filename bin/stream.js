@@ -1,4 +1,5 @@
 'use strict';
+var old_work_dir = process.cwd();
 process.chdir(__dirname); //set dir of current file as working dir
 
 //************************import module  *************************************************
@@ -10,7 +11,7 @@ var child_process = require('child_process'),
     jsonFile = require('./node_modules/jsonFile.js'),
     logger = require('./node_modules/logger.js');
 
-var conf = jsonFile.parse('./stream.json');
+var conf = jsonFile.parse(process.argv[2] ? Path.resolve(old_work_dir, process.argv[2]) : './stream.json');
 var log = logger.create(conf ? conf.log : null);
 log('===================================pid:' + process.pid + '=======================================');
 if (!conf) {

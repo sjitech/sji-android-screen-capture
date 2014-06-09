@@ -32,11 +32,15 @@ If you want to always record as H.264/MP4 or WebM video format, you need <a href
 To simplify other settings, you'd better put the directory of adb and local ffmpeg into PATH environment variable otherwise you need put the fullpath of them into "adb" and "ffmpeg" settings in stream.json file.
 <br/><br/>
 2.<b>Start Android Screen Capture (include a video stream server) on PC</b>
-<pre><code>cd path_of_this_project/bin  
-node stream.js
+<pre><code>
+node dir_of_this_project/bin/stream.js
 </code></pre>
-You can edit configuration file <a href="https://raw.github.com/sjitech/sji-android-screen-capture/master/bin/stream.json">stream.json</a> to change IP, port, SSL...  
+You can edit configuration file <a href="https://raw.github.com/sjitech/sji-android-screen-capture/master/bin/stream.json">stream.json</a> to change IP, port, SSL...
 <br/><br/>
+Or you can specify your own configuration file which can be copied from config.json file in this dir.
+<pre><code>
+node dir_of_this_project/bin/stream.js dir_of_your_config/myConfig.json
+</code></pre>
 3.<b>Show video/animated image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br/>
 Support <a href="http://www.webmproject.org/">WebM</a> video and <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
 Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
