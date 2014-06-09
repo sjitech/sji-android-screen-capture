@@ -125,7 +125,7 @@ function __setTouchHandler(htmlImgElement) {
   }
 }
 
-function rotateLocally(viewer) {
+function rotateLocally(viewer, viewerContainer) {
   'use strict';
   var j, clsAry = viewer.className.split(/ +/);
   if ((j = clsAry.indexOf('rotate270')) >= 0) {
@@ -133,6 +133,11 @@ function rotateLocally(viewer) {
   } else {
     clsAry.push('rotate270');
   }
+  var $viewerContainer = $(viewerContainer);
+  var w = $viewerContainer.outerWidth();
+  var h = $viewerContainer.outerHeight();
+  $viewerContainer.width(h);
+  $viewerContainer.height(w);
   viewer.style.display = 'none';
   viewer.className = clsAry.join(' ');
   viewer.style.display = '';

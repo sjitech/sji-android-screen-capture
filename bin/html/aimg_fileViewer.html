@@ -41,7 +41,7 @@
     </div>
     <iframe class="toolbar" name="resultIFrame"></iframe>
     <div style="float: right; text-align: right">
-      <div><button onclick="rotateLocally(document.getElementById('viewer'))">Rotate Locally</button></div>
+      <div><button onclick="rotateLocally(document.getElementById('viewer'), document.getElementById('viewerContainer'))">Rotate Locally</button></div>
       <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
       <div class="expandable" style="background-color: inherit; border: none; padding-right: 4px">
         <div style="width: 40px; padding-right: 6px">Rate</div>
@@ -61,9 +61,12 @@
       </div>
     </div>
   </div>
-  <div id="viewerContainer" style="margin-top: 56px">
+  <table id="viewerContainer" align="center" style="margin-top: 56px">
+    <tr><td align="center">
     <img id="viewer" src="/playRecordedFile?unprotect&device=@device&accessKey=@accessKey&filename=@origFilename&fps=@fps&playerId=@playerId"/>
-  </div>
+    </td></tr>
+  </table>
+  <script src="jquery-2.0.3.js" type="text/javascript"></script>
   <script src="common.js" type="text/javascript"></script>
 </body>
 </html>
