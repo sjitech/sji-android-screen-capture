@@ -1,6 +1,6 @@
 .DS_Store
-src/ffmpeg_src
-src/*.bz2
+src/android/ffmpeg/ffmpeg_src
+src/android/ffmpeg/*.bz2
 test*
 out/*
 log/*

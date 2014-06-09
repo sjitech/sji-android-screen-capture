@@ -46,6 +46,6 @@ make clean
 make all || exit 1
 make install || exit 1
 
-cp -fv ./qj_armv7/bin/ffmpeg $OLD_DIR/../bin/android/ffmpeg.armv7 || exit 1
+cp -fv ./qj_armv7/bin/ffmpeg $OLD_DIR/../../../bin/android/ffmpeg.armv7 || exit 1
 
 echo ""; echo ok; echo ""
