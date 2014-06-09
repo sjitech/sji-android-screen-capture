@@ -64,7 +64,7 @@ function __setTouchHandler(htmlImgElement) {
     var vw = $htmlImgElement.outerWidth();
     var vh = $htmlImgElement.outerHeight();
     if (isFirefox) {
-      if (htmlImgElement.className.split(/ +/).indexOf('rotate270') < 0) {
+      if ($htmlImgElement.css('transform').indexOf('matrix') < 0) {
         if (vw < vh) {
           e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
           e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
