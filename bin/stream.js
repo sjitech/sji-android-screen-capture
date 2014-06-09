@@ -1007,10 +1007,10 @@ function playOrDownloadRecordedFile(httpOutputStream, q, forDownload, range) {
     }
     if (range && stats.size) { //------------------ support partial data request ---------------------
       res.setHeader('Accept-Ranges', 'bytes');
-      range.start = Math.min(Math.max(Number(range.start), 0), stats.size) || 0;
-      range.end = Math.min(Math.max(Number(range.end), range.start), stats.size) || stats.size;
-      res.setHeader('Content-Range', 'bytes ' + range.start + '-' + (range.end - 1) + '/' + stats.size);
-      res.setHeader('Content-Length', range.end - range.start);
+      range.start = Math.min(Math.max(Number(range.start), 0), stats.size - 1) || 0;
+      range.end = Math.min(Math.max(Number(range.end), range.start), stats.size - 1) || (stats.size - 1);
+      res.setHeader('Content-Range', 'bytes ' + range.start + '-' + range.end + '/' + stats.size);
+      res.setHeader('Content-Length', range.end - range.start + 1);
     } else {
       res.setHeader('Content-Length', stats.size);
       range = undefined;
@@ -1676,7 +1676,7 @@ function startStreamWeb() {
         if (req.headers.range) {
           var match = req.headers.range.match(/^bytes=(\d*)-(\d*)$/i);
           if (match) {
-            range = {start: match[1] ? Number(match[1]) : 0, end: match[2] ? Number(match[2]) + 1 : undefined};
+            range = {start: match[1] ? Number(match[1]) : 0, end: match[2] ? Number(match[2]) : undefined};
           }
         }
         playOrDownloadRecordedFile(res, q, forDownload, range);
