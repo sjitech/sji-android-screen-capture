@@ -696,7 +696,7 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         }
         provider = dev.liveStreamer || (dev.liveStreamer = createCaptureProvider());
       } else { //stop current and start new if current live capture is not reusable for me
-        forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another incompatible live capture is going to run');
+        forEachValueIn(dev.liveStreamer.consumerMap, endCaptureConsumer, 'another incompatible live capture is going to run'/*this string is used by other code*/);
         provider = dev.liveStreamer = createCaptureProvider();
       }
     } else { //there is no existing capture running or preparing
@@ -867,6 +867,21 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   }
 
   if (Object.keys(consumerMap).length === 0) {
+    if (reason === 'another incompatible live capture is going to run' && provider.pid) {
+      exitCaptureProcess();
+    } else {
+      log(provider.logHead + 'delay kill capture process');
+      setTimeout(function () {
+        if (Object.keys(consumerMap).length === 0) {
+          exitCaptureProcess();
+        } else {
+          log(provider.logHead + 'capture process revival due to consumer came in');
+        }
+      }, 1500);
+    }
+  }
+
+  function exitCaptureProcess() {
     if (provider === provider.dev.liveStreamer) {
       log(provider.logHead + 'detach this live streamer');
       provider.dev.liveStreamer = null;
@@ -1248,25 +1263,23 @@ function updateLiveCaptureStatusUI() {
 
       forEachValueIn(devMgr, function (dev, device) {
         var qdevice = htmlIdEncode(device);
-        var haveLiveCapture = 0;
+        var liveCaptureRecorderCount = 0;
         Object.keys(aimgTypeSet).forEach(function (type) {
           var liveViewerCount = 0, recordingCount = 0;
-          if (dev.liveStreamer) {
-            haveLiveCapture = true;
-            if (dev.liveStreamer.type === type) {
-              forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
-                if (res.filename) {
-                  recordingCount += 1;
-                } else {
-                  liveViewerCount += 1;
-                }
-              });
-            }
+          if (dev.liveStreamer && dev.liveStreamer.type === type) {
+            forEachValueIn(dev.liveStreamer.consumerMap, function (res) {
+              if (res.filename) {
+                recordingCount += 1;
+              } else {
+                liveViewerCount += 1;
+              }
+            });
           }
+          liveCaptureRecorderCount += recordingCount + liveViewerCount;
           sd['liveViewCount_' + type + '_' + qdevice] = liveViewerCount ? '(' + liveViewerCount + ')' : '';
           sd['recordingIndicator_' + type + '_' + qdevice] = recordingCount ? '(1)' : '';
         });
-        sd['hasLiveCapture_' + qdevice] = haveLiveCapture;
+        sd['liveCaptureRecorderCount_' + qdevice] = liveCaptureRecorderCount;
       });
 
       if ((json = JSON.stringify(sd)) !== status.lastDataJson) {

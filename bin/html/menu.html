@@ -380,7 +380,7 @@
             if (theElement) {
               $(theElement).text(text);
             } else {
-              var match = elementId.match(/^hasLiveCapture_(.+)$/);
+              var match = elementId.match(/^liveCaptureRecorderCount_(.+)$/);
               if (match) {
                 var cls = 'liveCaptureRelatedCommand_' + match[1]/*SN*/;
                 if (text) {
