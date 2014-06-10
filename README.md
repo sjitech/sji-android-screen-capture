@@ -4,12 +4,12 @@ This project is aimed to provide a fast way to capture android screen and view,r
 <b>No Root Required: You need NOT root your android device)</b><br/>
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second).
 And it's low bandwidth usage (typically 150,000 bytes/second).
-This product will do encoding in host and android by <a href="http://ffmpeg.org/">ffmpeg</a>.
+This product will do encoding in host and android by <a href="http://www.ffmpeg.org/download.html">ffmpeg</a>.
 Support Chrome, Firefox, Safari. Windows/Linux/Unix
 <pre><code><a href="http://youtu.be/CWcOjzAJ6Sg">recorded video sample( converted by youtube)</a>  
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
 
-<b>New</b>: Recorded file can be auto converted to <b>H.264/MP4</b> and <b>WebM</b> video format if you'v installed ffmpeg in local PC. Recommend use ffmpeg-2.0.1<br/>
+<b>New</b>: Recorded file can be auto converted to <b>H.264/MP4</b> and <b>WebM</b> video format if you'v installed ffmpeg in local PC.<br/>
 <b>New</b>: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 4+ and 2.3)<br/>
 
 [Screenshot]
