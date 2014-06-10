@@ -915,6 +915,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           }
           args.push('-i', '-'); //from stdin
           //------------------------now make output parameters------------------------
+          args.push('-pix_fmt', 'yuv420p'); //for safari mp4
           args.push(outputDirSlash + filename + '.mp4');
           args.push(outputDirSlash + filename + '.webm');
 
