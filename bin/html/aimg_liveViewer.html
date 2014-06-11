@@ -37,8 +37,8 @@
     <iframe class="toolbar" name="resultIFrame"></iframe>
   </div>
   <div style="position: fixed; right: 0; top: 62px; text-align: right">
-    <div><button onclick="SumatiumUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
-    <div><button onclick="SumatiumUtil.scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
+    <div><button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
+    <div><button onclick="AscUtil.scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
     <div style="height:12px">&nbsp;</div>
     <div>Device Keyboard:</div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=26" target="resultIFrame">Power Key</a></div>
@@ -99,7 +99,7 @@
   <script src="jquery-2.0.3.js" type="text/javascript"></script>
   <script src="common.js" type="text/javascript"></script>
   <script>
-    SumatiumUtil.setTouchHandler(document.getElementById('viewer'), '/touch?device=@device&accessKey=@accessKey');
+    AscUtil.setTouchHandler(document.getElementById('viewer'), '/touch?device=@device&accessKey=@accessKey');
   </script>
 </body>
 </html>

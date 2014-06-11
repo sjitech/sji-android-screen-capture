@@ -1,9 +1,9 @@
-var SumatiumUtil = {};
+var AscUtil = {};
 
 
 (function () {
   'use strict';
-  SumatiumUtil.setTouchHandler = function (liveView, touchServerUrl) {
+  AscUtil.setTouchHandler = function (liveView, touchServerUrl) {
     setTimeout(function () {
       __prepareTouchServer(touchServerUrl, function/*on_ok*/() {
         liveView.touchServerUrl = touchServerUrl;
@@ -130,7 +130,7 @@ var SumatiumUtil = {};
     }
   };
 
-  SumatiumUtil.rotateChildLocally = function (targetContainer) {
+  AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
     $c.css({width: $c.outerHeight() + 'px', height: $c.outerWidth() + 'px', 'text-align': 'left', 'vertical-align': 'top'});
     if ($v.css('transform').indexOf('matrix') < 0) {
@@ -140,7 +140,7 @@ var SumatiumUtil = {};
     }
   };
 
-  SumatiumUtil.scaleLocally = function (target) {
+  AscUtil.scaleLocally = function (target) {
     var $v = $(target);
     if ($v.css('transform').indexOf('matrix') < 0) {
       $v.css({'transform': 'scale(0.5, 0.5) translate(0, -50%)'});
