@@ -126,27 +126,20 @@ function __setTouchHandler(htmlImgElement) {
 }
 
 function rotateFirstChildItemOf(targetContainer) {
-  'use strict';
   var $c = $(targetContainer), $v = $c.children(0);
   $c.css({width: $c.outerHeight() + 'px', height: $c.outerWidth() + 'px', 'text-align': 'left', 'vertical-align': 'top'});
   if ($v.css('transform').indexOf('matrix') < 0) {
     $v.css({'transform-origin': '0 0', 'transform': 'rotate(270deg) translate(-100%,0)'});
   } else {
     $v.css({'transform': ''});
-  };
+  }
 }
 
-function scaleLocally(viewerContainer) {
-  'use strict';
-  var j, clsAry = viewerContainer.className.split(/ +/);
-  if ((j = clsAry.indexOf('scale50')) >= 0) {
-    clsAry[j] = 'scale25';
-  } else if ((j = clsAry.indexOf('scale25')) >= 0) {
-    clsAry[j] = '';
+function scaleLocally(target) {
+  var $v = $(target)
+  if ($v.css('transform').indexOf('matrix') < 0) {
+    $v.css({'transform': 'scale(0.5, 0.5) translate(0, -50%)'});
   } else {
-    clsAry.push('scale50');
+    $v.css({'transform': ''});
   }
-  viewerContainer.style.display = 'none';
-  viewerContainer.className = clsAry.join(' ');
-  viewerContainer.style.display = '';
 }
