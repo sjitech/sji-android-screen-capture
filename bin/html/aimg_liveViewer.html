@@ -37,7 +37,7 @@
     <iframe class="toolbar" name="resultIFrame"></iframe>
   </div>
   <div style="position: fixed; right: 0; top: 62px; text-align: right">
-    <div><button onclick="rotateLocally(document.getElementById('viewer'), document.getElementById('viewerContainer'))">Rotate Locally</button></div>
+    <div><button onclick="rotateFirstChildItemOf(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
     <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
     <div style="height:12px">&nbsp;</div>
     <div>Device Keyboard:</div>
@@ -52,9 +52,11 @@
     <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame">Portrait</a></div>
     <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame">Free</a></div>
   </div>
-  <table id="viewerContainer" align="center" style="margin-top: 62px">
+  <table align="center" style="margin-top: 62px">
     <tr><td align="center">
-      <img id="viewer" src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate"/>
+      <div id="viewerContainer">
+        <img id="viewer" src="/capture?device=@device&accessKey=@accessKey&type=@type&fps=@fps&scale=@scale&rotate=@rotate"/>
+      </div>
     </td></tr>
   </table>
   <div class="expandable" style="position: fixed; bottom: 1px; left: 1px">
