@@ -43,21 +43,20 @@
     <div style="float: right; text-align: right">
       <div><button onclick="rotateFirstChildItemOf(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
       <div><button onclick="scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
-      <div class="expandable" style="background-color: inherit; border: none; padding-right: 4px">
-        <div style="width: 40px; padding-right: 6px">Rate</div>
-        <div>
-          <form class="toolbar">
-            <input type="hidden" name="device" value="#device"/>
-            <input type="hidden" name="accessKey" value="#accessKey"/>
-            <input type="hidden" name="adminKey" value="#adminKey"/>
-            <input type="hidden" name="filename" value="@origFilename"/>
+      <div>&nbsp;</div>
+      <div>Playback Rate</div>
+      <div>
+        <form class="toolbar">
+          <input type="hidden" name="device" value="#device"/>
+          <input type="hidden" name="accessKey" value="#accessKey"/>
+          <input type="hidden" name="adminKey" value="#adminKey"/>
+          <input type="hidden" name="filename" value="@origFilename"/>
 
-            <button type="submit">Using</button>
-            <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
-              Rate<input type="text" name="fps" size="3" value="@fps"/>
-            </label>
-          </form>
-        </div>
+          <button type="submit">Using</button>
+          <label class="infoWithTip" title="Frames per Second. @MIN_FPS >= value <= @MAX_FPS">
+            Rate<input type="text" name="fps" size="3" value="@fps"/>
+          </label>
+        </form>
       </div>
     </div>
   </div>
