@@ -1,145 +1,151 @@
-function setTouchHandler(htmlImgElement, touchServerUrl) {
-  setTimeout(function () {
-    __prepareTouchServer(touchServerUrl, function/*on_ok*/() {
-      htmlImgElement.touchServerUrl = touchServerUrl;
-      if (!htmlImgElement.didInitEventHandler) {
-        htmlImgElement.didInitEventHandler = true;
-        __setTouchHandler(htmlImgElement);
-      }
-    }, 10/*retry times*/);
-  }, 100);
-}
+var SumatiumUtil = {};
 
-function __prepareTouchServer(touchServerUrl, on_ok, retryCounter) {
-  console.log('prepare touch server');
-  $.ajax(touchServerUrl, {timeout: 10 * 1000})
-      .done(function (result) {
-        console.log('prepare touch server result: ' + result);
-        if (result === 'OK') {
-          on_ok();
-        } else if (result === 'preparing' || result === 'device is not being live viewed') {
-          if (retryCounter >= 2) {
-            setTimeout(function () {
-              __prepareTouchServer(touchServerUrl, on_ok, retryCounter - 1);
-            }, 500);
-          }
+
+(function () {
+  'use strict';
+  SumatiumUtil.setTouchHandler = function (liveView, touchServerUrl) {
+    setTimeout(function () {
+      __prepareTouchServer(touchServerUrl, function/*on_ok*/() {
+        liveView.touchServerUrl = touchServerUrl;
+        if (!liveView.didInitEventHandler) {
+          liveView.didInitEventHandler = true;
+          __setTouchHandler(liveView);
         }
-      })
-      .fail(function (jqXHR, textStatus) {
-        console.log('prepare touch server error: ' + textStatus);
-      });
-}
+      }, 10/*retry times*/);
+    }, 100);
 
-function __setTouchHandler(htmlImgElement) {
-  var $htmlImgElement = $(htmlImgElement);
-  $htmlImgElement
-      .on('mousedown', function (e) {
-        saveOrSendMouseAction(e);
-        $htmlImgElement.mousemove(function (e) {
-          saveOrSendMouseAction(e);
-        }).mouseout(function (e) {
-              saveOrSendMouseAction(e);
-              $htmlImgElement.unbind('mousemove').unbind('mouseout');
-            });
-      })
-      .on('mouseup', function (e) {
-        saveOrSendMouseAction(e);
-        $htmlImgElement.unbind('mousemove').unbind('mouseout');
-      })
-      .on('dragstart', function () {
-        return false; //disable drag
-      })
-  ;
-
-  var evtAry = [];
-  var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
-
-  function saveOrSendMouseAction(e) {
-    if (e.offsetX === undefined) {
-      e.offsetX = e.clientX - $htmlImgElement.offset().left;
-    }
-    if (e.offsetY === undefined) {
-      e.offsetY = e.clientY - $htmlImgElement.offset().top;
-    }
-    var vw = $htmlImgElement.outerWidth();
-    var vh = $htmlImgElement.outerHeight();
-    if (isFirefox) {
-      if ($htmlImgElement.css('transform').indexOf('matrix') < 0) {
-        if (vw < vh) {
-          e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
-          e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
-        } else {
-          e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
-          e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
-        }
-      } else {
-        if (vw < vh) {
-          e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
-          e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
-        } else {
-          e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
-          e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
-        }
-      }
-    } else {
-      if (vw < vh) {
-        e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
-        e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
-      } else {
-        e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
-        e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
-      }
-    }
-    if (evtAry.length) {
-      evtAry.push(e);
-    } else {
-      sendMouseAction(e);
-    }
-  }
-
-  function sendMouseAction(e) {
-    console.log('send touch event: ' + e.type + ' ' + e.xPer + ' ' + e.yPer);
-    $.ajax(htmlImgElement.touchServerUrl + '&type=' + e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/ + '&x=' + e.xPer + '&y=' + e.yPer,
-        {timeout: 2000})
-        .done(function () {
-          if ((e = evtAry.shift())) {
-            if (e.type === 'mousemove') {
-              //get latest mousemove
-              var _e = e;
-              do {
-                if (_e.type === 'mousemove') {
-                  e = _e;
-                } else {
-                  break;
-                }
+    function __prepareTouchServer(touchServerUrl, on_ok, retryCounter) {
+      console.log('prepare touch server');
+      $.ajax(touchServerUrl, {timeout: 10 * 1000})
+          .done(function (result) {
+            console.log('prepare touch server result: ' + result);
+            if (result === 'OK') {
+              on_ok();
+            } else if (result === 'preparing' || result === 'device is not being live viewed') {
+              if (retryCounter >= 2) {
+                setTimeout(function () {
+                  __prepareTouchServer(touchServerUrl, on_ok, retryCounter - 1);
+                }, 500);
               }
-              while ((_e = evtAry.shift()));
             }
-            sendMouseAction(e);
+          })
+          .fail(function (jqXHR, textStatus) {
+            console.log('prepare touch server error: ' + textStatus);
+          });
+    }
+
+    function __setTouchHandler(liveView) {
+      var evtAry = [];
+      var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
+
+      var $liveView = $(liveView);
+      $liveView
+          .on('mousedown', function (e) {
+            saveOrSendMouseAction(e);
+            $liveView.mousemove(function (e) {
+              saveOrSendMouseAction(e);
+            }).mouseout(function (e) {
+                  saveOrSendMouseAction(e);
+                  $liveView.unbind('mousemove').unbind('mouseout');
+                });
+          })
+          .on('mouseup', function (e) {
+            saveOrSendMouseAction(e);
+            $liveView.unbind('mousemove').unbind('mouseout');
+          })
+          .on('dragstart', function () {
+            return false; //disable drag
+          })
+      ;
+
+      function saveOrSendMouseAction(e) {
+        if (e.offsetX === undefined) {
+          e.offsetX = e.clientX - $liveView.offset().left;
+        }
+        if (e.offsetY === undefined) {
+          e.offsetY = e.clientY - $liveView.offset().top;
+        }
+        var vw = $liveView.outerWidth();
+        var vh = $liveView.outerHeight();
+        if (isFirefox) {
+          if ($liveView.css('transform').indexOf('matrix') < 0) {
+            if (vw < vh) {
+              e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+              e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+            } else {
+              e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+              e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+            }
+          } else {
+            if (vw < vh) {
+              e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+              e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
+            } else {
+              e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
+              e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+            }
           }
-        })
-        .fail(function (jqXHR, textStatus) {
-          console.log('send touch event error: ' + textStatus);
-          evtAry = [];
-        })
-  }
-}
+        } else {
+          if (vw < vh) {
+            e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+            e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+          } else {
+            e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+            e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
+          }
+        }
+        if (evtAry.length) {
+          evtAry.push(e);
+        } else {
+          sendMouseAction(e);
+        }
+      }
 
-function rotateFirstChildItemOf(targetContainer) {
-  var $c = $(targetContainer), $v = $c.children(0);
-  $c.css({width: $c.outerHeight() + 'px', height: $c.outerWidth() + 'px', 'text-align': 'left', 'vertical-align': 'top'});
-  if ($v.css('transform').indexOf('matrix') < 0) {
-    $v.css({'transform-origin': '0 0', 'transform': 'rotate(270deg) translate(-100%,0)'});
-  } else {
-    $v.css({'transform': ''});
-  }
-}
+      function sendMouseAction(e) {
+        console.log('send touch event: ' + e.type + ' ' + e.xPer + ' ' + e.yPer);
+        $.ajax(liveView.touchServerUrl + '&type=' + e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/ + '&x=' + e.xPer + '&y=' + e.yPer,
+            {timeout: 2000})
+            .done(function () {
+              if ((e = evtAry.shift())) {
+                if (e.type === 'mousemove') {
+                  //get latest mousemove
+                  var _e = e;
+                  do {
+                    if (_e.type === 'mousemove') {
+                      e = _e;
+                    } else {
+                      break;
+                    }
+                  }
+                  while ((_e = evtAry.shift()));
+                }
+                sendMouseAction(e);
+              }
+            })
+            .fail(function (jqXHR, textStatus) {
+              console.log('send touch event error: ' + textStatus);
+              evtAry = [];
+            })
+      }
+    }
+  };
 
-function scaleLocally(target) {
-  var $v = $(target)
-  if ($v.css('transform').indexOf('matrix') < 0) {
-    $v.css({'transform': 'scale(0.5, 0.5) translate(0, -50%)'});
-  } else {
-    $v.css({'transform': ''});
-  }
-}
+  SumatiumUtil.rotateChildLocally = function (targetContainer) {
+    var $c = $(targetContainer), $v = $c.children(0);
+    $c.css({width: $c.outerHeight() + 'px', height: $c.outerWidth() + 'px', 'text-align': 'left', 'vertical-align': 'top'});
+    if ($v.css('transform').indexOf('matrix') < 0) {
+      $v.css({'transform-origin': '0 0', 'transform': 'rotate(270deg) translate(-100%,0)'});
+    } else {
+      $v.css({'transform': ''});
+    }
+  };
+
+  SumatiumUtil.scaleLocally = function (target) {
+    var $v = $(target);
+    if ($v.css('transform').indexOf('matrix') < 0) {
+      $v.css({'transform': 'scale(0.5, 0.5) translate(0, -50%)'});
+    } else {
+      $v.css({'transform': ''});
+    }
+  };
+})();
