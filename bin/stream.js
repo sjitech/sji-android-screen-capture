@@ -1905,7 +1905,7 @@ function startStreamWeb() {
         if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
           return end(res, 'error: device is not being live viewed');
         }
-        if (chkerrRequired('keyCode', q.keyCode, ['3', '4', '82', '26'])) {
+        if (chkerrRequired('keyCode', q.keyCode, ['3', '4', '82', '26', '187'])) {
           return end(res, chkerr);
         }
         spawn('[sendKey]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', '/system/bin/input', 'keyevent', q.keyCode));
