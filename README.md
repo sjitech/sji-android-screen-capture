@@ -5,12 +5,12 @@ This project is aimed to provide a fast way to capture android screen and view,r
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second).
 And it's low bandwidth usage (typically 150,000 bytes/second).
 This product will do encoding in host and android by <a href="http://www.ffmpeg.org/download.html">ffmpeg</a>.
-Support Chrome, Firefox, Safari. Windows/Linux/Unix
+Support Chrome, Firefox, Safari. Windows/Mac/Linux/Unix
 <pre><code><a href="http://youtu.be/CWcOjzAJ6Sg">recorded video sample( converted by youtube)</a>  
 <a href="http://youtu.be/1wZYHHzMwQ8">Usage video</a></code></pre>
 
 <b>New</b>: Recorded file can be auto converted to <b>H.264/MP4</b> and <b>WebM</b> video format if you'v installed ffmpeg in local PC.<br/>
-<b>New</b>: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 4+ and 2.3)<br/>
+<b>New</b>: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 2.2~4.4)<br/>
 
 [Screenshot]
 
@@ -48,7 +48,7 @@ Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
 
 ===================
 [Note]  
-    Currently tested in android 4.2, 4.1, 4.0, 2.2, 2.3.  With PC Browser Chrome 33, Firefox 27, Safari 7.
+    Currently tested in android 2.2~4.4.  With PC Browser Chrome 33, Firefox 27, Safari 7.
     Host OS can be Windows/Mac/Linux (Unix should also be OK, but not tested).  
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.  
