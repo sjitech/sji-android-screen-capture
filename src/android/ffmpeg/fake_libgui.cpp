@@ -23,7 +23,7 @@ class ScreenshotClient
     uint32_t mHeight;
     PixelFormat mFormat;
     */
-    char data[64];
+    char data[64]; //please adjust this value when you copy ScreenshotClient definition to your real source
 public:
     ScreenshotClient();
 
@@ -37,6 +37,7 @@ public:
 
     uint32_t getWidth() const;
     uint32_t getHeight() const;
+    uint32_t getStride() const; //base + getStride()*bytesPerPixel will get start address of next row
     int32_t getFormat() const;
     // size of allocated memory in bytes
     size_t getSize() const;
@@ -70,6 +71,10 @@ uint32_t ScreenshotClient::getWidth() const {
 }
 uint32_t ScreenshotClient::getHeight() const {
     LOG("ScreenshotClient::getHeight()\n");
+    return 0;
+}
+uint32_t ScreenshotClient::getStride() const {
+    LOG("ScreenshotClient::getStride()\n");
     return 0;
 }
 int32_t ScreenshotClient::getFormat() const {

@@ -82,7 +82,7 @@ template <typename T> class sp {
 public:
     union{
         T* m_ptr;
-        char data[64];
+        char data[128];
     };
 };
 
@@ -95,7 +95,7 @@ class ScreenshotClient {
     uint32_t mHeight;
     PixelFormat mFormat;
     */
-    char data[1024];
+    char data[1024]; //android 4.2 embed CpuConsumer::LockedBuffer here which cause more space
 public:
     ScreenshotClient();
 
@@ -113,6 +113,7 @@ public:
 
     uint32_t getWidth() const;
     uint32_t getHeight() const;
+    uint32_t getStride() const; //base + getStride()*bytesPerPixel will get start address of next row
     int32_t getFormat() const;
     // size of allocated memory in bytes
     size_t getSize() const;
@@ -143,7 +144,7 @@ int main(int argc, char** argv) {
     bool isGetFormat = false;
     bool forceUseFbFormat = false;
     const char* tmps;
-    int width, height, bytesPerPixel;
+    int width, height, internal_width, bytesPerPixel;
 
     //for fb0
     int fb = -1;
@@ -220,11 +221,13 @@ int main(int argc, char** argv) {
             rawImageSize = screenshot.getSize();
             width = screenshot.getWidth();
             height = screenshot.getHeight();
-            bytesPerPixel = rawImageSize/width/height;
+            internal_width = screenshot.getStride();
+            bytesPerPixel = rawImageSize/internal_width/height;
+
             int fmt = screenshot.getFormat();
             if (count==1) {
-                LOG("ScreenshotClient.update result: imageSize:%d w:%d h:%d bytesPerPixel:%d fmt:%d",
-                 rawImageSize, width, height, bytesPerPixel, fmt);
+                LOG("ScreenshotClient.update result: imageSize:%d w:%d h:%d W:%d bytesPerPixel:%d fmt:%d",
+                 rawImageSize, width, height, internal_width, bytesPerPixel, fmt);
             }
 
             if (isGetFormat) {
@@ -253,6 +256,7 @@ int main(int argc, char** argv) {
 
             width = vinfo.xres;
             height = vinfo.yres;
+            internal_width = width;
             bytesPerPixel = vinfo.bits_per_pixel/8;
             rawImageSize = (width*height) * bytesPerPixel;
 
@@ -323,25 +327,31 @@ int main(int argc, char** argv) {
             LOG("rawImageSize:%d", rawImageSize);
         }
 
-        #define MAX_WRITE_SIZE (32*1024*1024)
-//        #define MAX_WRITE_SIZE (4*1024*1024)
-        int rest = rawImageSize;
-        int callCount = 0;
-        while (rest > 0) {
-            int request = rest <= MAX_WRITE_SIZE ? rest : MAX_WRITE_SIZE;
-            if (callCount > 0 ||request < rest) LOG("data is too big so try to write %d of rest %d", request, rest);
-            int bytesWritten = write(STDOUT_FILENO, rawImageData+(rawImageSize-rest), request);
-            if (bytesWritten < 0) {
-                ABORT("write() requested:%d", request);
-            } else if (bytesWritten < request) {
-                LOGERR("write() result:%d < requested:%d. Continue writing rest data", bytesWritten, request);
-            } else {
-//                if (callCount > 0) LOG("write %d OK", request);
+        char* base = rawImageData;
+        for (int y=0; y < height; y++) {
+            size_t sizeOfRow = width*bytesPerPixel;
+
+            #define MAX_WRITE_SIZE (4*1024*1024)
+            int rest = sizeOfRow;
+            int callCount = 0;
+            while (rest > 0) {
+                int request = rest <= MAX_WRITE_SIZE ? rest : MAX_WRITE_SIZE;
+                if (callCount > 0 ||request < rest) LOG("data is too big so try to write %d of rest %d", request, rest);
+                int bytesWritten = write(STDOUT_FILENO, base+(sizeOfRow-rest), request);
+                if (bytesWritten < 0) {
+                    ABORT("write() requested:%d", request);
+                } else if (bytesWritten < request) {
+                    LOGERR("write() result:%d < requested:%d. Continue writing rest data", bytesWritten, request);
+                } else {
+//                  if (callCount > 0) LOG("write %d OK", request);
+                }
+                rest -= bytesWritten;
+                callCount++;
             }
-            rest -= bytesWritten;
-            callCount++;
+            if (callCount > 1) LOG("write() finished. total:%d", sizeOfRow);
+
+            base += internal_width*bytesPerPixel;
         }
-        if (callCount > 1) LOG("write() finished. total:%d", rawImageSize);
 
         if (interval_mms==-1) {
             LOG("stop due to fps argument is 0");
