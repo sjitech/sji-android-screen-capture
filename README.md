@@ -19,7 +19,7 @@ Feel free to feedback with English/日本語/中国語!<br>
 Menu<br>
 <img src="doc/screenshot-menu.png" /><br>
 Live View<br>
-<img src="doc/screenshot-png.png" /><br>
+<img src="doc/liveview.png" /><br>
 Recorded Videos<br>
 <img src="doc/recorded.png" /><br>
 
