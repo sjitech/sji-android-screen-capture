@@ -132,11 +132,13 @@ var AscUtil = {};
 
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
-    $c.css({width: $c.outerHeight() + 'px', height: $c.outerWidth() + 'px', 'text-align': 'left', 'vertical-align': 'top'});
     if ($v.css('transform').indexOf('matrix') < 0) {
-      $v.css({'transform-origin': '0 0', 'transform': 'rotate(270deg) translate(-100%,0)'});
+      var w = $c.outerWidth(), h = $c.outerHeight();
+      $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', 'overflow': 'hidden'});
+      $v.css({'max-width': w, 'max-height': h, width: w, height: h, 'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
     } else {
-      $v.css({'transform': ''});
+      $v.css({'max-width': '', 'max-height': '', width: '', height: '', 'transform-origin': '', transform: ''});
+      $c.css({width: '', height: '', 'text-align': '', 'vertical-align': '', 'overflow': ''});
     }
   };
 
