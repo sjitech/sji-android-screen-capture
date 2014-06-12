@@ -4,88 +4,94 @@ var AscUtil = {};
 (function () {
   'use strict';
   AscUtil.setTouchHandler = function (liveView, touchServerUrl) {
-    setTimeout(function () {
-      __prepareTouchServer(touchServerUrl, function/*on_ok*/() {
-        liveView.touchServerUrl = touchServerUrl;
-        if (!liveView.didInitEventHandler) {
-          liveView.didInitEventHandler = true;
-          __setTouchHandler(liveView);
-        }
-      }, 10/*retry times*/);
-    }, 100);
+    liveView.asc_endTimeMsForInit = Date.now() + 30000; //set timeout
+    liveView.asc_touchServerUrl = touchServerUrl;
+    liveView.asc_logHead = '[dev ' + decodeURIComponent((liveView.asc_touchServerUrl.match(/[?&]device=([^&]+)/) || '  ')[1]) + '] ';
 
-    function __prepareTouchServer(touchServerUrl, on_ok, retryCounter) {
-      console.log('prepare touch server');
-      $.ajax(touchServerUrl, {timeout: 10 * 1000})
+    __setTouchHandler(liveView);
+
+    __prepareTouchServer();
+
+    var old_endTimeMsForInit = liveView.asc_endTimeMsForInit;
+
+    function __prepareTouchServer() {
+      console.log(liveView.asc_logHead + '[prepare touch] ...');
+      $.ajax(liveView.asc_touchServerUrl, {timeout: 10 * 1000})
           .done(function (result) {
-            console.log('prepare touch server result: ' + result);
+            if (liveView.asc_endTimeMsForInit !== old_endTimeMsForInit) {
+              console.log(liveView.asc_logHead + '[prepare touch] abandoned');
+              return;
+            }
             if (result === 'OK') {
-              on_ok();
+              console.info(liveView.asc_logHead + '[prepare touch] OK');
+
             } else if (result === 'preparing' || result === 'device is not being live viewed') {
-              if (retryCounter >= 2) {
-                setTimeout(function () {
-                  __prepareTouchServer(touchServerUrl, on_ok, retryCounter - 1);
-                }, 500);
+              if (Date.now() < liveView.asc_endTimeMsForInit) {
+                console.warn(liveView.asc_logHead + '[prepare touch] error: ' + result);
+                liveView.timerForSetTouchHandler = setTimeout(__prepareTouchServer, 250);
+              } else {
+                console.error(liveView.asc_logHead + '[prepare touch] final result: failed. last error: ' + result);
               }
+            } else {
+              console.error(liveView.asc_logHead + '[prepare touch] final result: failed. Last error: ' + result);
             }
           })
           .fail(function (jqXHR, textStatus) {
-            console.log('prepare touch server error: ' + textStatus);
-          });
+            if (liveView.asc_endTimeMsForInit !== old_endTimeMsForInit) {
+              console.log(liveView.asc_logHead + '[prepare touch] abandoned');
+              return;
+            }
+            if (Date.now() < liveView.asc_endTimeMsForInit) {
+              console.warn(liveView.asc_logHead + '[prepare touch] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
+              liveView.timerForSetTouchHandler = setTimeout(__prepareTouchServer, 1000);
+            } else {
+              console.error(liveView.asc_logHead + '[prepare touch] final result: failed. Last error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
+            }
+          })
     }
+  };
 
-    function __setTouchHandler(liveView) {
-      var evtAry = [];
-      var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
+  function __setTouchHandler(liveView) {
+    if (liveView.asc_initedTouchHandler) {
+      return;
+    }
+    liveView.asc_initedTouchHandler = true;
+    var evtAry = [];
+    var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
 
-      var $liveView = $(liveView);
-      $liveView
-          .on('mousedown', function (e) {
+    var $liveView = $(liveView);
+    $liveView
+        .on('mousedown', function (e) {
+          saveOrSendMouseAction(e);
+          $liveView.mousemove(function (e) {
             saveOrSendMouseAction(e);
-            $liveView.mousemove(function (e) {
-              saveOrSendMouseAction(e);
-            }).mouseout(function (e) {
-                  saveOrSendMouseAction(e);
-                  $liveView.unbind('mousemove').unbind('mouseout');
-                });
-          })
-          .on('mouseup', function (e) {
-            saveOrSendMouseAction(e);
-            $liveView.unbind('mousemove').unbind('mouseout');
-          })
-          .on('dragstart', function () {
-            return false; //disable drag
-          })
-      ;
+          }).mouseout(function (e) {
+                saveOrSendMouseAction(e);
+                $liveView.unbind('mousemove').unbind('mouseout');
+              });
+        })
+        .on('mouseup', function (e) {
+          saveOrSendMouseAction(e);
+          $liveView.unbind('mousemove').unbind('mouseout');
+        })
+        .on('dragstart', function () {
+          return false; //disable drag
+        })
+        .unbind('mousemove')
+        .unbind('mouseout')
+    ;
 
-      function saveOrSendMouseAction(e) {
-        if (e.offsetX === undefined) {
-          e.offsetX = e.clientX - $liveView.offset().left;
-        }
-        if (e.offsetY === undefined) {
-          e.offsetY = e.clientY - $liveView.offset().top;
-        }
-        var vw = $liveView.outerWidth();
-        var vh = $liveView.outerHeight();
-        if (isFirefox) {
-          if ($liveView.css('transform').indexOf('matrix') < 0) {
-            if (vw < vh) {
-              e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
-              e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
-            } else {
-              e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
-              e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
-            }
-          } else {
-            if (vw < vh) {
-              e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
-              e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
-            } else {
-              e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
-              e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
-            }
-          }
-        } else {
+    function saveOrSendMouseAction(e) {
+      if (e.offsetX === undefined) {
+        e.offsetX = e.clientX - $liveView.offset().left;
+      }
+      if (e.offsetY === undefined) {
+        e.offsetY = e.clientY - $liveView.offset().top;
+      }
+      var vw = $liveView.outerWidth();
+      var vh = $liveView.outerHeight();
+      if (isFirefox) {
+        if ($liveView.css('transform').indexOf('matrix') < 0) {
           if (vw < vh) {
             e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
             e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
@@ -93,42 +99,59 @@ var AscUtil = {};
             e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
             e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
           }
-        }
-        if (evtAry.length) {
-          evtAry.push(e);
         } else {
-          sendMouseAction(e);
+          if (vw < vh) {
+            e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+            e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
+          } else {
+            e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
+            e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
+          }
+        }
+      } else {
+        if (vw < vh) {
+          e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
+          e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
+        } else {
+          e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
+          e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
         }
       }
-
-      function sendMouseAction(e) {
-        console.log('send touch event: ' + e.type + ' ' + e.xPer + ' ' + e.yPer);
-        $.ajax(liveView.touchServerUrl + '&type=' + e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/ + '&x=' + e.xPer + '&y=' + e.yPer,
-            {timeout: 2000})
-            .done(function () {
-              if ((e = evtAry.shift())) {
-                if (e.type === 'mousemove') {
-                  //get latest mousemove
-                  var _e = e;
-                  do {
-                    if (_e.type === 'mousemove') {
-                      e = _e;
-                    } else {
-                      break;
-                    }
-                  }
-                  while ((_e = evtAry.shift()));
-                }
-                sendMouseAction(e);
-              }
-            })
-            .fail(function (jqXHR, textStatus) {
-              console.log('send touch event error: ' + textStatus);
-              evtAry = [];
-            })
+      if (evtAry.length) {
+        evtAry.push(e);
+      } else {
+        sendMouseAction(e);
       }
     }
-  };
+
+    function sendMouseAction(e) {
+      var type = e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/;
+      console.log(liveView.asc_logHead + '[send touch event] ' + type + ' ' + e.xPer + ' ' + e.yPer);
+      $.ajax(liveView.asc_touchServerUrl + '&type=' + type + '&x=' + e.xPer + '&y=' + e.yPer,
+          {timeout: 2000})
+          .done(function () {
+            if ((e = evtAry.shift())) {
+              if (e.type === 'mousemove') {
+                //get latest mousemove
+                var _e = e;
+                do {
+                  if (_e.type === 'mousemove') {
+                    e = _e;
+                  } else {
+                    break;
+                  }
+                }
+                while ((_e = evtAry.shift()));
+              }
+              sendMouseAction(e);
+            }
+          })
+          .fail(function (jqXHR, textStatus) {
+            console.error(liveView.asc_logHead + '[send touch event] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
+            evtAry = [];
+          })
+    }
+  }
 
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);

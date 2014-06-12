@@ -1880,7 +1880,7 @@ function startStreamWeb() {
         }
 
         if (dev.touchDevPath === undefined) {
-          end(res, JSON.stringify("re preparing"));
+          end(res, JSON.stringify("start preparing"));
           return prepareTouchServer();
         } else if (dev.touchDevPath === '') {
           end(res, JSON.stringify('preparing'));
