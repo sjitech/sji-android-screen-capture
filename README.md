@@ -1,4 +1,4 @@
-Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
+No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
 ===================
 This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.<br>
 <b>No Root Required: You need NOT root your android device)</b><br>
