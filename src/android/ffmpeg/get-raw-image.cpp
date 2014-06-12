@@ -75,7 +75,7 @@ static void on_SIGPIPE(int signum) {
 }
 
 // hack android OS head file
-#if defined(TARGET_ICS) || defined(TARGET_JB)
+#if defined(TARGET_ICS) || defined(TARGET_JB) //{
 namespace android {
 
 template <typename T> class sp {
@@ -127,7 +127,15 @@ public:
     static sp<IBinder> getBuiltInDisplay(int32_t id);
 };
 #endif
-}
+
+class ProcessState {
+    char data[1024]; //please adjust this value when you copy this definition to your real source!!!!!!!!!!!!!!!!!!!!!!!
+public:
+    static sp<ProcessState> self();
+    void startThreadPool();
+};
+
+} //end of namespace android
 
 using android::ScreenshotClient;
 using android::sp;
@@ -135,8 +143,9 @@ using android::IBinder;
 #if defined(TARGET_JB)
 using android::SurfaceComposerClient;
 #endif
+using android::ProcessState;
 
-#endif
+#endif //} end of "if defined(TARGET_ICS) || defined(TARGET_JB)"
 
 int main(int argc, char** argv) {
     LOG("start. pid %d", getpid());
@@ -170,6 +179,8 @@ int main(int argc, char** argv) {
     }
 
 #if defined(TARGET_JB) || defined(TARGET_ICS)
+    LOG("call ProcessState::self()->startThreadPool()");
+    ProcessState::self().m_ptr->startThreadPool();
     LOG("call ScreenshotClient init");
     ScreenshotClient screenshot;
 #endif

@@ -18,9 +18,10 @@ echo ---------------make get-raw-image--------------------
 gcc -x c -std=c99 $CFLAGS $LDFLAGS get-raw-image.cpp      -o ../../../bin/android/get-raw-image-old   -Xlinker -rpath=/system/lib || exit 1
 
 g++ $CFLAGS $LDFLAGS fake_libgui.cpp                      -o libgui.so                          -fPIC -shared || exit 1
-g++ $CFLAGS $LDFLAGS get-raw-image.cpp -lsupc++ libgui.so -o ../../../bin/android/get-raw-image-4.1.2 -Xlinker -rpath=/system/lib -DTARGET_JB || exit 1
-g++ $CFLAGS $LDFLAGS get-raw-image.cpp -lsupc++ libgui.so -o ../../../bin/android/get-raw-image-4     -Xlinker -rpath=/system/lib -DTARGET_ICS || exit 1
+g++ $CFLAGS $LDFLAGS fake_libbinder.cpp                   -o libbinder.so                       -fPIC -shared || exit 1
+g++ $CFLAGS $LDFLAGS get-raw-image.cpp -lsupc++ libgui.so libbinder.so -o ../../../bin/android/get-raw-image-4.1.2 -Xlinker -rpath=/system/lib -DTARGET_JB || exit 1
+g++ $CFLAGS $LDFLAGS get-raw-image.cpp -lsupc++ libgui.so libbinder.so -o ../../../bin/android/get-raw-image-4     -Xlinker -rpath=/system/lib -DTARGET_ICS || exit 1
 
-rm libgui.so
+rm libgui.so libbinder.so
 
 echo ""; echo ok; echo ""
