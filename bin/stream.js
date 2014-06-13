@@ -549,6 +549,105 @@ function prepareDeviceFile(device, on_complete) {
   });
 }
 
+function prepareTouchServer(dev) {
+  if (dev.touchStatus !== undefined) {
+    if (dev.touchStatus === 'OK') {
+      __prepareTouchServer(dev);
+    }
+    return;
+  }
+  dev.touchStatus = 'preparing';
+  spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -iS || getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr) {
+      dev.touchStatus = undefined;
+      log('[touch]******** failed to run adb');
+      return;
+    }
+    //add device 6: /dev/input/event8
+    //  bus:      0018
+    //  vendor    0000
+    //  product   0000
+    //  version   0000
+    //  name:     "Touchscreen"
+    //  location: "3-0048/input0"
+    //  id:       ""
+    //  version:  1.0.1
+    //  events:
+    //    ABS (0003): 002f  : value 9, min 0, max 9, fuzz 0, flat 0, resolution 0
+    //                0030  : value 0, min 0, max 30, fuzz 0, flat 0, resolution 0     //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+    //                0032  : value 0, min 0, max 30, fuzz 0, flat 0, resolution 0     //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+    //                0035  : value 0, min 0, max 719, fuzz 0, flat 0, resolution 0    //ABS_MT_POSITION_X  0x35 /* Center X ellipse position */
+    //                0036  : value 0, min 0, max 1279, fuzz 0, flat 0, resolution 0   //ABS_MT_POSITION_Y  0x36 /* Center Y ellipse position */
+    //                0039  : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0  //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+    //                003a  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0    //ABS_MT_PRESSURE    0x3a /* Pressure on contact area */
+    //  input props:
+    //    INPUT_PROP_DIRECT
+    dev.touchModernStyle = stdout.indexOf('INPUT_PROP_DIRECT') >= 0;
+
+    if (!stdout.split(/add device \d+: /).some(function (devInfo) {
+      var match = {};
+      if ((match['0030'] = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/)) && //ABS_MT_TOUCH_MAJOR
+          (match['0035'] = devInfo.match(/\D*0035.*value.*min.*max\D*(\d+)/)) && //ABS_MT_POSITION_X
+          (match['0036'] = devInfo.match(/\D*0036.*value.*min.*max\D*(\d+)/)) && //ABS_MT_POSITION_Y
+          (match['0039'] = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/)) && //ABS_MT_TRACKING_ID
+          true) {
+        if ((dev.touchModernStyle && devInfo.indexOf('INPUT_PROP_DIRECT') >= 0) ||
+            (!dev.touchModernStyle && !devInfo.match(/\n +name: +.*pen/))) {
+
+          dev.w = Math.floor((Number(match['0035'][1]) + 1) / 2) * 2;
+          dev.h = Math.floor((Number(match['0036'][1]) + 1) / 2) * 2;
+          if (!dev.w || !dev.h) {
+            log('[touch]******** strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
+          } else {
+            dev.touchAvgContactSize = Math.max(Math.ceil(match['0030'][1] / 2), 1);
+            dev.touchMaxTrackId = Number(match['0039'][1]);
+
+            if ((match = devInfo.match(/\D*003a.*value.*min.*max\D*(\d+)/))) { //ABS_MT_PRESSURE
+              dev.touchAvgPressure = Math.max(Math.ceil(match[1] / 2), 1);
+            }
+            if ((match = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/))) { //ABS_MT_WIDTH_MAJOR
+              dev.touchAvgFingerSize = Math.max(Math.ceil(match[1] / 2), 1);
+            }
+            if (devInfo.match(/\n +KEY.*:.*014a/)) { //BTN_TOUCH for sumsung devices
+              dev.touchNeedBtnTouchEvent = true;
+            }
+
+            dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
+            dev.touchStatus = 'OK';
+            log('[touch]******** got input device: ' + dev.touchDevPath + ' w=' + dev.w + ' h=' + dev.h + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
+            __prepareTouchServer(dev);
+            return true;
+          }
+        }
+      }
+      return false;
+    })) { //almost impossible
+      dev.touchStatus = 'not found touch device';
+      log('[touch]******** ' + dev.touchStatus);
+    }
+  });
+
+  function __prepareTouchServer(dev) {
+    if (!dev.touchShellStdin) {
+      var childProc = spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell'), null, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'ignore'/*stderr*/]});
+      childProc.on('close', function () {
+        dev.touchShellStdin = undefined;
+      });
+      childProc.stdin.on('error', function (err) {
+        log("[touch]failed to write touchServer.stdin. Error: " + err);
+      });
+      dev.touchShellStdin = childProc.stdin;
+    }
+  }
+}
+
+function installApkOnce(dev) {
+  if (!dev.didTryInstallApk) {
+    dev.didTryInstallApk = true;
+    spawn('[installApk]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
+  }
+}
+
 function chkerrCaptureParameter(q) {
   if (q.type === undefined && q.fps === undefined && q.scale === undefined && q.rotate === undefined) {
     //try to peek parameter of current live capture if not specified any parameter
@@ -1867,42 +1966,24 @@ function startStreamWeb() {
         break;
       case '/touch':
         res.setHeader('Content-Type', 'text/json');
-        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
+        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput || !Object.keys(dev.liveStreamer.consumerMap).length) {
           return end(res, JSON.stringify('device is not being live viewed'));
-        }
-        if (!q.type) {
-          return prepareTouchServer();
         }
         if (chkerrRequired('type', q.type, ['d', 'u', 'o', 'm']) ||
             chkerrRequired('x', q.x = Number(q.x), 0, 1) ||
             chkerrRequired('x', q.y = Number(q.y), 0, 1)) {
           return end(res, JSON.stringify(chkerr));
         }
-
-        if (dev.touchDevPath === undefined) {
-          end(res, JSON.stringify("start preparing"));
-          return prepareTouchServer();
-        } else if (dev.touchDevPath === '') {
-          end(res, JSON.stringify('preparing'));
-        } else if (dev.touchDevPath === null) {
-          end(res, JSON.stringify('failed to get touch device'));
+        if (dev.touchStatus !== 'OK') {
+          end(res, JSON.stringify(dev.touchStatus));
         } else {
-          if (!dev.touchShellStdin) {
-            var childProc = spawn('[touch]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell'), null, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'ignore'/*stderr*/]});
-            childProc.on('close', function () {
-              dev.touchShellStdin = undefined;
-            });
-            childProc.stdin.on('error', function (err) {
-              log("[touch]failed to write touchServer.stdin. Error: " + err);
-            });
-            dev.touchShellStdin = childProc.stdin;
-          }
+          prepareTouchServer(dev); //ensure adb shell is waiting for command
           sendTouchEvent();
           end(res, JSON.stringify('OK'));
         }
         break;
       case '/sendKey':
-        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
+        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput || !Object.keys(dev.liveStreamer.consumerMap).length) {
           return end(res, 'error: device is not being live viewed');
         }
         if (chkerrRequired('keyCode', q.keyCode, ['3', '4', '82', '26', '187'])) {
@@ -1912,13 +1993,13 @@ function startStreamWeb() {
         return end(res, 'OK');
         break;
       case '/setOrientation':
-        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput) {
+        if (!dev || !dev.liveStreamer || !dev.liveStreamer.didOutput || !Object.keys(dev.liveStreamer.consumerMap).length) {
           return end(res, 'error: device is not being live viewed');
         }
         if (chkerrRequired('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
           return end(res, chkerr);
         }
-        spawn('[setOrientation]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd ' + ANDROID_WORK_DIR + '; (pm path jp.sji.sumatium.tool.screenorientation | ./busybox grep -qF package:) || (pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk | ./busybox grep -xF Success) && (am 2>&1 | ./busybox grep -qF -- --user && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ' --user 0 || am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ')'), function/*on_close*/(ret, stdout, stderr) {
+        spawn('[setOrientation]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd ' + ANDROID_WORK_DIR + '; (pm path jp.sji.sumatium.tool.screenorientation | ./busybox grep -qF package:) || (pm install ./ScreenOrientation.apk | ./busybox grep -xF Success) && (am 2>&1 | ./busybox grep -qF -- --user && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ' --user 0 || am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ')'), function/*on_close*/(ret, stdout, stderr) {
           end(res, (ret !== 0 || stderr) ? (toErrSentence(stderr) || 'internal error') : stdout.match(/Starting service: Intent/i) ? 'OK' : (toErrSentence(stdout) || 'unknown error'));
         });
         break;
@@ -1926,110 +2007,6 @@ function startStreamWeb() {
         end(res, 'bad request');
     }
     return ''; //just to avoid compiler warning
-
-    function prepareTouchServer() {
-      if (dev.touchDevPath === undefined) {
-        dev.touchDevPath = '';
-        spawn('[touch]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell',
-            ANDROID_WORK_DIR + '/busybox', 'grep', '-m', '1', '-Eo', 'w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)', ANDROID_ASC_LOG_PATH, ';',
-            'echo', '========', ';',
-            '/system/bin/getevent', '-iS', '||', '/system/bin/getevent', '-pS'
-        ), function/*on_close*/(ret, stdout, stderr) {
-          if (ret !== 0 || stderr) {
-            dev.touchDevPath = undefined;
-            return end(res, JSON.stringify('failed to run adb'));
-          }
-          var stdoutAry = stdout.split('========');
-
-          //get screen width/height
-          var match = stdoutAry[0].match(/w:([1-9]+[0-9]+) h:([1-9]+[0-9]+)/);
-          if (match) {
-            dev.w = Number(match[1]);
-            dev.h = Number(match[2]);
-            log('[touch]******** got device width: ' + dev.w + ' height: ' + dev.h + ' ********');
-          } else {
-            dev.touchDevPath = undefined;
-            return end(res, JSON.stringify('failed to get screen size'));
-          }
-
-          //add device 6: /dev/input/event8
-          //  bus:      0018
-          //  vendor    0000
-          //  product   0000
-          //  version   0000
-          //  name:     "Touchscreen"
-          //  location: "3-0048/input0"
-          //  id:       ""
-          //  version:  1.0.1
-          //  events:
-          //    ABS (0003): 002f  : value 9, min 0, max 9, fuzz 0, flat 0, resolution 0
-          //                0030  : value 0, min 0, max 30, fuzz 0, flat 0, resolution 0
-          //                0035  : value 0, min 0, max 719, fuzz 0, flat 0, resolution 0
-          //                0036  : value 0, min 0, max 1279, fuzz 0, flat 0, resolution 0
-          //                0039  : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
-          //                003a  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
-          //  input props:
-          //    INPUT_PROP_DIRECT
-
-          var devInfoAry = stdoutAry[1].split(/add device \d+: /);
-          dev.touchModernStyle = stdoutAry[1].indexOf('INPUT_PROP_DIRECT') >= 0;
-          var devInfo, i;
-          for (match = null, i = 0; i < devInfoAry.length; i++) {
-            devInfo = devInfoAry[i];
-            if ((match = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/))) { //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-              if ((dev.touchModernStyle && devInfo.indexOf('INPUT_PROP_DIRECT') >= 0) ||
-                  (!dev.touchModernStyle && !devInfo.match(/\n +name: +.*pen/))) {
-                dev.touchAvgContactSize = Math.max(Math.ceil(match[1] / 2), 1);
-
-                if ((match = devInfo.match(/\D*003a.*value.*min.*max\D*(\d+)/))) { //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
-                  dev.touchAvgPressure = Math.max(Math.ceil(match[1] / 2), 1);
-                }
-                if ((match = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/))) { //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
-                  dev.touchAvgFingerSize = Math.max(Math.ceil(match[1] / 2), 1);
-                }
-                if ((match = devInfo.match(/\D*0035.*value.*min.*max\D*(\d+)/))) { //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-                  var w = Number(match[1]) + 1;
-                  if (w !== dev.w) {
-                    dev.w = w;
-                    log('[touch]******** USE device width: ' + dev.w + ' ********');
-                  }
-                }
-                if ((match = devInfo.match(/\D*0036.*value.*min.*max\D*(\d+)/))) { //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-                  var h = Number(match[1]) + 1;
-                  if (h !== dev.h) {
-                    dev.h = h;
-                    log('[touch]******** USE device height: ' + dev.h + ' ********');
-                  }
-                }
-                if ((match = devInfo.match(/\n +KEY.*:.*014a/))) { //BTN_TOUCH for sumsung devices
-                  dev.touchNeedBtnTouchEvent = true;
-                }
-                if ((match = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/))) { //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-                  dev.touchMaxTrackId = Number(match[1]);
-                }
-                dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
-                break;
-              }
-            }
-          }
-
-          if (dev.touchDevPath) {
-            log('[touch]******** got input device: ' + dev.touchDevPath + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
-            return end(res, JSON.stringify('OK'));
-          } else { //almost impossible
-            dev.touchDevPath = null;
-            log('[touch]******** failed to get input device of touch screen');
-            return end(res, JSON.stringify('failed to get touch device'));
-          }
-        });
-      } else if (dev.touchDevPath === '') {
-        end(res, JSON.stringify('preparing'));
-      } else if (dev.touchDevPath === null) {
-        end(res, JSON.stringify('failed to get touch device'));
-      } else {
-        end(res, JSON.stringify('OK'));
-      }
-    }
 
     function sendTouchEvent() {
       var x = (q.x * dev.w).toFixed();
@@ -2492,34 +2469,9 @@ function startAdminWeb() {
               end(res, stringifyError(err));
             }).pipe(res);
         break;
-      case '/prepareDeviceFile':  //--------------------------prepare device file forcibly -----------------------------
-        q.device = q.device ? uniqueNonEmptyArray(q.device) : Object.keys(devMgr);
-        if (!q.device.length) {
-          end(res, 'OK');
-        }
-        okAry = [];
-        errAry = [];
-        prepareDeviceFile.ver = getLocalToolFileHashSync();
-        var i = 0;
-        (function prepare_next_device() {
-          if (i < q.device.length) {
-            var device = q.device[i];
-            if (devMgr[device]) {
-              devMgr[device].didPrepare = false;
-            }
-            prepareDeviceFile(device, function/*on_complete*/(err) {
-              if (err) {
-                errAry.push(q.device.length > 1 ? device + ': ' + err : err);
-              } else {
-                okAry.push(q.device.length > 1 ? device + ': OK' : 'OK');
-              }
-              i++;
-              prepare_next_device();
-            });
-          } else {
-            end(res, okAry.concat(errAry).join('\n'));
-          }
-        })();
+      case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
+        prepareAllDevices(true/*forceOnce*/);
+        end(res, 'OK');
         break;
       default:
         end(res, 'bad request');
@@ -2560,15 +2512,30 @@ function loadResourceSync() {
   updateWholeUI();
 }
 
-function keepAdbAlive() {
-  getAllDevInfo(function/*on_complete*/(deviceList) {
+function prepareAllDevices(forceOnce) {
+  getAllDevInfo(function/*on_complete*/(err, deviceList) {
     forEachValueIn(devMgr, function (dev) {
       if (deviceList.indexOf(dev.device) < 0) {
         dev.err = 'error: device not found';
         updateWholeUI();
+      } else {
+        if (forceOnce) {
+          dev.didPrepare = false;
+          dev.touchStatus = undefined;
+        }
+        prepareDeviceFile(dev.device, function/*on_complete*/() {
+          if (forceOnce) {
+            dev.touchStatus = undefined;
+            dev.didTryInstallApk = false;
+          }
+          prepareTouchServer(dev);
+          installApkOnce(dev);
+        });
       }
     });
-    setTimeout(keepAdbAlive, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+    if (!forceOnce) {
+      setTimeout(prepareAllDevices, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+    }
   }, true/*forceLoadDevInfo*/);
 }
 
@@ -2581,7 +2548,7 @@ checkAdb(function/*on_complete*/() {
   checkFfmpeg(function/*on_complete*/() {
     startAdminWeb();
     startStreamWeb();
-    keepAdbAlive();
+    prepareAllDevices();
   });
 });
 

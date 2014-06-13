@@ -4,62 +4,16 @@ var AscUtil = {};
 (function () {
   'use strict';
   AscUtil.setTouchHandler = function (liveView, touchServerUrl) {
-    liveView.asc_endTimeMsForInit = Date.now() + 30000; //set timeout
-    liveView.asc_touchServerUrl = touchServerUrl;
-    liveView.asc_logHead = '[dev ' + decodeURIComponent((liveView.asc_touchServerUrl.match(/[?&]device=([^&]+)/) || '  ')[1]) + '] ';
-
-    __setTouchHandler(liveView);
-
-    __prepareTouchServer();
-
-    var old_endTimeMsForInit = liveView.asc_endTimeMsForInit;
-
-    function __prepareTouchServer() {
-      console.log(liveView.asc_logHead + '[prepare touch] ...');
-      $.ajax(liveView.asc_touchServerUrl, {timeout: 10 * 1000})
-          .done(function (result) {
-            if (liveView.asc_endTimeMsForInit !== old_endTimeMsForInit) {
-              console.log(liveView.asc_logHead + '[prepare touch] abandoned');
-              return;
-            }
-            if (result === 'OK') {
-              console.info(liveView.asc_logHead + '[prepare touch] OK');
-
-            } else if (result === 'preparing' || result === 'device is not being live viewed') {
-              if (Date.now() < liveView.asc_endTimeMsForInit) {
-                console.warn(liveView.asc_logHead + '[prepare touch] error: ' + result);
-                liveView.timerForSetTouchHandler = setTimeout(__prepareTouchServer, 250);
-              } else {
-                console.error(liveView.asc_logHead + '[prepare touch] final result: failed. last error: ' + result);
-              }
-            } else {
-              console.error(liveView.asc_logHead + '[prepare touch] final result: failed. Last error: ' + result);
-            }
-          })
-          .fail(function (jqXHR, textStatus) {
-            if (liveView.asc_endTimeMsForInit !== old_endTimeMsForInit) {
-              console.log(liveView.asc_logHead + '[prepare touch] abandoned');
-              return;
-            }
-            if (Date.now() < liveView.asc_endTimeMsForInit) {
-              console.warn(liveView.asc_logHead + '[prepare touch] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
-              liveView.timerForSetTouchHandler = setTimeout(__prepareTouchServer, 1000);
-            } else {
-              console.error(liveView.asc_logHead + '[prepare touch] final result: failed. Last error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
-            }
-          })
-    }
-  };
-
-  function __setTouchHandler(liveView) {
-    if (liveView.asc_initedTouchHandler) {
+    var $liveView = $(liveView);
+    if (!touchServerUrl) {
+      console.info('clearTouchHandler');
+      $liveView.unbind('mousedown').unbind('mouseup').unbind('mousemove').unbind('mouseout');
       return;
     }
-    liveView.asc_initedTouchHandler = true;
+    var logHead = '[dev ' + decodeURIComponent((touchServerUrl.match(/[?&]device=([^&]+)/) || '  ')[1]) + '] ';
     var evtAry = [];
     var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
 
-    var $liveView = $(liveView);
     $liveView
         .on('mousedown', function (e) {
           saveOrSendMouseAction(e);
@@ -78,8 +32,9 @@ var AscUtil = {};
           return false; //disable drag
         })
         .unbind('mousemove')
-        .unbind('mouseout')
-    ;
+        .unbind('mouseout');
+
+    console.info(logHead + 'setTouchHandler OK');
 
     function saveOrSendMouseAction(e) {
       if (e.offsetX === undefined) {
@@ -126,8 +81,8 @@ var AscUtil = {};
 
     function sendMouseAction(e) {
       var type = e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/;
-      console.log(liveView.asc_logHead + '[send touch event] ' + type + ' ' + e.xPer + ' ' + e.yPer);
-      $.ajax(liveView.asc_touchServerUrl + '&type=' + type + '&x=' + e.xPer + '&y=' + e.yPer,
+      console.log(logHead + '[send touch event] ' + type + ' ' + e.xPer + ' ' + e.yPer);
+      $.ajax(touchServerUrl + '&type=' + type + '&x=' + e.xPer + '&y=' + e.yPer,
           {timeout: 2000})
           .done(function () {
             if ((e = evtAry.shift())) {
@@ -147,11 +102,11 @@ var AscUtil = {};
             }
           })
           .fail(function (jqXHR, textStatus) {
-            console.error(liveView.asc_logHead + '[send touch event] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
+            console.error(logHead + '[send touch event] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
             evtAry = [];
           })
     }
-  }
+  };
 
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
