@@ -1973,7 +1973,7 @@ function startStreamWeb() {
           return end(res, JSON.stringify(chkerr));
         }
         if (dev.touchStatus !== 'OK') {
-          end(res, JSON.stringify(dev.touchStatus));
+          end(res, JSON.stringify(dev.touchStatus || 'not prepared'));
         } else {
           prepareTouchServer(dev); //ensure adb shell is waiting for command
           sendTouchEvent();
