@@ -445,7 +445,7 @@ var ADB_GET_DEV_INFO_CMD_ARGS = [
   'getprop', 'ro.product.cpu.abi;'
 ];
 function getDevInfo(device, on_complete, timeoutMs, forceReloadDevInfo) {
-  if (!forceReloadDevInfo && !conf.reloadDevInfo && devMgr[device] && devMgr[device].info && !devMgr[device].err) {
+  if (!forceReloadDevInfo && devMgr[device] && devMgr[device].info && !devMgr[device].err) {
     on_complete('', devMgr[device].info);
     return;
   }
@@ -1024,9 +1024,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           } else if (q.type === 'apng') {
             args.push('-f', 'image2pipe', '-vcodec', 'png');
           }
-          if (q.fps) {
-            args.push('-r', q.fps); //rate
-          }
+          args.push('-r', q.fps); //rate
           args.push('-i', '-'); //from stdin
           //------------------------now make output parameters------------------------
           args.push('-pix_fmt', 'yuv420p'); //for safari mp4
@@ -2281,12 +2279,11 @@ function startAdminWeb() {
       case '/': //---------------------------------------show menu of all devices---------------------------------------
         q.fps = q.fps || conf.defaultFps || DEFAULT_FPS;
         q.type = q.type || 'ajpg';
-        q.scale = (q.scale === undefined) ? '320xAuto' : q.scale;
+        q.scale = (q.scale === undefined) ? '400xAuto' : q.scale;
         if (chkerrCaptureParameter(q)) {
           return end(res, chkerr);
         }
-
-        getAllDevInfo(function/*on_complete*/(err, realDeviceList) {
+        prepareAllDevices(/*repeat*/false, /*forceReloadDevInfo*/conf.reloadDevInfo, /*forcePrepareFileTouchApk*/false, function/*on_gotAllRealDev*/(err, realDeviceList) {
           var html = htmlCache['menu.html']
                   .replace(/@adminKey\b/g, querystring.escape(conf.adminWeb.adminKey))
                   .replace(/#adminKey\b/g, htmlEncode(conf.adminWeb.adminKey || ''))
@@ -2470,7 +2467,7 @@ function startAdminWeb() {
             }).pipe(res);
         break;
       case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
-        prepareAllDevices(true/*forceOnce*/);
+        prepareAllDevices(/*repeat*/false, /*forceReloadDevInfo*/true, /*forcePrepareFileTouchApk*/true, /*on_gotAllRealDev*/null);
         end(res, 'OK');
         break;
       default:
@@ -2512,19 +2509,24 @@ function loadResourceSync() {
   updateWholeUI();
 }
 
-function prepareAllDevices(forceOnce) {
+function prepareAllDevices(repeat, forceReloadDevInfo, forcePrepareFileTouchApk, on_gotAllRealDev) {
   getAllDevInfo(function/*on_complete*/(err, deviceList) {
+    if (on_gotAllRealDev) {
+      on_gotAllRealDev(err, deviceList);
+    }
     forEachValueIn(devMgr, function (dev) {
       if (deviceList.indexOf(dev.device) < 0) {
-        dev.err = 'error: device not found';
-        updateWholeUI();
+        if (dev.err !== 'error: device not found') {
+          dev.err = 'error: device not found';
+          updateWholeUI();
+        }
       } else {
-        if (forceOnce) {
+        if (forcePrepareFileTouchApk) {
           dev.didPrepare = false;
           dev.touchStatus = undefined;
         }
         prepareDeviceFile(dev.device, function/*on_complete*/() {
-          if (forceOnce) {
+          if (forcePrepareFileTouchApk) {
             dev.touchStatus = undefined;
             dev.didTryInstallApk = false;
           }
@@ -2533,10 +2535,12 @@ function prepareAllDevices(forceOnce) {
         });
       }
     });
-    if (!forceOnce) {
-      setTimeout(prepareAllDevices, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
+    if (repeat) {
+      setTimeout(function () {
+        prepareAllDevices(repeat, forceReloadDevInfo, forcePrepareFileTouchApk, on_gotAllRealDev);
+      }, (conf.keepAdbAliveIntervalSeconds || 5 * 60) * 1000);
     }
-  }, true/*forceLoadDevInfo*/);
+  }, forceReloadDevInfo);
 }
 
 //check configuration
@@ -2548,7 +2552,7 @@ checkAdb(function/*on_complete*/() {
   checkFfmpeg(function/*on_complete*/() {
     startAdminWeb();
     startStreamWeb();
-    prepareAllDevices();
+    prepareAllDevices(/*repeat*/true, /*forceReloadDevInfo*/true, /*forcePrepareFileTouchApk*/false, /*on_gotAllRealDev*/null);
   });
 });
 
