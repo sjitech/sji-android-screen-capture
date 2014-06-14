@@ -49,6 +49,10 @@ label.fillParent {display: inline-block; width: 100%; height: 100%; text-align: 
     min-width: 16px;
     min-height: 16px;
     background-color: #A0A0A0;
+    border: 8px solid lightskyblue;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -ms-box-sizing: border-box;
 }
 #viewerContainer {
     -webkit-user-select: none;
