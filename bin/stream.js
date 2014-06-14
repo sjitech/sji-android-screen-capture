@@ -849,13 +849,15 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
       FFMPEG_PARAM += ' -r ' + (q.fps || 1);
       FFMPEG_PARAM += ' ' + opt.in + ' -i -'; //"-i -" means read from stdin
       //------------------------now make output parameters------------------------
-      if (q.scale || q.rotate) {
-        var filter = '';
+      var filter = '';
+      if (q.scale) {
         if (typeof(q.scale) === 'number') {
           filter += ',scale=' + 'ceil(iw*' + q.scale + '/2)*2' + ':' + 'ceil(ih*' + q.scale + '/2)*2';
         } else {
           filter += ',scale=' + 'ceil(' + (q.scale_w || ('iw/ih*' + q.scale_h) ) + '/2)*2' + ':' + 'ceil(' + (q.scale_h || ('ih/iw*' + q.scale_w) ) + '/2)*2';
         }
+      }
+      if (q.rotate) {
         if (q.rotate === 90) {
           filter += ',transpose=1';
         } else if (q.rotate === 180) {
@@ -863,10 +865,10 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         } else if (q.rotate === 270) {
           filter += ',transpose=2';
         }
+      }
 
-        if (filter) {
-          FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
-        }
+      if (filter) {
+        FFMPEG_PARAM += ' -vf ' + filter.slice(1/*remove first comma*/);
       }
 
       if (q.type === 'ajpg') { //animated jpg image
