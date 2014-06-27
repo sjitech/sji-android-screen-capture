@@ -40,6 +40,11 @@
     <div><button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
     <div><button onclick="AscUtil.scaleLocally(document.getElementById('viewerContainer'))">Scale Locally</button></div>
     <div style="height:12px">&nbsp;</div>
+    <div>Device Orientation:</div>
+    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame">Landscape</a></div>
+    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame">Portrait</a></div>
+    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame">Free</a></div>
+    <div style="height:4px">&nbsp;</div>
     <div>Device Keyboard:</div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=26" target="resultIFrame">Power Key</a></div>
     <div style="height:4px">&nbsp;</div>
@@ -48,11 +53,6 @@
     <div style="height:4px">&nbsp;</div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=82" target="resultIFrame">Menu Key</a></div>
     <div><a class="button" href="/sendKey?device=@device&accessKey=@accessKey&keyCode=187" target="resultIFrame">App Switch</a></div>
-    <div style="height:4px">&nbsp;</div>
-    <div>Device Orientation:</div>
-    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame">Landscape</a></div>
-    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame">Portrait</a></div>
-    <div><a class="button" href="/setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame">Free</a></div>
   </div>
   <table align="center" style="margin-top: 62px">
     <tr><td align="center">
