@@ -59,8 +59,11 @@ function spawn(logHead, _path, args, on_close, options) {
   log(logHead + 'spawn ' + _path + ' with args: ' + JSON.stringify(args));
   options = options || {};
   options.stdio = options.stdio || ['ignore'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/];
+  var needCallbackOnClose = (typeof(on_close) === 'function');
+  var stdoutBufAry = [], stderrBufAry = [];
 
   var childProc = child_process.spawn(_path, args, options);
+  childProc.__err = '';
   if (childProc.pid > 0) {
     childProcPidMap[childProc.pid] = true;
     childProc.logHead = logHead + '[pid_' + childProc.pid + ']';
@@ -73,8 +76,7 @@ function spawn(logHead, _path, args, on_close, options) {
   childProc.once('error', function (err) {
     if (err.code === 'ENOENT') {
       var hasDir = containsDir(_path);
-      var hint = hasDir ? '' : ', Please use full path or add the executable file\'s dir to `PATH` environment variable';
-      err = 'Error ENOENT(file is not found' + (hasDir ? '' : ' in dir list defined by PATH environment variable') + '). File: ' + _path + hint;
+      err = 'Error ENOENT(file is not found' + (hasDir ? '' : ' in dir list defined by PATH environment variable') + '). File: ' + _path + (hasDir ? '' : ', Please use full path or add the executable file\'s dir to `PATH` environment variable');
       childProc.__processNotStarted = true;
     } else if (err.code === 'EACCES') {
       err = 'Error EACCES(file is not executable or you have no permission to execute). File: ' + _path;
@@ -86,59 +88,47 @@ function spawn(logHead, _path, args, on_close, options) {
   childProc.once('close', function (ret, signal) { //exited or failed to spawn
     log(childProc.logHead + 'exited: ' + (ret === null || ret === undefined ? '' : ret) + ' ' + (signal || ''));
     delete childProcPidMap[childProc.pid];
-  });
-
-  //if specified on_close callback, then wait process finished and get stdout,stderr output
-  if (typeof(on_close) === 'function') {
-    var stdoutBufAry = [];
-    if (childProc.stdout) {
-      childProc.stdout.on('data', function (buf) {
-        stdoutBufAry.push(buf);
-        if (options.noLogStdout === true) {
-          if (!childProc.didOmitStdout) {
-            childProc.didOmitStdout = true;
-            log(childProc.logHead + 'stdout output... omitted');
-          }
-        } else {
-          log(buf, {noNewLine: true, head: childProc.logHead});
-        }
-      });
-    }
-    var stderrBufAry = [];
-    if (childProc.stderr) {
-      childProc.stderr.on('data', function (buf) {
-        stderrBufAry.push(buf);
-        log(buf, {noNewLine: true, head: childProc.logHead});
-      });
-    }
-    childProc.once('close', function (ret) { //exited or failed to spawn
+    if (needCallbackOnClose) {
       var stdout = Buffer.concat(stdoutBufAry).toString();
       stdoutBufAry = null;
-      var stderr = Buffer.concat(stderrBufAry).toString();
+      var stderr = Buffer.concat(stderrBufAry).toString() || childProc.__err;
       stderrBufAry = null;
       on_close(ret, stdout, stderr);
+    }
+  });
+
+  if (childProc.stdout) {
+    childProc.stdout.on('data', function (buf) {
+      if (needCallbackOnClose) {
+        stdoutBufAry.push(buf);
+      }
+      if (options.noLogStdout === true) {
+        if (!childProc.didOmitStdout) {
+          childProc.didOmitStdout = true;
+          log(childProc.logHead + 'stdout output... omitted');
+        }
+      } else {
+        log(buf, {noNewLine: true, head: childProc.logHead});
+      }
+      childProc.didGetStdoutData = true;
     });
   }
-  else {
-    if (childProc.stdout) {
-      childProc.stdout.on('data', function (buf) {
-        if (!childProc.didGetStdoutData) {
-          childProc.didGetStdoutData = true;
-          log(childProc.logHead + 'got stdout data first time. ' + buf.length + ' bytes');
+
+  if (childProc.stderr) {
+    childProc.stderr.on('data', function (buf) {
+      if (needCallbackOnClose) {
+        stderrBufAry.push(buf);
+      }
+      if (options.noLogStderr === true) {
+        if (!childProc.didOmitStderr) {
+          childProc.didOmitStderr = true;
+          log(childProc.logHead + 'stderr output... omitted');
         }
-      });
-      childProc.stdout.on('end', function () {
-        log(childProc.logHead + 'stdout read end');
-      });
-    }
-    if (childProc.stderr) {
-      childProc.stderr.on('data', function (buf) {
-        if (!childProc.didGetStderrData) {
-          childProc.didGetStderrData = true;
-          log(childProc.logHead + 'got stderr data first time. ' + buf.length + ' bytes');
-        }
-      });
-    }
+      } else {
+        log(buf, {noNewLine: true, head: childProc.logHead});
+      }
+      childProc.didGetStderrData = true;
+    });
   }
 
   return childProc;
@@ -410,7 +400,7 @@ function checkFfmpeg(on_complete) {
     if (ret !== 0 || stderr) {
       log('Failed to check FFMPEG (for this machine, not for Android device).' +
           ' You will not be able to convert recorded video to other format.' +
-          ' Please install it from "http://www.ffmpeg.org/download.html" and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to stream.json conf.ffmpeg', {stderr: true});
+          ' Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to stream.json conf.ffmpeg', {stderr: true});
     } else {
       checkFfmpeg.success = true;
     }
@@ -453,7 +443,7 @@ function getDevInfo(device, on_complete, timeoutMs, forceReloadDevInfo) {
         var err;
         if (childProc.myTimer) {
           clearTimeout(childProc.myTimer);
-          err = (ret === 0 && !stderr) ? '' : stderr ? toErrSentence(stderr) : 'unknown error: failed to get device info';
+          err = (ret === 0 && !stderr) ? '' : (toErrSentence(stderr) || 'unknown error: failed to get device info');
         } else {
           err = 'error: timeout when try to get device info';
         }
@@ -500,14 +490,14 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
 /*
  * upload all necessary files to android
  */
-function prepareDeviceFile(device, on_complete) {
-  if (devMgr[device] && devMgr[device].didPrepare && !devMgr[device].err) {
+function prepareDeviceFile(device, on_complete, force/*optional*/) {
+  if (devMgr[device] && devMgr[device].didPrepare && !devMgr[device].err && !force) {
     on_complete();
     return;
   }
   spawn('[CheckDevice ' + device + ']', conf.adb, conf.adbOption.concat('-s', device, 'shell', 'echo', '`', ADB_GET_DEV_INFO_CMD_ARGS, 'echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null', '`'), function/*on_close*/(ret, stdout, stderr) {
     var dev;
-    var err = (ret === 0 && !stderr && stdout) ? '' : stderr ? toErrSentence(stderr) : 'unknown error: failed to get device info';
+    var err = (ret === 0 && !stderr && stdout) ? '' : (toErrSentence(stderr) || 'unknown error: failed to get device info');
     if (err) {
       if ((dev = devMgr[device]) && dev.err !== err) {
         dev.err = err;
@@ -530,7 +520,7 @@ function prepareDeviceFile(device, on_complete) {
     dev.CrCount = (stdout.length - stdoutNoCRLF.length) - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/;
 
     //compare to local version
-    if (ver === prepareDeviceFile.ver) {
+    if (ver === prepareDeviceFile.ver && !force) {
       dev.didPrepare = true;
       return on_complete();
     }
@@ -540,7 +530,7 @@ function prepareDeviceFile(device, on_complete) {
       }
       return spawn('[UpdateFileOnDevice ' + device + ']', conf.adb, conf.adbOption.concat('-s', device, 'shell', 'chmod', '755', ANDROID_WORK_DIR + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', ANDROID_WORK_DIR + '/version'), function/*on_close*/(ret, stdout, stderr) {
         if (ret !== 0 || stdout || stderr) {
-          return on_complete(toErrSentence(stderr) || 'unknown error: failed to finish preparing device file');
+          return on_complete(toErrSentence(stderr || stdout) || 'unknown error: failed to finish preparing device file');
         }
         dev.didPrepare = true;
         return on_complete();
@@ -549,10 +539,10 @@ function prepareDeviceFile(device, on_complete) {
   });
 }
 
-function prepareTouchServer(dev) {
-  if (dev.touchStatus !== undefined) {
+function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
+  if (dev.touchStatus !== undefined && (!force || dev.touchStatus === 'preparing')) {
     if (dev.touchStatus === 'OK') {
-      __prepareTouchServer(dev);
+      prepareTouchCmdServer(dev);
     }
     return;
   }
@@ -560,7 +550,6 @@ function prepareTouchServer(dev) {
   spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -iS || getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
     if (ret !== 0 || stderr) {
       dev.touchStatus = undefined;
-      log('[touch]******** failed to run adb');
       return;
     }
     //add device 6: /dev/input/event8
@@ -615,7 +604,7 @@ function prepareTouchServer(dev) {
             dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
             dev.touchStatus = 'OK';
             log('[touch]******** got input device: ' + dev.touchDevPath + ' w=' + dev.w + ' h=' + dev.h + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
-            __prepareTouchServer(dev);
+            prepareTouchCmdServer(dev);
             return true;
           }
         }
@@ -626,25 +615,25 @@ function prepareTouchServer(dev) {
       log('[touch]******** ' + dev.touchStatus);
     }
   });
+}
 
-  function __prepareTouchServer(dev) {
-    if (!dev.touchShellStdin) {
-      var childProc = spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell'), null, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'ignore'/*stderr*/]});
-      childProc.on('close', function () {
-        dev.touchShellStdin = undefined;
-      });
-      childProc.stdin.on('error', function (err) {
-        log("[touch]failed to write touchServer.stdin. Error: " + err);
-      });
-      dev.touchShellStdin = childProc.stdin;
-    }
+function prepareTouchCmdServer(dev) {
+  if (!dev.touchShellStdin) {
+    var childProc = spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell'), null, {noLogStdout: true, stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
+    childProc.on('close', function () {
+      dev.touchShellStdin = undefined;
+    });
+    childProc.stdin.on('error', function (err) {
+      log('[touch]failed to write touchServer.stdin. Error: ' + err);
+    });
+    dev.touchShellStdin = childProc.stdin;
   }
 }
 
-function installApkOnce(dev) {
-  if (!dev.didTryInstallApk) {
+function installApkIgnoreErr(dev, force/*optional*/) {
+  if (!dev.didTryInstallApk || force) {
     dev.didTryInstallApk = true;
-    spawn('[installApk]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
+    spawn('[installApk]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', (force ? 'pm uninstall jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1;' : 'ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 ||') + ' pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
   }
 }
 
@@ -890,7 +879,8 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
           'sh', './capture.sh',
           conf.forceUseFbFormat ? 'forceUseFbFormat' : 'autoDetectFormat',
           q.fps, FFMPEG_PARAM,
-          (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH));
+          (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH),
+          null, {noLogStdout: true});
 
       provider.pid = childProc.pid;
       childProc.stdout.on('data', function (buf) {
@@ -913,7 +903,6 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         provider.didOutput = true;
       });
       childProc.stderr.on('data', function (buf) {
-        log(buf, {noNewLine: true, head: childProc.logHead});
         var err = toErrSentence(buf.toString());
         forEachValueIn(provider.consumerMap, endCaptureConsumer, err);
         if (dev.err !== err) {
@@ -1033,7 +1022,7 @@ function startRecording(q/*same as capture*/, on_complete) {
           args.push(outputDirSlash + filename + '.mp4');
           args.push(outputDirSlash + filename + '.webm');
 
-          var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) {
+          var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) { //todo: do not wait
             log(logHead + (ret === 0 ? 'complete' : 'failed due to ' + (childProc.__err || 'internal error')));
             callbackOnce(ret === 0 ? '' : childProc.__err || 'internal error');
           }, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
@@ -1577,7 +1566,7 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
       }
       if (context.frameIndex >= conf.latestFramesToDump) {
         filename = context.filename + '-frame' + (context.frameIndex - conf.latestFramesToDump) + '.' + context.imageType; //should respect re_filename
-        logIf(conf.logImageDumpFile, 'delete"' + outputDirSlash + filename + '"');
+        logIf(conf.logImageDumpFile, 'delete "' + outputDirSlash + filename + '"');
         try {
           fs.unlinkSync(outputDirSlash + filename);
         } catch (err) {
@@ -1977,7 +1966,7 @@ function startStreamWeb() {
         if (dev.touchStatus !== 'OK') {
           end(res, JSON.stringify(dev.touchStatus || 'not prepared'));
         } else {
-          prepareTouchServer(dev); //ensure adb shell is waiting for command
+          prepareTouchCmdServer(dev); //ensure adb shell is waiting for command
           sendTouchEvent();
           end(res, JSON.stringify('OK'));
         }
@@ -1999,9 +1988,8 @@ function startStreamWeb() {
         if (chkerrRequired('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
           return end(res, chkerr);
         }
-        spawn('[setOrientation]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd ' + ANDROID_WORK_DIR + '; (pm path jp.sji.sumatium.tool.screenorientation | ./busybox grep -qF package:) || (pm install ./ScreenOrientation.apk | ./busybox grep -xF Success) && (am 2>&1 | ./busybox grep -qF -- --user && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ' --user 0 || am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ')'), function/*on_close*/(ret, stdout, stderr) {
-          end(res, (ret !== 0 || stderr) ? (toErrSentence(stderr) || 'internal error') : stdout.match(/Starting service: Intent/i) ? 'OK' : (toErrSentence(stdout) || 'unknown error'));
-        });
+        spawn('[setOrientation]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd ' + ANDROID_WORK_DIR + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && (am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ' --user 0 || am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + q.orientation + ')'));
+        end(res, 'OK');
         break;
       default:
         end(res, 'bad request');
@@ -2253,26 +2241,19 @@ function startAdminWeb() {
                 return end(res, err);
               }
               res.setHeader('Content-Type', 'image/raw');
-              res.setHeader('Content-Disposition', 'attachment;filename=' + q.qdevice + '~' + getTimestamp() + '.raw');
+              res.setHeader('Content-Disposition', 'attachment;filename=' + querystring.escape(q.device) + '~' + getTimestamp() + '.raw');
 
-              var childProc = spawn('[RawCapture]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';',
-                  'sh', 'capture_raw.sh',
-                  (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH));
-
+              var childProc = spawn('[RawCapture]', conf.adb, conf.adbOption.concat('-s', q.device, 'shell', 'cd', ANDROID_WORK_DIR, ';', 'sh', 'capture_raw.sh', (conf.remoteLogAppend ? '2>>' : '2>'), ANDROID_ASC_LOG_PATH), null, {noLogStdout: true});
               childProc.stdout.on('data', function (buf) {
                 convertCRLFToLF(childProc/*as context*/, devMgr[q.device].CrCount, buf).forEach(function (buf) {
                   write(res, buf);
                 });
               });
               childProc.stderr.on('data', function (buf) {
-                log(buf, {noNewLine: true, head: childProc.logHead});
                 end(res, toErrSentence(buf.toString()));
               });
-              childProc.on('error', function () {
-                end(res, childProc.__err);
-              });
               childProc.on('close', function () {
-                end(res);
+                end(res, childProc.__err);
               });
               return ''; //just to avoid compiler warning
             }
@@ -2523,18 +2504,10 @@ function prepareAllDevices(repeat, forceReloadDevInfo, forcePrepareFileTouchApk,
           updateWholeUI();
         }
       } else {
-        if (forcePrepareFileTouchApk) {
-          dev.didPrepare = false;
-          dev.touchStatus = undefined;
-        }
         prepareDeviceFile(dev.device, function/*on_complete*/() {
-          if (forcePrepareFileTouchApk) {
-            dev.touchStatus = undefined;
-            dev.didTryInstallApk = false;
-          }
-          prepareTouchServer(dev);
-          installApkOnce(dev);
-        });
+          prepareTouchInfoAndCmdServer(dev, /*force:*/forcePrepareFileTouchApk);
+          installApkIgnoreErr(dev, /*force:*/forcePrepareFileTouchApk);
+        }, /*force:*/forcePrepareFileTouchApk);
       }
     });
     if (repeat) {
@@ -2566,13 +2539,6 @@ process.on('uncaughtException', function (err) {
 
 if (1 === 0) { //impossible condition. Just prevent jsLint/jsHint warning of 'undefined member ... variable of ...'
   log({adb: 0, ffmpeg: 0, port: 0, ip: 0, ssl: 0, on: 0, certificateFilePath: 0, adminWeb: 0, outputDir: 0, protectOutputDir: 0, maxRecordTimeSeconds: 0, ffmpegDebugLog: 0, ffmpegStatistics: 0, remoteLogAppend: 0, logHttpReqDetail: 0, reloadDevInfo: 0, logImageDecoderDetail: 0, logImageDumpFile: 0, latestFramesToDump: 0, forceUseFbFormat: 0, ffmpegOption: 0, shadowRecording: 0, logTouchCmdDetail: 0,
-    playerId: 0, range: 0, as: 0, asHtml5Video: 0, orientation: 0,
+    playerId: 0, range: 0, as: 0, asHtml5Video: 0, orientation: 0, noLogStderr: 0,
     action: 0, logDate: 0, logDownload: 0, keepAdbAliveIntervalSeconds: 0, defaultFps: 0, err: 0, x: 0, y: 0, stack: 0});
 }
-
-//todo: some device crashes if live view full image
-//todo: sometimes ScreenshotClient::update just failed
-//todo: screenshot buffer changed frequently, should lock
-//todo: seems adb ignore SIGPIPE so sometimes it does not exit if parent node.js exit -> use socket to talk to 5037 directly
-//todo: add audio
-//todo: remove dependence of adb
