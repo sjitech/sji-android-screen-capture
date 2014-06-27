@@ -1557,6 +1557,15 @@ function aimgDecode(context, consumerMap, buf, pos, endPos, fnDecodeRest /*optio
         } else {
           write(res, context.httpHeadPrependWithCRLF); //write next content-type early to force Chrome draw image immediately.
         }
+        //show statistics
+        res.__framesWritten = (res.__framesWritten || 0) + 1;
+        var nowMs = Date.now();
+        res.__firstWriteTimeMs = res.__firstWriteTimeMs || nowMs;
+        res.__lastStatTimeMs = res.__lastStatTimeMs || nowMs;
+        if (nowMs - res.__lastStatTimeMs >= 10000 || isLastFrame && res.__framesWritten > 1) {
+          res.__lastStatTimeMs = nowMs;
+          log(res.logHead + 'statistics: ' + res.__framesWritten + ' frames. fps=' + (res.__framesWritten * 1000 / Math.max(1, (nowMs - res.__firstWriteTimeMs))).toPrecision(3) + ' AvgImgSize:' + (res.__bytesWritten / res.__framesWritten).toFixed());
+        }
       } else { //----------------------------for file output stream and other...----------------
         write(res, wholeImageBuf);
         if (isLastFrame) {
