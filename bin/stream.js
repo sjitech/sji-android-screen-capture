@@ -547,20 +547,13 @@ function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
     return;
   }
   dev.touchStatus = 'preparing';
-  spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -iS || getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
+  spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
     if (ret !== 0 || stderr) {
       dev.touchStatus = undefined;
       return;
     }
     //add device 6: /dev/input/event8
-    //  bus:      0018
-    //  vendor    0000
-    //  product   0000
-    //  version   0000
     //  name:     "Touchscreen"
-    //  location: "3-0048/input0"
-    //  id:       ""
-    //  version:  1.0.1
     //  events:
     //    ABS (0003): 002f  : value 9, min 0, max 9, fuzz 0, flat 0, resolution 0
     //                0030  : value 0, min 0, max 30, fuzz 0, flat 0, resolution 0     //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
