@@ -509,7 +509,7 @@ function prepareDeviceFile(device, _on_complete, force/*optional*/) {
 
   var on_complete = function (err) {
     var callbackAry = tmpDevMapForPrepareFile[device];
-    log('[prepareFileToDevice ' + device + ']end. ' + (callbackAry.length ? 'Now notify all callbacks' + (err ? ' with ' : '') : '') + (err || ''));
+    log('[prepareFileToDevice ' + device + ']end. ' + (callbackAry.length > 1 ? 'Now notify all callbacks' + (err ? ' with ' : '') : '') + (err || ''));
     delete tmpDevMapForPrepareFile[device];
     callbackAry.forEach(function (callback) {
       callback(err);
@@ -646,10 +646,17 @@ function prepareTouchCmdServer(dev) {
 }
 
 function installApkIgnoreErr(dev, force/*optional*/) {
-  if (!dev.didTryInstallApk || force) {
-    dev.didTryInstallApk = true;
-    spawn('[installApkTo ' + dev.device + ']', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', (force ? 'pm uninstall jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1;' : 'ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 ||') + ' pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
+  if (dev.apkStatus !== undefined && (!force || dev.apkStatus === 'preparing')) {
+    return;
   }
+  dev.apkStatus = 'preparing';
+  spawn('[installApkTo ' + dev.device + ']', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', (force ? 'pm uninstall jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1;' : 'ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 ||') + ' pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk', function/*on_close*/(ret, stdout, stderr) {
+    if (ret !== 0 || stderr) {
+      dev.apkStatus = undefined;
+      return;
+    }
+    dev.apkStatus = 'OK';
+  }));
 }
 
 function chkerrCaptureParameter(q) {
