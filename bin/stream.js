@@ -490,6 +490,7 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
 /*
  * upload all necessary files to android
  */
+var tmpDevMapForPrepareFile = {};
 function prepareDeviceFile(device, _on_complete, force/*optional*/) {
   var dev = devMgr[device];
   if (dev && dev.didPrepare && !dev.err && !force) {
@@ -497,21 +498,20 @@ function prepareDeviceFile(device, _on_complete, force/*optional*/) {
     return;
   }
   dev.didPrepare = false;
-  if (prepareDeviceFile.callbackMap) { //is preparing?
+  if (tmpDevMapForPrepareFile[device]) { //is preparing?
     log('[prepareFileToDevice ' + device + ']already in preparing, so add to callback array');
-    prepareDeviceFile.callbackMap[device] = _on_complete;
+    tmpDevMapForPrepareFile[device].push(_on_complete);
     return;
   } else {
     log('[prepareDeviceFile for ' + device + ']begin');
-    prepareDeviceFile.callbackMap = {};
-    prepareDeviceFile.callbackMap[device] = _on_complete;
+    tmpDevMapForPrepareFile[device] = [_on_complete];
   }
 
   var on_complete = function (err) {
-    var map = prepareDeviceFile.callbackMap;
-    log('[prepareFileToDevice ' + device + ']end. ' + (Object.keys(map).length ? 'Now notify all callbacks' + (err ? ' with ' : '') : '') + (err || ''));
-    delete prepareDeviceFile.callbackMap;
-    forEachValueIn(map, function (callback) {
+    var callbackAry = tmpDevMapForPrepareFile[device];
+    log('[prepareFileToDevice ' + device + ']end. ' + (callbackAry.length ? 'Now notify all callbacks' + (err ? ' with ' : '') : '') + (err || ''));
+    delete tmpDevMapForPrepareFile[device];
+    callbackAry.forEach(function (callback) {
       callback(err);
     });
   };
