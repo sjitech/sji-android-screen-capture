@@ -1015,21 +1015,21 @@ function startRecording(q/*same as capture*/, on_complete) {
           args.push(outputDirSlash + filename + '.mp4');
           args.push(outputDirSlash + filename + '.webm');
 
-          var childProc = spawn(logHead, conf.ffmpeg, args, function/*on_close*/(ret) { //todo: do not wait
+          var childProc = spawn(logHead, conf.ffmpeg, args, null, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
+          childProc.on('close', function/*on_close*/(ret) {
             log(logHead + (ret === 0 ? 'complete' : 'failed due to ' + (childProc.__err || 'internal error')));
             callbackOnce(ret === 0 ? '' : childProc.__err || 'internal error');
-          }, {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
-
-          childProc.stdin.filename = filename + '.mp4' + ' ' + filename + '.webm'; //needed by capture(), deviceControl
-          childProc.stdin.logHead = '[FileWriter(RecorderConverter)' + filename + '.mp4&webm' + ')]';
-
-          capture(childProc.stdin, q, function/*on_captureBeginOrFailed*/(err) { //---------do capture, save output to childProc.stdin----------
-            callbackOnce(err, childProc.stdin);
           });
-
-          childProc.stdin.on('error', function (err) {
-            log(childProc.stdin.logHead + stringifyError(err));
-          });
+          if (childProc.stdin) {
+            childProc.stdin.filename = filename + '.mp4' + ' ' + filename + '.webm'; //needed by capture(), deviceControl
+            childProc.stdin.logHead = '[FileWriter(RecorderConverter)' + filename + '.mp4&webm' + ')]';
+            capture(childProc.stdin, q, function/*on_captureBeginOrFailed*/(err) { //---------do capture, save output to childProc.stdin----------
+              callbackOnce(err, childProc.stdin);
+            });
+            childProc.stdin.on('error', function (err) {
+              log(childProc.stdin.logHead + stringifyError(err));
+            });
+          }
         }
         else { //------------------------if local ffmpeg is not available, then record as animated image----------------
           var wfile = fs.createWriteStream(outputDirSlash + filename);
