@@ -968,9 +968,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   }
 
   if (Object.keys(consumerMap).length === 0) {
-    if (reason === 'another incompatible live capture is going to run' && provider.pid) {
-      exitCaptureProcess();
-    } else {
+    if (provider === provider.dev.liveStreamer && provider.pid > 0 && reason !== 'another incompatible live capture is going to run') {
       log(provider.logHead + 'delay kill capture process');
       setTimeout(function () {
         if (Object.keys(consumerMap).length === 0) {
@@ -979,6 +977,8 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
           log(provider.logHead + 'capture process revival due to consumer came in');
         }
       }, 1500);
+    } else {
+      exitCaptureProcess();
     }
   }
 
