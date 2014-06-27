@@ -490,13 +490,33 @@ function getAllDevInfo(on_complete, forceReloadDevInfo) {
 /*
  * upload all necessary files to android
  */
-function prepareDeviceFile(device, on_complete, force/*optional*/) {
-  if (devMgr[device] && devMgr[device].didPrepare && !devMgr[device].err && !force) {
-    on_complete();
+function prepareDeviceFile(device, _on_complete, force/*optional*/) {
+  var dev = devMgr[device];
+  if (dev && dev.didPrepare && !dev.err && !force) {
+    _on_complete();
     return;
   }
+  dev.didPrepare = false;
+  if (prepareDeviceFile.callbackMap) { //is preparing?
+    log('[prepareFileToDevice ' + device + ']already in preparing, so add to callback array');
+    prepareDeviceFile.callbackMap[device] = _on_complete;
+    return;
+  } else {
+    log('[prepareDeviceFile for ' + device + ']begin');
+    prepareDeviceFile.callbackMap = {};
+    prepareDeviceFile.callbackMap[device] = _on_complete;
+  }
+
+  var on_complete = function (err) {
+    var map = prepareDeviceFile.callbackMap;
+    log('[prepareFileToDevice ' + device + ']end. ' + (Object.keys(map).length ? 'Now notify all callbacks' + (err ? ' with ' : '') : '') + (err || ''));
+    delete prepareDeviceFile.callbackMap;
+    forEachValueIn(map, function (callback) {
+      callback(err);
+    });
+  };
+
   spawn('[CheckDevice ' + device + ']', conf.adb, conf.adbOption.concat('-s', device, 'shell', 'echo', '`', ADB_GET_DEV_INFO_CMD_ARGS, 'echo', '====;', 'cat', ANDROID_WORK_DIR + '/version', '2>', '/dev/null', '`'), function/*on_close*/(ret, stdout, stderr) {
-    var dev;
     var err = (ret === 0 && !stderr && stdout) ? '' : (toErrSentence(stderr) || 'unknown error: failed to get device info');
     if (err) {
       if ((dev = devMgr[device]) && dev.err !== err) {
@@ -511,9 +531,9 @@ function prepareDeviceFile(device, on_complete, force/*optional*/) {
     var info = parts[0].trim(); //get device info
 
     dev = getOrCreateDevCtx(device);
-    if (dev.info !== info || dev.err !== err) {
+    if (dev.info !== info || dev.err) {
       dev.info = info;
-      dev.err = err;
+      dev.err = '';
       updateWholeUI();
     }
     // BTW, detect new line sequence returned by adb, Usually CrCount=0 (means need not convert), But for Windows OS, at least=1
@@ -547,7 +567,8 @@ function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
     return;
   }
   dev.touchStatus = 'preparing';
-  spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
+  var logHead = '[getTouchDevInfo ' + dev.device + ']';
+  spawn(logHead, conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', 'getevent -pS'), function/*on_close*/(ret, stdout, stderr) {
     if (ret !== 0 || stderr) {
       dev.touchStatus = undefined;
       return;
@@ -579,7 +600,7 @@ function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
           dev.w = Math.floor((Number(match['0035'][1]) + 1) / 2) * 2;
           dev.h = Math.floor((Number(match['0036'][1]) + 1) / 2) * 2;
           if (!dev.w || !dev.h) {
-            log('[touch]******** strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
+            log(logHead + '******** strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
           } else {
             dev.touchAvgContactSize = Math.max(Math.ceil(match['0030'][1] / 2), 1);
             dev.touchMaxTrackId = Number(match['0039'][1]);
@@ -596,7 +617,7 @@ function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
 
             dev.touchDevPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
             dev.touchStatus = 'OK';
-            log('[touch]******** got input device: ' + dev.touchDevPath + ' w=' + dev.w + ' h=' + dev.h + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
+            log(logHead + '******** got input device: ' + dev.touchDevPath + ' w=' + dev.w + ' h=' + dev.h + ' touchModernStyle=' + dev.touchModernStyle + ' touchAvgContactSize=' + dev.touchAvgContactSize + ' touchAvgPressure=' + dev.touchAvgPressure + ' touchAvgFingerSize=' + dev.touchAvgFingerSize + ' touchNeedBtnTouchEvent=' + dev.touchNeedBtnTouchEvent + ' touchMaxTrackId=' + dev.touchMaxTrackId + ' ********');
             prepareTouchCmdServer(dev);
             return true;
           }
@@ -605,19 +626,20 @@ function prepareTouchInfoAndCmdServer(dev, force/*optional*/) {
       return false;
     })) { //almost impossible
       dev.touchStatus = 'not found touch device';
-      log('[touch]******** ' + dev.touchStatus);
+      log(logHead + '******** ' + dev.touchStatus);
     }
   });
 }
 
 function prepareTouchCmdServer(dev) {
   if (!dev.touchShellStdin) {
-    var childProc = spawn('[touch]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell'), null, {noLogStdout: true, stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
+    var logHead = '[touchCmdSrv ' + dev.device + ']';
+    var childProc = spawn(logHead, conf.adb, conf.adbOption.concat('-s', dev.device, 'shell'), null, {noLogStdout: true, stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
     childProc.on('close', function () {
       dev.touchShellStdin = undefined;
     });
     childProc.stdin.on('error', function (err) {
-      log('[touch]failed to write touchServer.stdin. Error: ' + err);
+      log(logHead + '******** failed to write touchServer.stdin. Error: ' + err);
     });
     dev.touchShellStdin = childProc.stdin;
   }
@@ -626,7 +648,7 @@ function prepareTouchCmdServer(dev) {
 function installApkIgnoreErr(dev, force/*optional*/) {
   if (!dev.didTryInstallApk || force) {
     dev.didTryInstallApk = true;
-    spawn('[installApk]', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', (force ? 'pm uninstall jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1;' : 'ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 ||') + ' pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
+    spawn('[installApkTo ' + dev.device + ']', conf.adb, conf.adbOption.concat('-s', dev.device, 'shell', (force ? 'pm uninstall jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1;' : 'ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 ||') + ' pm install ' + ANDROID_WORK_DIR + '/ScreenOrientation.apk'));
   }
 }
 
@@ -899,6 +921,7 @@ function capture(outputStream, q, on_captureBeginOrFailed) {
         var err = toErrSentence(buf.toString());
         forEachValueIn(provider.consumerMap, endCaptureConsumer, err);
         if (dev.err !== err) {
+          dev.err = err;
           updateWholeUI();
         }
       });
@@ -1993,8 +2016,9 @@ function startStreamWeb() {
       var x = (q.x * dev.w).toFixed();
       var y = (q.y * dev.h).toFixed();
 
+      var logHead = '[touchCmdSrv ' + dev.device + ']';
       if (q.type === 'm' && dev.touchLast_x === x && dev.touchLast_y === y) { //ignore move event if at same position
-        logIf(conf.logTouchCmdDetail, '[touch]ignore move event at same position');
+        logIf(conf.logTouchCmdDetail, logHead + 'ignore move event at same position');
         return;
       }
 
@@ -2054,7 +2078,7 @@ function startStreamWeb() {
       }
 
       if (cmd !== '') {
-        logIf(conf.logTouchCmdDetail, cmd, {head: '[touch]exec: '});
+        logIf(conf.logTouchCmdDetail, cmd, {head: logHead + 'exec: '});
         dev.touchShellStdin.write(cmd + '\n');
       }
 
