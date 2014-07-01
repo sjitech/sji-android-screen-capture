@@ -16,4 +16,4 @@ New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on
 <b>
 New: We will enhance performance to 30 frames/second full screen in about 2 months, for android 4.2~4.4.  No root needed, just use adb.</b>
 
-New: for private reason, we closed this project, if you are interesting with this project or ask for bussiness support please contact osexp2003@gmail.com
+<b>For private reason, we'v closed this project, if you are interested with this project or asking for bussiness support please contact osexp2003@gmail.com</b>
