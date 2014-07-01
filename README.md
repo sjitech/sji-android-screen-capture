@@ -13,6 +13,7 @@ Usage videoFeel free to feedback with English/日本語/中国語!
 New: Recorded file can be auto converted to H.264/MP4 and WebM video format if you'v installed ffmpeg in local PC.
 New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 2.2~4.4)
 
-New: We will enhance performance to 30 frames/second full screen in about 2 months, for android 4.2~4.4.  No root needed, just use adb.
+<b>
+New: We will enhance performance to 30 frames/second full screen in about 2 months, for android 4.2~4.4.  No root needed, just use adb.</b>
 
 New: for private reason, we closed this project, if you are interesting with this project or ask for bussiness support please contact osexp2003@gmail.com
