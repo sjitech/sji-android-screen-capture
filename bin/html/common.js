@@ -111,7 +111,10 @@ var AscUtil = {};
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
     if ($v.css('transform').indexOf('matrix') < 0) {
-      var w = $c.outerWidth(), h = $c.outerHeight();
+      var w = $c.outerWidth(true), h = $c.outerHeight(true);
+      if (w === 0 || h === 0) {
+        w = $v.outerWidth(true), h = $v.outerHeight(true);
+      }
       $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', 'overflow': 'hidden'});
       $v.css({'max-width': w, 'max-height': h, width: w, height: h, 'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
     } else {
