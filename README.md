@@ -57,3 +57,5 @@ Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.
     bin/android/busybox is downloaded from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.
+    <br>
+    Currently this product need PC, but can be modified to run in android device directly, if you are interested please contact me.
