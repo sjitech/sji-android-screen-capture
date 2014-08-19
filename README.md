@@ -58,4 +58,4 @@ Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.
     bin/android/busybox is downloaded from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.
     <br>
-    Currently this product need PC, but can be modified to run in android device directly, if you are interested please contact me.
+    Currently this product need PC, but can be modified to run in rooted android device directly, if you are interested please contact me.
