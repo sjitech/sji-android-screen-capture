@@ -14,7 +14,7 @@ New: We will enhance performance to 30 frames/second full screen in about 2 mont
 
 <b>For private reason, we'v closed this project, if you are interested with this project or asking for bussiness support please contact osexp2003@gmail.com, Feel free to feedback with English/日本語/中国語!</b>
 
-<br><br>
+<br>
 
 [Screenshot]
 
@@ -47,7 +47,7 @@ node dir_of_this_project/bin/stream.js dir_of_your_config/myConfig.json
 </code></pre>
 3.<b>Show video/animated image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br>
 Support <a href="http://www.webmproject.org/">WebM</a> video and <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
-Chrome,Firefox,Safari are well supported. IE10+ is not tested but should be OK.
+Chrome,Firefox,Safari are well supported.
 <br><br>
 
 ===================
