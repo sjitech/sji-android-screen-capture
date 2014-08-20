@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
-This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
+This project is aimed to provide a fast way to capture android screen and live view,share,record,remote control it from PC's HTML5 browser.
 No Root Required: You need NOT root your android device)
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari. Windows/Mac/Linux/Unix
 
