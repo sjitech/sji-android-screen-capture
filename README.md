@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
-This project is aimed to provide a fast way to capture android screen and live view,share,record,remote control it from PC's HTML5 browser.
+This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
 No Root Required: You need NOT root your android device)
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari. Windows/Mac/Linux/Unix
 
@@ -20,6 +20,8 @@ New: We will enhance performance to 30 frames/second full screen in about 2 mont
 
 Menu<br>
 <img src="doc/screenshot-menu.png" /><br>
+Menu(AdminTool)<br>
+<img src="doc/AdminTool.png" /><br>
 Live View<br>
 <img src="doc/liveview.png" /><br>
 Recorded Videos<br>
@@ -33,15 +35,15 @@ Recorded Videos<br>
 Install android USB driver automatically or manually when you first plug Android into PC.
 If you want to always record as H.264/MP4 or WebM video format, you need <a href="http://www.ffmpeg.org/download.html">install FFMPEG into PC</a>.
 </code></pre>
-To simplify other settings, you'd better put the directory of adb and local ffmpeg into PATH environment variable otherwise you need put the fullpath of them into "adb" and "ffmpeg" settings in stream.json file.
+To simplify other settings, you'd better put the directory of adb and local ffmpeg into PATH environment variable otherwise you need put the fullpath of them into "adb" and "ffmpeg" settings in config.json file.
 <br><br>
 2.<b>Start Android Screen Capture (include a video stream server) on PC</b>
 <pre><code>
 node dir_of_this_project/bin/stream.js
 </code></pre>
-You can edit configuration file <a href="https://raw.github.com/sjitech/sji-android-screen-capture/master/bin/stream.json">stream.json</a> to change IP, port, SSL...
+You can edit configuration file <a href="bin/config.json">config.json</a> to change IP, port, SSL...
 <br><br>
-Or you can specify your own configuration file which can be copied from config.json file in this dir.
+Or you can specify your own configuration file which can be partially copied from config.json file in this dir.
 <pre><code>
 node dir_of_this_project/bin/stream.js dir_of_your_config/myConfig.json
 </code></pre>
