@@ -18,14 +18,14 @@ New: We will enhance performance to 30 frames/second full screen in about 2 mont
 
 [Screenshot]
 
-Menu<br>
-<img src="doc/screenshot-menu.png" /><br>
-Menu(AdminTool)<br>
-<img src="doc/AdminTool.png" /><br>
 Live View<br>
 <img src="doc/liveview.png" /><br>
 Recorded Videos<br>
 <img src="doc/recorded.png" /><br>
+Menu<br>
+<img src="doc/screenshot-menu.png" /><br>
+Menu(AdminTool)<br>
+<img src="doc/AdminTool.png" /><br>
 
 [How to use]
 
