@@ -1,0 +1,65 @@
+*** /Users/macq/Downloads/ffmpeg-2.4/configure	2014-09-15 01:07:47.000000000 +0900
+--- patch_ffmpeg_configure	2014-09-17 14:21:51.000000000 +0900
+***************
+*** 4307,4311 ****
+  die_license_disabled gpl libxvid
+  die_license_disabled gpl libzvbi
+! die_license_disabled gpl x11grab
+  
+  die_license_disabled nonfree libaacplus
+--- 4307,4311 ----
+  die_license_disabled gpl libxvid
+  die_license_disabled gpl libzvbi
+! #die_license_disabled gpl x11grab
+  
+  die_license_disabled nonfree libaacplus
+***************
+*** 4988,4995 ****
+      check_lib X11/Xlib.h XOpenDisplay -lX11 || disable xlib
+  
+! enabled x11grab                                           &&
+! require Xext X11/extensions/XShm.h XShmCreateImage -lXext &&
+! require Xfixes X11/extensions/Xfixes.h XFixesGetCursorImage -lXfixes &&
+! { enabled xlib || die "ERROR: Xlib not found"; }
+  
+  check_func_headers "windows.h" CreateDIBSection "$gdigrab_indev_extralibs"
+--- 4988,4995 ----
+      check_lib X11/Xlib.h XOpenDisplay -lX11 || disable xlib
+  
+! #enabled x11grab                                           &&
+! #require Xext X11/extensions/XShm.h XShmCreateImage -lXext &&
+! #require Xfixes X11/extensions/Xfixes.h XFixesGetCursorImage -lXfixes &&
+! #{ enabled xlib || die "ERROR: Xlib not found"; }
+  
+  check_func_headers "windows.h" CreateDIBSection "$gdigrab_indev_extralibs"
+*** /Users/macq/Downloads/ffmpeg-2.4/ffmpeg.c	2014-09-15 01:07:47.000000000 +0900
+--- patch_ffmpeg_ffmpeg.c	2014-09-17 14:24:35.000000000 +0900
+***************
+*** 315,322 ****
+--- 315,324 ----
+  static volatile int transcode_init_done = 0;
+  static int main_return_code = 0;
++ static int mainThreadId = 0;
+  
+  static void
+  sigterm_handler(int sig)
+  {
++     if (gettid() != mainThreadId) return;
+      received_sigterm = sig;
+      received_nb_signals++;
+***************
+*** 357,360 ****
+--- 359,363 ----
+      signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
+      signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
++     signal(SIGHUP, sigterm_handler); /* Session Exit (ANSI).  */
+  #ifdef SIGXCPU
+      signal(SIGXCPU, sigterm_handler);
+***************
+*** 3805,3808 ****
+--- 3808,3812 ----
+      int64_t ti;
+  
++     mainThreadId = gettid();
+      register_exit(ffmpeg_cleanup);
+  

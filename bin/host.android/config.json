@@ -1,0 +1,14 @@
+{
+  "outputDir": ".",
+  "alsoRecordAsWebM": false,
+  "log_filePath": "./log.txt",
+  "log_keepOldFileDays": 1,
+  "adbDeviceListUpdateInterval": 10,
+  "adbCheckDeviceTimeout": 30,
+  "adbPushFileToDeviceTimeout": 60,
+  "adbFinishPrepareFileTimeout": 20,
+  "adbSendKeyTimeout": 10,
+  "adbTurnScreenOnTimeout": 20,
+  "adbSetOrientationTimeout": 30,
+  "__end": 0
+}
