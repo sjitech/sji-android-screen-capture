@@ -666,7 +666,7 @@ function streamWeb_handler(req, res) {
         }
         var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html'), recordingTimestamp = dev.liveStreamer && dev.liveStreamer.consumerMap[REC_TAG] && dev.liveStreamer.consumerMap[REC_TAG].q.timestamp;
         filenameAry.forEach(function (filename) {
-          (filename = new FilenameInfo(filename, q.device)).isValid && isImage === (filename.type === 'jpg') && (filename.origTimestamp !== recordingTimestamp)
+          (filename = new FilenameInfo(filename, q.device)).isValid && isImage === (filename.type === 'jpg') && (isImage || filename.origTimestamp !== recordingTimestamp)
           && (filenameMap[isImage ? filename.toString() : filename.origTimestamp] = filename);
         });
         var sortedKeys = Object.keys(filenameMap).sort().reverse();
