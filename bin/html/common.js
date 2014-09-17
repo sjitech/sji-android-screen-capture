@@ -1,89 +1,119 @@
-var AscUtil = {};
-
+var AscUtil = {showEventsOnly: false};
 
 (function () {
   'use strict';
-  AscUtil.setTouchHandler = function (liveView, touchServerUrl) {
-    var $liveView = $(liveView);
-    if (!touchServerUrl) {
-      console.info('clearTouchHandler');
-      $liveView.unbind('mousedown').unbind('mouseup').unbind('mousemove').unbind('mouseout');
-      return;
-    }
-    var logHead = '[dev ' + decodeURIComponent((touchServerUrl.match(/[?&]device=([^&]+)/) || '  ')[1]) + '] ';
+  AscUtil.setTouchHandler = function (liveImage, touchServerUrl) {
+    var $liveImage = $(liveImage);
     var evtAry = [];
-    var isFirefox = (navigator.userAgent.match(/Firefox/i) !== null);
+    var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
+    var typeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
+    var dummyObj = {};
+    !typeMap && console.log({changedTouches: null, touches: null}); //just to avoid compiler warning
 
-    $liveView
-        .on('mousedown', function (e) {
+    $liveImage
+        .unbind('mousedown touchstart dragstart')
+        .on('mousedown', function (e) { //touch handler for desktop browser
+          if (e.which === 3) return; //skip right button
           saveOrSendMouseAction(e);
-          $liveView.mousemove(function (e) {
-            saveOrSendMouseAction(e);
-          }).mouseout(function (e) {
+          $liveImage
+              .on('mousemove', function (e) {
                 saveOrSendMouseAction(e);
-                $liveView.unbind('mousemove').unbind('mouseout');
-              });
+              })
+              .on('mouseup mouseout', function (e) {
+                saveOrSendMouseAction(e);
+                $liveImage.unbind('mousemove mouseup mouseout');
+              })
+          ;
         })
-        .on('mouseup', function (e) {
+        .on('touchstart', function (e) { //touch handler for mobile browser
           saveOrSendMouseAction(e);
-          $liveView.unbind('mousemove').unbind('mouseout');
+          $liveImage
+              .on('touchmove', function (e) {
+                if (!(e.originalEvent && (e.originalEvent.changedTouches || e.originalEvent.touches || dummyObj).length > 1)) {
+                  e.preventDefault(); //prevent scroll page only if not touched by multi-finger
+                }
+                saveOrSendMouseAction(e);
+              })
+              .on('touchend touchcancel touchleave', function (e) {
+                saveOrSendMouseAction(e);
+                $liveImage.unbind('touchmove touchend touchcancel touchleave');
+              })
+              .unbind('mousedown') //need not mousedown event anymore
+          ;
         })
         .on('dragstart', function () {
-          return false; //disable drag
+          return false; //e.preventDefault() has no effect
         })
-        .unbind('mousemove')
-        .unbind('mouseout');
-
-    console.info(logHead + 'setTouchHandler OK');
+        .on('contextmenu', function () {
+          return false;
+        })
+    ;
 
     function saveOrSendMouseAction(e) {
       if (e.offsetX === undefined) {
-        e.offsetX = e.clientX - $liveView.offset().left;
+        if (e.pageX) {
+          e.offsetX = e.pageX - $liveImage.offset().left;
+        } else if (e.originalEvent && e.originalEvent.changedTouches && e.originalEvent.changedTouches.length && e.originalEvent.changedTouches[0].pageX) {
+          e.offsetX = e.originalEvent.changedTouches[0].pageX - $liveImage.offset().left; //for mobile browser
+        } else {
+          return;
+        }
       }
       if (e.offsetY === undefined) {
-        e.offsetY = e.clientY - $liveView.offset().top;
+        if (e.pageY) {
+          e.offsetY = e.pageY - $liveImage.offset().top;
+        } else if (e.originalEvent && e.originalEvent.changedTouches && e.originalEvent.changedTouches.length && e.originalEvent.changedTouches[0].pageY) {
+          e.offsetY = e.originalEvent.changedTouches[0].pageY - $liveImage.offset().top; //for mobile browser
+        } else {
+          return;
+        }
       }
-      var vw = $liveView.outerWidth();
-      var vh = $liveView.outerHeight();
-      if (isFirefox) {
-        if ($liveView.css('transform').indexOf('matrix') < 0) {
+      var vw = $liveImage.width(), vh = $liveImage.height();
+
+      if (isDesktopFirefoxStyle) {
+        if ($liveImage.css('transform').indexOf('matrix') < 0) { //not rotated (portrait)
           if (vw < vh) {
             e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
             e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
-          } else {
+          } else { //normally not used. Only used when capture in landscape
             e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
             e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
           }
-        } else {
+        } else { //rotated (landscape)
           if (vw < vh) {
             e.xPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
             e.yPer = Math.min(1, Math.max(0, e.offsetX / vh));
-          } else {
+          } else { //normally not used. Only used when capture in landscape
             e.xPer = Math.min(1, Math.max(0, (vh - e.offsetX) / vh));
             e.yPer = Math.min(1, Math.max(0, (vw - e.offsetY) / vw));
           }
         }
-      } else {
+      } else { //desktop chrome style
         if (vw < vh) {
           e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
           e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));
-        } else {
+        } else { //normally not used. Only used when capture in landscape
           e.xPer = Math.min(1, Math.max(0, (vh - e.offsetY) / vh));
           e.yPer = Math.min(1, Math.max(0, e.offsetX / vw));
         }
       }
-      if (evtAry.length) {
-        evtAry.push(e);
+
+      if (AscUtil.showEventsOnly) {
+        console.log(e.type + ' ' + e.xPer.toFixed(5) + ' ' + e.yPer.toFixed(5));
+        if (e.originalEvent && (e.originalEvent.changedTouches || e.originalEvent.touches || dummyObj).length > 1) {
+          console.log('touches: ' + (e.originalEvent.changedTouches || e.originalEvent.touches).length);
+        }
       } else {
-        sendMouseAction(e);
+        if (evtAry.length) {
+          evtAry.push(e);
+        } else {
+          sendMouseAction(e);
+        }
       }
     }
 
     function sendMouseAction(e) {
-      var type = e.type.slice(5, 6)/*d:down, u:up: o:out, m:move*/;
-      console.log(logHead + '[send touch event] ' + type + ' ' + e.xPer + ' ' + e.yPer);
-      $.ajax(touchServerUrl + '&type=' + type + '&x=' + e.xPer + '&y=' + e.yPer,
-          {timeout: 2000})
+      $.ajax(touchServerUrl + '&type=' + typeMap[e.type] + '&x=' + e.xPer.toFixed(5) + '&y=' + e.yPer.toFixed(5), {timeout: 3000})
           .done(function () {
             if ((e = evtAry.shift())) {
               if (e.type === 'mousemove') {
@@ -101,34 +131,39 @@ var AscUtil = {};
               sendMouseAction(e);
             }
           })
-          .fail(function (jqXHR, textStatus) {
-            console.error(logHead + '[send touch event] error: ' + textStatus + ', HTTP status code: ' + jqXHR.status);
+          .fail(function () {
             evtAry = [];
-          })
+          });
     }
   };
 
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
     if ($v.css('transform').indexOf('matrix') < 0) {
+      targetContainer.oldCss = {
+        width: targetContainer.style.width,
+        height: targetContainer.style.height,
+        overflow: ''
+      };
       var w = $c.outerWidth(true), h = $c.outerHeight(true);
       if (w === 0 || h === 0) {
-        w = $v.outerWidth(true), h = $v.outerHeight(true);
+        w = $v.outerWidth(true);
+        h = $v.outerHeight(true);
       }
-      $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', 'overflow': 'hidden'});
-      $v.css({'max-width': w, 'max-height': h, width: w, height: h, 'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
+      $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', overflow: 'hidden'});
+      $v.css({'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
     } else {
-      $v.css({'max-width': '', 'max-height': '', width: '', height: '', 'transform-origin': '', transform: ''});
-      $c.css({width: '', height: '', 'text-align': '', 'vertical-align': '', 'overflow': ''});
+      $v.css({'transform-origin': '', transform: ''});
+      $c.css(targetContainer.oldCss);
     }
   };
 
-  AscUtil.scaleLocally = function (target) {
-    var $v = $(target);
-    if ($v.css('transform').indexOf('matrix') < 0) {
-      $v.css({'transform': 'scale(0.5, 0.5) translate(0, -50%)'});
-    } else {
-      $v.css({'transform': ''});
-    }
-  };
+  AscUtil.loopLoadImage = function (liveImage, liveImageUrl) {
+    var $liveImage = $(liveImage), src = (liveImageUrl || $liveImage.prop('src')).replace(/&?type=[^&]*/, '') + '&type=jpg';
+    $liveImage.prop('src', '').prop('src', src); //close comet connection and trigger log once
+    clearInterval(liveImage.__liveImageTimer);
+    liveImage.__liveImageTimer = setInterval(function () {
+      $liveImage.prop('src', src + '&timestamp=' + Date.now());
+    }, 1000 / src.match(/fps=([^&]+)/)[1]);
+  }
 })();

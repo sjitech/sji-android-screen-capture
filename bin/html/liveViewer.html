@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Live JPG of #device</title>
+  <link rel="stylesheet" type="text/css" href="common.css">
+  <style>
+    .expandable > * {display: none}
+  </style>
+</head>
+<body>
+  <div style="text-align: center; width: 100%; position: fixed; top:0">
+    <form class="toolbar">
+      <input type="hidden" name="device" value="#device">
+      <input type="hidden" name="accessKey" value="#accessKey">
+      <span class="_capture_param_changed">
+        <button type="submit">Set</button>
+        <label class="infoWithTip" title="Frames per Second. @minFps >= value <= @maxFps">
+          Fps<input type="text" name="fps" value="@fps" maxlength="3" size="3"/>
+        </label>
+        <label class="infoWithTip" title="Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
+          Scale<input type="text" name="scale" value="@scale" size="10"/>
+        </label>
+        <label>
+          <select name="rotate">
+            <option value="0" _selectedIf_rotate_0>Portrait</option>
+            <option value="270" title="landscape" _selectedIf_rotate_270>Landscape</option>
+          </select>
+        </label>
+      </span>
+    </form>
+    <div style="position: absolute; width: 100%; text-align: right">
+      <a class="button" href="saveImage?device=@device&accessKey=@accessKey" target="resultIFrame" title="Save Current Image To File On Server">
+        Save Image
+      </a>
+      <a href="imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device">Images</a>&nbsp;&nbsp;
+    </div>
+    <iframe class="toolbar" name="resultIFrame"></iframe>
+  </div>
+  <div style="position: fixed; right: 0; top: 62px; text-align: right">
+    <div><button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
+    <div style="height:12px">&nbsp;</div>
+    <div>Device Orientation:</div>
+    <div><a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame">Landscape</a></div>
+    <div><a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame">Portrait</a></div>
+    <div><a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame">Free</a></div>
+    <div style="height:8px">&nbsp;</div>
+    <div>Device Buttons:</div>
+    <div><a class="button" href="turnScreenOn?device=@device&accessKey=@accessKey" target="resultIFrame">Screen ON</a></div>
+    <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=26" target="resultIFrame" title="Only valid for android 4.2+">ON/OFF</a></div>
+    <div style="height:8px">&nbsp;</div>
+    <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=3" target="resultIFrame">Home</a></div>
+    <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=4" target="resultIFrame">Back</a></div>
+    <div style="height:8px">&nbsp;</div>
+    <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=82" target="resultIFrame">Menu</a></div>
+    <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=187" target="resultIFrame">Apps</a></div>
+  </div>
+  <div style="text-align: center; margin-top: 62px">
+    <div id="viewerContainer" style="display: inline-block">
+      <img id="viewer" src="capture?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate"/>
+    </div>
+  </div>
+  <div class="expandable" style="position: fixed; top: 1px; left: 1px; max-width:50%; max-height:50%">
+    <div>Help</div>
+    <ul>
+      If the live view is not displayed, please confirm following checklist
+      <li>
+        You have installed latest Android SDK because some devices need newer SDK
+      </li>
+      <li>
+        You have enabled "Debug Mode" of the device(Developer Setting Menu)
+      </li>
+      <li>
+        You have connected the device to this machine by USB cable or by WiFi-ADB mode manually
+      </li>
+      <li>
+        You have permitted access from this machine to the device.
+        When you connect the device to a machine, the device will show a security confirmation dialog to ask your permission.
+        You should click yes.
+      </li>
+      <li>
+        If you have done all above mentioned, Now try to:
+        <ul>
+          <li>Restart ADB (by "AdminTool" in menu page)</li>
+          <li>Reconnect the device</li>
+          <li>Refresh this page</li>
+        </ul>
+      </li>
+    </ul>
+    <ul>
+      If you can not remote control the device by click/drag mouse in the live view, please actually turn on screen of the device
+      (because for some devices, the [Power Key] in the page does not work, so although the device's screen is off but the
+      live view still shows an static image which is just a cache of last screen of device.
+      And ).
+    </ul>
+    <ul id="lblBrowserAgentStr">
+    </ul>
+    <ul>
+      To report an issue: https://github.com/sjitech/sji-android-screen-capture/issues/new
+    </ul>
+  </div>
+  <script src="jquery.js" type="text/javascript"></script>
+  <script src="common.js" type="text/javascript"></script>
+  <script>
+    AscUtil.setTouchHandler(document.getElementById('viewer'), '/touch?device=@device&accessKey=@accessKey');
+    $('#lblBrowserAgentStr').text('Current browser agent string: ' + navigator.userAgent);
+    if (!/chrome|firefox/i.test(navigator.userAgent) && (!/safari/i.test(navigator.userAgent) || /android/i.test(navigator.userAgent))) {
+      AscUtil.loopLoadImage(document.getElementById('viewer'));
+    }
+  </script>
+</body>
+</html>

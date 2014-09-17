@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>SJI-ASC Management</title>
+  <style>
+    th {
+      background-color: #e8e8e8;
+      font-size: small
+    }
+    .expandable > * {
+      display: none
+    }
+  </style>
+  <link rel="stylesheet" type="text/css" href="common.css">
+</head>
+<body onunload="">
+<div style="text-align: left; width: 100%; position: fixed; top:0">
+  <form class="toolbar" style="white-space: nowrap">
+    <input type="hidden" name="adminKey" value="#adminKey"/>
+    <button type="submit" title="Set default value">Set</button>
+    <label class="infoWithTip" title="Frames per Second. @minFps >= value <= @maxFps">
+      Fps<input type="text" name="fps" value="@fps" maxlength="3" size="3"/>
+    </label>
+    <label class="infoWithTip" title="Set default scale. Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
+      Scale<input type="text" name="scale" value="@scale" size="10"/>
+    </label>
+    <label>
+      <select name="rotate">
+        <option value="0" _selectedIf_rotate_0>Portrait</option>
+        <option value="270" title="landscape" _selectedIf_rotate_270>Landscape</option>
+      </select>
+    </label>
+  </form>
+  <iframe class="toolbar" name="resultIFrame"></iframe>
+</div>
+<div style="margin-top: 62px; text-align: center">
+  <table border="1px" id="device_tbl" style="width:100%">
+    <tr>
+      <th style="text-align: left">Device<label class="infoWithTip" title="Device Serial Number or IP:Port">SN</label>/Info/Action</th>
+      <th>Status</th>
+      <th>AccessKey</th>
+    </tr>
+    <!--repeatBegin-->
+    <tr id="row1_$device">
+      <td style="text-align: left; vertical-align: top; white-space: nowrap">
+        #device
+      </td>
+      <td style="width: 1px; vertical-align: top; text-align: left; padding-right: 2px; white-space: nowrap; border-left: 1px solid lightgray" id="devStatus_$device">
+        #devStatus
+      </td>
+      <td style="width: 1px; vertical-align: top; text-align: left; white-space: nowrap; border-left: 1px solid lightgray">
+        <form action="/deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')">
+          <input type="hidden" name="adminKey" value="#adminKey"/>
+          <input type="hidden" name="action" value="setAccessKey"/>
+          <input type="hidden" name="device" value="#device"/>
+          <button type="submit" class="internal">Set</button>
+          <label>
+            <input type="text" name="accessKey" value="#accessKey" size="4" />
+          </label>
+          <span id="accessKeyTimestamp">#accessKeyTimestamp</span>
+        </form>
+      </td>
+    </tr>
+    <tr id="row2_$device" style="border-top: 1px solid lightgray">
+      <td colspan="3" style="text-align: left; vertical-align: top; padding-left: 8px">
+        <div>
+          <span id="devInfo_$device">#devInfo</span>
+          <span style="float: right">
+            <span class="captureIndicator" id="captureParameter_$device"></span>
+            <span id="captureTimestamp_$device"></span>
+          </span>
+        </div>
+        <div>
+          <span style="white-space: nowrap">
+            <span style="background-color: darkgray">&nbsp;</span>
+            <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device">
+              Live View
+            </a>
+            <span class="captureIndicator" id="liveViewCount_$device"></span>
+            <a id="stopLiveView_$device" class="button" href="/deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop All Live View" style="display: none">
+              Stop
+            </a>
+          </span>
+          <span style="white-space: nowrap; @hideIf_no_local_ffmpeg">
+            <span style="background-color: darkgray">&nbsp;</span>
+            <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')">
+              Record
+            </a>
+            <span class="captureIndicator" id="recordingCount_$device"></span>
+            <a id="stopRecording_$device" class="button" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop Recording" style="display: none">
+              Stop
+            </a>
+          </span>
+          <span style="white-space: nowrap">
+            <span style="background-color: darkgray">&nbsp;</span>
+            <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device">
+              Videos
+            </a>
+            <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device">
+              Images
+            </a>
+          </span>
+          <span style="white-space: nowrap">
+            <span style="background-color: darkgray">&nbsp;</span>
+            <a class="internal" href="/getDeviceLog?device=@device&adminKey=@adminKey" target="log_$device" title="Android-Side Utility Log">
+              Log
+            </a>
+            <a class="internal" href="/GetDeviceCpuMemTop?device=@device&adminKey=@adminKey" target="top_$device" title="Android CPU/Memory Usage">
+              CPU/Mem
+            </a>
+          </span>
+        </div>
+      </td>
+    </tr>
+    <!--repeatEnd-->
+  </table>
+  <div>&nbsp;</div>
+  <span style="@hideIf_local_ffmpeg"><b style="color: blue">Failed</b> to check local FFMPEG utility, so can <b style="color: blue">NOT</b> record in H.264/MP4 and WebM format</span>
+</div>
+<div class="expandable" style="position: fixed; top: 1px; right: 1px; max-width:80%; max-height:90%">
+  <div>AdminTool</div>
+  <div>
+    <form action="/getServerLog" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit">Get Server Log</button>
+      <label>
+        <input type="checkbox" name="download" value="true"/>Download
+      </label>
+      <div>
+        <label><input type="radio" name="logHowManyDaysAgo" value="0" checked/>Today</label>
+        <label><input type="radio" name="logHowManyDaysAgo" value="1"/>-1</label>
+        <label><input type="radio" name="logHowManyDaysAgo" value="2"/>-2</label>
+        <span style="background-color: darkgray">&nbsp;</span>
+        <label>
+          <select name="mode" onchange="if(this.value===''){$('#txt_logSize').css('visibility','hidden');}else{$('#txt_logSize').css('visibility','');}">
+            <option value="">All</option>
+            <option value="tail" selected>Last</option>
+            <option value="head">First</option>
+          </select>
+        </label>
+        <label>
+          <input type="text" id="txt_logSize" name="size" value="32000" maxlength="10" size="5"/>B
+        </label>
+      </div>
+    </form>
+    <form action="/discover" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit" title="Discover Remote Devices Which running ADB Server in TCP/IP Mode">Discover Devices</button>
+      <a id="discoveringStatus" href="/stopDiscover?adminKey=@adminKey" target="resultIFrame" style="background-color: blue; color: white; font-size: 1em; margin-left: 16px; display: block"></a>
+      <div style="margin-left: 16px">
+        <label>
+          IP<input type="text" name="from" value="@discover_from_ip" maxlength="15" style="width: 100px"/>-<input type="text" name="to" value="@discover_to_ip_part4" maxlength="3" size="3"/>
+        </label>
+        <label>
+          Port<input type="text" name="port" value="@discover_port" maxlength="5" size="5"/>
+        </label>
+      </div>
+      <div style="margin-left: 16px">
+        <label>
+          Within<input type="text" name="totalTimeout" value="@discover_totalTimeout" maxlength="2" size="2"/>s.
+        </label>
+        <label>
+          <input type="text" name="timeout" value="@discover_timeout" maxlength="2" size="2"/>s/device
+        </label>
+      </div>
+      <div style="margin-left: 16px">
+        <label>
+          Until<input type="text" name="maxFound" value="@discover_maxFound" maxlength="3" size="3"/>new devices found
+        </label>
+      </div>
+    </form>
+    <form action="/set" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      Stream Web: <span style="border: 1px solid #000000; padding: 2px;">@result_streamWebBaseURL</span>
+      <br>
+      <button type="submit">Set</button>
+      <label>
+        <input type="checkbox" _checkedIf_autoChooseStreamWebBaseURL onclick="if ($.prop(this, 'checked')) {$('#txt_streamWebBaseURL').val('').hide();} else {$('#txt_streamWebBaseURL').val('@result_streamWebBaseURL').show();}"/>Auto
+      </label>
+      <label>
+        <input type="text" name="streamWebBaseURL" id="txt_streamWebBaseURL" value="@streamWebBaseURL" style="@hideIf_autoChooseStreamWebBaseURL; width: 170px" />
+      </label>
+    </form>
+    <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+      <a class="button" href="/prepareAllDevices?adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')">
+        Prepare
+      </a>
+      All Devices forcibly
+    </div>
+    <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+      <a class="button" href="/reloadResource?adminKey=@adminKey" target="resultIFrame">
+        Reload
+      </a>
+      Internal Files
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">#showDisconnectedDevices_negBtn</a>
+      Show Disconnected Devices
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">#logHttpReqDetail_negBtn</a>
+      Log HTTP Request Detail
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">#logFpsStatistic_negBtn</a>
+      Log FPS Statistic
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">#logFfmpegDebugInfo_negBtn</a>
+      Log FFMPEG Debug Info
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&logAllHttpRequests=@logAllHttpRequests_negVal" target="resultIFrame">#logAllHttpRequests_negBtn</a>
+      Log All Http Requests
+    </div>
+    <div>
+      <a class="button" href="/set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">#logAllAdbCommands_negBtn</a>
+      Log All ADB Commands
+    </div>
+    <div style="border-top: 1px solid lightgray">
+      <a class="button" href="/stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
+        Stop Server
+      </a>
+    </div>
+  </div>
+</div>
+<div id="darkMask" style="display: none">Disconnected. Auto reconnect every 10 seconds...</div>
+
+<script src="jquery.js" type="text/javascript"></script>
+<script>
+  var appVer = '@appVer', ver = '';
+  (function queryStatus() {
+    $('#darkMask').hide();
+    $.ajax('/status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
+      .done(function (status) {
+        if (status.appVer !== appVer) {
+          document.location.reload(true);
+          return;
+        }
+        ver = status.ver;
+        $.each(status.data, function (elementId, text) {
+          var $e = $('#' + elementId);
+          $e.text(text);
+          if (elementId.slice(0, 10) === 'devStatus_') {
+            var cls = !text ? '' : text.slice(0, 9) === 'preparing' ? 'devPrep' : text.slice(0, 2) === 'OK' ? '' : 'devErr';
+            $('#' + elementId.replace(/^devStatus_/, 'row1_')).prop('class', cls);
+            $('#' + elementId.replace(/^devStatus_/, 'row2_')).prop('class', cls);
+          } else if (elementId.slice(0,14)==='liveViewCount_') {
+            $('#'+elementId.replace(/^liveViewCount_/,'stopLiveView_')).css('display', text ? '' : 'none');
+          } else if (elementId.slice(0,15)==='recordingCount_') {
+            $('#'+elementId.replace(/^recordingCount_/,'stopRecording_')).css('display', text ? '' : 'none');
+          }
+        });
+        queryStatus();
+      })
+      .fail(function (jqXHR, textStatus) {
+        if (textStatus === 'timeout') {
+          queryStatus();
+        } else {
+          $('#darkMask').show();
+          setTimeout(queryStatus, 10 * 1000);
+        }
+      });
+  })();
+</script>
+</body>
+</html>

@@ -3,25 +3,25 @@
     <words>
       <w>&amp;amp</w>
       <w>&amp;fps</w>
-      <w>&amp;get</w>
-      <w>&amp;key</w>
-      <w>acapess</w>
       <w>addr</w>
-      <w>aimg</w>
       <w>ajpg</w>
-      <w>apng</w>
+      <w>androidgrab</w>
+      <w>armeabi</w>
       <w>armv</w>
       <w>autoplay</w>
       <w>autox</w>
-      <w>axxx</w>
       <w>busybox</w>
       <w>charcode</w>
       <w>chkerr</w>
+      <w>codec</w>
+      <w>contextmenu</w>
+      <w>cpuinfo</w>
       <w>crcrlf</w>
       <w>crlf</w>
-      <w>decice</w>
       <w>disp</w>
+      <w>dlopen</w>
       <w>dragstart</w>
+      <w>dumpsys</w>
       <w>eacces</w>
       <w>eaddrinuse</w>
       <w>evtlog</w>
@@ -41,57 +41,45 @@
       <w>lightcyan</w>
       <w>logpipe</w>
       <w>lookahead</w>
+      <w>loopback</w>
       <w>maxage</w>
       <w>mousedown</w>
       <w>mousemove</w>
       <w>mouseout</w>
       <w>mouseup</w>
-      <w>mpeg</w>
-      <w>mpng</w>
       <w>multiline</w>
       <w>multipart</w>
-      <w>newcap</w>
-      <w>newcc</w>
-      <w>newctx</w>
-      <w>noop</w>
       <w>nostats</w>
-      <w>nput</w>
+      <w>nostdin</w>
       <w>oncr</w>
       <w>pkcs</w>
       <w>preload</w>
       <w>proc</w>
-      <w>qdevice</w>
       <w>qmax</w>
       <w>qmin</w>
       <w>rawvideo</w>
       <w>readdir</w>
       <w>revalidate</w>
-      <w>rfile</w>
       <w>rotatescale</w>
-      <w>safarai</w>
       <w>screenorientation</w>
       <w>screenshot</w>
-      <w>seekable</w>
       <w>sendevent</w>
-      <w>setchkerr</w>
       <w>sigkill</w>
       <w>sigpipe</w>
-      <w>sjiasc</w>
-      <w>smark</w>
       <w>startservice</w>
       <w>stdin</w>
       <w>stty</w>
       <w>sumatium</w>
       <w>sumsung</w>
+      <w>touchcancel</w>
+      <w>touchend</w>
+      <w>touchleave</w>
+      <w>touchmove</w>
+      <w>touchstart</w>
       <w>typemark</w>
-      <w>unregister</w>
-      <w>unsubscribe</w>
       <w>vcodec</w>
-      <w>vdevice</w>
       <w>vframes</w>
       <w>webm</w>
-      <w>wfile</w>
-      <w>xxxxx</w>
     </words>
   </dictionary>
 </component>

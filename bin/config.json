@@ -1,0 +1,65 @@
+//Be careful !!!
+//digital unit of time and interval is second.
+//current directory will be the dir of asc.js
+{
+  "streamWeb_port": 33333, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege.
+  "streamWeb_ip": "localhost", //IP or hostname to which stream web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
+  "streamWeb_protocol": "http", //or "https", when use https, the server certificate (PKCS12 file) is in ./ssl/streamWeb.pfx, you can replace it with yours.
+
+  "adminWeb_port": 3000, //Admin Web public port (must < 65536). For port < 1024, your need to have root privilege.
+  "adminWeb_ip": "localhost", //IP or hostname to which admin web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
+  "adminWeb_protocol": "http", //or "https", when use https, the server certificate (PKCS12 file) is in ./ssl/adminWeb.pfx, you can replace it with yours.
+  "adminKey": "", //access key of admin web server and it is also used as source of auto-generated access key for device. If not but use https, then this will be auto generated.
+
+  "outputDir": "../out", //dir to store recorded file
+  "maxRecordTime": 7200, //max recorded time
+  "enableGetOutputFile": true, //false means you can not view recorded file and saved image without correct adminKey querystring
+  "alsoRecordAsWebM": true,
+
+  //log settings
+  "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
+  "log_keepOldFileDays": 2, //0 means no old files to keep
+  "logAllAdbCommands": false,
+  "logAllHttpRequests": false,
+  "logHttpReqDetail": false,
+  "logFfmpegDebugInfo": false,
+  "logFpsStatistic": false,
+
+  "adbDeviceListUpdateInterval": 5, //get device list repeatedly at this interval
+  "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
+  "fpsStatisticInterval": 10, //output Fps statistic at this interval
+
+  //UI settings
+  "showDisconnectedDevices": false,
+  "defaultScale": "400xAuto",
+  "defaultFps": 4,
+  "minFps": 0.1,
+  "maxFps": 40,
+  "streamWebBaseURL": "", //empty means auto. You can speficy it like http://user:pwd@www.abc.com:8888/virtualPath1/
+
+  //discovery settings
+  "discover_from_ip_part4": 1,
+  "discover_to_ip_part4": 254,
+  "discover_port": 5555,
+  "discover_maxFound": 254,
+  "discover_timeout": 10, //timeout for each device scan
+  "discover_totalTimeout": 60, //total timeout
+
+  //internal settings
+  "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
+  "adbOption": [], //such as ["-H", "172.21.137.5"],
+  "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
+  "androidWorkDir": "/data/local/tmp/sji-asc",
+  "androidLogPath": "/data/local/tmp/sji-asc.log",
+  "adbGetDeviceListTimeout": 5,
+  "adbEchoTimeout": 5,
+  "adbCheckDeviceTimeout": 10,
+  "adbPushFileToDeviceTimeout": 60,
+  "adbFinishPrepareFileTimeout": 10,
+  "adbCaptureExitDelayTime": 2,
+  "adbSendKeyTimeout": 5,
+  "adbTurnScreenOnTimeout": 10,
+  "adbSetOrientationTimeout": 30,
+
+  "__end": 0
+}

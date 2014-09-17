@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Recorded Video of #device</title>
+  <link rel="stylesheet" type="text/css" href="common.css">
+  <style>
+    .toolbar > a[href$="fileindex=@fileindex"] {visibility: hidden}
+    .toolbar > a[href*="fileindex=@fileindex&"] {visibility: hidden}
+  </style>
+</head>
+<body>
+<div style="text-align: center; width: 100%; position: fixed; top:0; z-index: 90">
+  <div class="toolbar">
+    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
+      &lt;&lt;
+    </a>
+    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
+      &lt;
+    </a>
+    <span class="fileDesc">@timestamp</span>
+    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
+      &gt;
+    </a>
+    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=0">
+      &gt;&gt;
+    </a>
+    (Total:<b style="color:blue">@fileCount</b>)
+  </div>
+  <div class="toolbar">
+    <span id="currentVideoType"></span>
+    <button id="btnShow_mp4">Show MP4</button>
+    <button id="btnShow_webm">Show WebM</button>
+    <button style="float: right" onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
+  </div>
+  <div style="float: right; text-align: right">
+    <div style="margin-top: 8px">
+      Download:&nbsp;&nbsp;&nbsp;
+      <div>
+        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
+      </div>
+      <div>
+        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div style="text-align: center; margin-top: 56px">
+  <div id="viewerContainer" style="display: inline-block">
+    <video id="viewer" autoplay controls>
+      <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4" type="video/mp4">
+      <source id="viewerSrc_webm" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm" type="video/webm">
+      <p>Your browser does not support H.264/MP4 or WebM in &lt;video&gt; tag</p>
+    </video>
+  </div>
+</div>
+<script src="jquery.js" type="text/javascript"></script>
+<script src="common.js" type="text/javascript"></script>
+<script>
+  (function () {
+    var htmlMap = {}, statusTimer;
+    htmlMap.mp4 = document.getElementById('viewerContainer').outerHTML.replace(/<source .*\bwebm\b.*>/g, '');
+    htmlMap.webm = document.getElementById('viewerContainer').outerHTML.replace(/<source .*\bmp4\b.*>/g, '');
+    ['mp4', 'webm'].forEach(function (type) {
+      $('#btnShow_' + type).on('click', function () {
+        document.getElementById('viewerContainer').outerHTML = htmlMap[type];
+        setSrcStatus();
+      });
+    });
+    function setSrcStatus() {
+      var currentSrc, viewerSrc_mp4 = document.getElementById('viewerSrc_mp4'), viewerSrc_webm = document.getElementById('viewerSrc_webm');
+      if (viewerSrc_mp4 && viewerSrc_webm) {
+        currentSrc = document.getElementById('viewer').currentSrc;
+        if (!currentSrc) {
+          clearTimeout(statusTimer);
+          statusTimer = setTimeout(setSrcStatus, 100);
+        }
+      } else {
+        currentSrc = (viewerSrc_mp4 || viewerSrc_webm).src;
+        clearTimeout(statusTimer);
+      }
+
+      var currentVideoType = currentSrc && (currentSrc.match(/mp4|webm/) || {})[0];
+      $('#btnShow_mp4').prop('disabled', currentVideoType === 'mp4');
+      $('#btnShow_webm').prop('disabled', currentVideoType === 'webm');
+      $('#currentVideoType').text(currentVideoType === 'mp4' ? 'Showing MP4' : currentVideoType === 'webm' ? 'Showing WebM' : 'Unknown Type');
+    }
+
+    setSrcStatus();
+  })();
+</script>
+</body>
+</html>
