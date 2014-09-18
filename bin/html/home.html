@@ -103,10 +103,10 @@
           </span>
           <span style="white-space: nowrap">
             <span style="background-color: darkgray">&nbsp;</span>
-            <a class="internal" href="/getDeviceLog?device=@device&adminKey=@adminKey" target="log_$device" title="Android-Side Utility Log">
+            <a class="internal" href="/cmd?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
               Log
             </a>
-            <a class="internal" href="/GetDeviceCpuMemTop?device=@device&adminKey=@adminKey" target="top_$device" title="Android CPU/Memory Usage">
+            <a class="internal" href="/cmd?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
               CPU/Mem
             </a>
           </span>
@@ -229,7 +229,7 @@
 
 <script src="jquery.js" type="text/javascript"></script>
 <script>
-  var appVer = '@appVer', ver = '';
+  var appVer = '@appVer', ver = '', devAry = [];
   (function queryStatus() {
     $('#darkMask').hide();
     $.ajax('/status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
@@ -239,17 +239,20 @@
           return;
         }
         ver = status.ver;
+        devAry = [];
         $.each(status.data, function (elementId, text) {
           var $e = $('#' + elementId);
           $e.text(text);
           if (elementId.slice(0, 10) === 'devStatus_') {
+            var device = elementId.slice(10);
             var cls = !text ? '' : text.slice(0, 9) === 'preparing' ? 'devPrep' : text.slice(0, 2) === 'OK' ? '' : 'devErr';
-            $('#' + elementId.replace(/^devStatus_/, 'row1_')).prop('class', cls);
-            $('#' + elementId.replace(/^devStatus_/, 'row2_')).prop('class', cls);
-          } else if (elementId.slice(0,14)==='liveViewCount_') {
-            $('#'+elementId.replace(/^liveViewCount_/,'stopLiveView_')).css('display', text ? '' : 'none');
-          } else if (elementId.slice(0,15)==='recordingCount_') {
-            $('#'+elementId.replace(/^recordingCount_/,'stopRecording_')).css('display', text ? '' : 'none');
+            $('#' + 'row1_' + device).prop('class', cls);
+            $('#' + 'row2_' + device).prop('class', cls);
+            text && text.slice(0, 2) === 'OK' && devAry.push(htmlIdDecode(device));
+          } else if (elementId.slice(0, 14) === 'liveViewCount_') {
+            $('#' + 'stopLiveView_' + elementId.slice(14)).css('display', text ? '' : 'none');
+          } else if (elementId.slice(0, 15) === 'recordingCount_') {
+            $('#' + 'stopRecording_' + elementId.slice(15)).css('display', text ? '' : 'none');
           }
         });
         queryStatus();
@@ -259,10 +262,29 @@
           queryStatus();
         } else {
           $('#darkMask').show();
+          devAry = [];
           setTimeout(queryStatus, 10 * 1000);
         }
       });
   })();
+
+  function adb(cmd, timeout, device) {
+    (device ? [device] : devAry).forEach(function (device) {
+      $.ajax('/cmd?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
+        .done(function (res) {
+          console.log(device + ': ' + res);
+        })
+        .fail(function (jqXHR, textStatus) {
+          console.log(device + ': ' + textStatus);
+        });
+    });
+  }
+
+  function htmlIdDecode(text) {
+    return text.replace(/_([^_]+)_/g, function (match, sub1) {
+      return String.fromCharCode(Number('0x' + sub1));
+    });
+  }
 </script>
 </body>
 </html>

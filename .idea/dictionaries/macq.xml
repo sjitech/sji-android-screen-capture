@@ -2,6 +2,7 @@
   <dictionary name="macq">
     <words>
       <w>&amp;amp</w>
+      <w>&amp;cmd</w>
       <w>&amp;fps</w>
       <w>addr</w>
       <w>ajpg</w>

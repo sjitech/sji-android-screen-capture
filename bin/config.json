@@ -60,6 +60,7 @@
   "adbSendKeyTimeout": 5,
   "adbTurnScreenOnTimeout": 10,
   "adbSetOrientationTimeout": 30,
+  "adbCmdTimeout": 30,
 
   "__end": 0
 }
