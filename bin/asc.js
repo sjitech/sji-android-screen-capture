@@ -531,7 +531,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
     }
   }
 }
-function startRecording(q/*same as capture*/) {
+function doRecord(q/*same as capture*/) {
   var origFilename = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg';
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
@@ -779,7 +779,7 @@ function adminWeb_handler(req, res) {
       q.accessKey !== dev.accessKey && scheduleUpdateWholeUI();
       q.accessKey !== dev.accessKey && (dev.accessKey = q.accessKey);
       q.orientation && setDeviceOrientation(dev, q.orientation);
-      return end(res, q.action === 'startRecording' ? startRecording(q) : 'OK');
+      return end(res, q.action === 'startRecording' ? doRecord(q) : 'OK');
     case '/cmd':
       return spawn('[cmd]', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
