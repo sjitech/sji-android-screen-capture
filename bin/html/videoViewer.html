@@ -87,6 +87,20 @@
     }
 
     setSrcStatus();
+
+    //force render for safari
+    if (!/chrome|firefox/i.test(navigator.userAgent) && /safari/i.test(navigator.userAgent)) {
+      var b = false;
+      var timer = setInterval(forceRender, 100);
+      setTimeout(function () {
+        clearInterval(timer);
+        setInterval(forceRender, 1000);
+      }, 2000);
+      function forceRender() {
+        document.getElementById('viewer').style.backgroundColor = b ? 'white' : '#fefefe';
+        b = !b;
+      }
+    }
   })();
 </script>
 </body>
