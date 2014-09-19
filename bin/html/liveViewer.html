@@ -37,7 +37,7 @@
     </div>
     <iframe class="toolbar" name="resultIFrame"></iframe>
   </div>
-  <div style="position: fixed; right: 0; top: 62px; text-align: right">
+  <div style="position: fixed; right: 0; top: 62px; text-align: right; background-color: ghostwhite; z-index: 1">
     <div><button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button></div>
     <div style="height:12px">&nbsp;</div>
     <div>Device Orientation:</div>
@@ -55,7 +55,7 @@
     <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=82" target="resultIFrame">Menu</a></div>
     <div><a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=187" target="resultIFrame">Apps</a></div>
   </div>
-  <div style="text-align: center; margin-top: 62px">
+  <div style="text-align: center; margin-top: 62px; margin-right: 150px; position: relative; z-index: 100">
     <div id="viewerContainer" style="display: inline-block">
       <img id="viewer" src="capture?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate"/>
     </div>
@@ -64,6 +64,9 @@
     <div>Help</div>
     <ul>
       If the live view is not displayed, please confirm following checklist
+      <li>
+        You have turned on screen (you can try [Screen ON] button in this page.
+      </li>
       <li>
         You have installed latest Android SDK because some devices need newer SDK
       </li>
@@ -89,7 +92,7 @@
     </ul>
     <ul>
       If you can not remote control the device by click/drag mouse in the live view, please actually turn on screen of the device
-      (because for some devices, the [Power Key] in the page does not work, so although the device's screen is off but the
+      (because for some devices, the [Screen ON] button in the page does not work, so although the device's screen is off but the
       live view still shows an static image which is just a cache of last screen of device.
       And ).
     </ul>

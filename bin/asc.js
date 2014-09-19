@@ -435,6 +435,7 @@ function chkCaptureParameter(q, force_ajpg) {
 function doCapture(outputStream, q) {
   var res = outputStream, dev = devMgr[q.device], capture = dev.capture;
   if (!capture) {
+    dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000});
     capture = dev.capture = {q: q, frameIndex: 0, bufAry: []};
     var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell',
         '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
@@ -491,7 +492,6 @@ function doCapture(outputStream, q) {
     childProc.stderr.on('data', function (buf) {
       capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer, stringifyError(buf.toString()) || 'unknown error: strange output of capture process');
     });
-    dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000});
   }
   dev.consumerMap[res.__tag] = res;
   scheduleUpdateLiveUI();

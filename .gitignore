@@ -8,3 +8,4 @@ src/**/bin
 out/*
 log/*
 desktop.ini
+coverage

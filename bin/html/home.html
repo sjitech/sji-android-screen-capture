@@ -35,6 +35,7 @@
   <iframe class="toolbar" name="resultIFrame"></iframe>
 </div>
 <div style="margin-top: 62px; text-align: center">
+  <div style="@hideIf_local_ffmpeg; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
   <table border="1px" id="device_tbl" style="width:100%">
     <tr>
       <th style="text-align: left">Device<label class="infoWithTip" title="Device Serial Number or IP:Port">SN</label>/Info/Action</th>
@@ -115,8 +116,6 @@
     </tr>
     <!--repeatEnd-->
   </table>
-  <div>&nbsp;</div>
-  <span style="@hideIf_local_ffmpeg"><b style="color: blue">Failed</b> to check local FFMPEG utility, so can <b style="color: blue">NOT</b> record in H.264/MP4 and WebM format</span>
 </div>
 <div class="expandable" style="position: fixed; top: 1px; right: 1px; max-width:80%; max-height:90%">
   <div>AdminTool</div>
