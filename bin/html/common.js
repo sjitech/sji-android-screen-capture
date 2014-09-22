@@ -2,8 +2,8 @@ var AscUtil = {showEventsOnly: false, debug: false};
 
 (function () {
   'use strict';
-  AscUtil.setTouchHandler = function (liveImage, touchServerUrl) {
-    var $liveImage = $(liveImage);
+  AscUtil.setTouchHandler = function (liveImage, touchServerUrl, rootRotator) {
+    var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
     var evtAry = [];
     var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
     var typeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
@@ -74,7 +74,7 @@ var AscUtil = {showEventsOnly: false, debug: false};
       var vw = $liveImage.width(), vh = $liveImage.height();
 
       if (isDesktopFirefoxStyle) {
-        if ($liveImage.css('transform').indexOf('matrix') < 0) { //not rotated (portrait)
+        if ($rootRotator.css('transform').indexOf('matrix') < 0) { //not rotated (portrait)
           if (vw < vh) {
             e.xPer = Math.min(1, Math.max(0, e.offsetX / vw));
             e.yPer = Math.min(1, Math.max(0, e.offsetY / vh));

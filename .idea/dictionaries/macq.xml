@@ -62,6 +62,7 @@
       <w>readdir</w>
       <w>revalidate</w>
       <w>rotatescale</w>
+      <w>rotator</w>
       <w>screenorientation</w>
       <w>screenshot</w>
       <w>sendevent</w>
