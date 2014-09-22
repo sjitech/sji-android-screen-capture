@@ -1,4 +1,4 @@
-var AscUtil = {showEventsOnly: false};
+var AscUtil = {showEventsOnly: false, debug: false};
 
 (function () {
   'use strict';
@@ -50,6 +50,9 @@ var AscUtil = {showEventsOnly: false};
     ;
 
     function saveOrSendMouseAction(e) {
+      if (AscUtil.debug) {
+        debugger;
+      }
       if (e.offsetX === undefined) {
         if (e.pageX) {
           e.offsetX = e.pageX - $liveImage.offset().left;
