@@ -2,6 +2,7 @@
 #define HFILE_libui
 
 #include "libutils.h"
+#include <stdio.h>
 
 namespace android {
 
@@ -83,8 +84,20 @@ struct GraphicBuffer {
     ANativeWindowBuffer* getNativeBuffer() const;
     status_t lock(uint32_t usage, void** vaddr);
     status_t unlock();
-    void incStrong(const void* id) const { /*getNativeBuffer()->common.incRef((struct android_native_base_t*)id);*/ }
-    void decStrong(const void* id) const { /*getNativeBuffer()->common.decRef((struct android_native_base_t*)id);*/ }
+    void incStrong(const void* id) const {
+        fprintf(stderr, "GraphicBuffer::incStrong id=%p\n", id);
+//        fprintf(stderr, "getNativeBuffer()=%p\n", getNativeBuffer());
+//        fprintf(stderr, "getNativeBuffer()->common.incRef=%p\n", getNativeBuffer()->common.incRef);
+//        fprintf(stderr, "((android_native_base_t*)id)->magic=%p\n", ((android_native_base_t*)id)->magic);
+//        getNativeBuffer()->common.incRef((struct android_native_base_t*)id);
+    }
+    void decStrong(const void* id) const {
+        fprintf(stderr, "GraphicBuffer::decStrong id=%p\n", id);
+//        fprintf(stderr, "getNativeBuffer()=%p\n", getNativeBuffer());
+//        fprintf(stderr, "getNativeBuffer()->common.decRef=%p\n", getNativeBuffer()->common.decRef);
+//        fprintf(stderr, "((android_native_base_t*)id)->magic=%p\n", ((android_native_base_t*)id)->magic);
+//        getNativeBuffer()->common.decRef((struct android_native_base_t*)id);
+    }
 };
 
 } //end of namespace android

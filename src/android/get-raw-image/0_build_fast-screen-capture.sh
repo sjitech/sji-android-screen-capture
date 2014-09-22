@@ -14,16 +14,12 @@ export LDFLAGS="-B$SYS_ROOT/usr/lib -B$LIBGCC_DIR -B$TOOL_CHAIN_DIR/arm-linux-an
 export PATH="$TOOL_CHAIN_DIR/arm-linux-androideabi/bin:$LIBEXEC_DIR:$MAKE_DIR:$PATH"
 export CC=gcc
 
-export CFLAGS="$CFLAGS -v"
 export CPPFLAGS="-fno-rtti -fno-exceptions -fmax-errors=5"
 
 mkdir bin 2>/dev/null
 rm -f *.so
 
-echo ---------------make fast-screen-capture-220 --------------------
-gcc -x c -std=c99 $CFLAGS $LDFLAGS -DANDROID_VER=220 fast-screen-capture.cpp -o bin/fast-screen-capture-220 || exit 1
-
-for v in 400 420 440; do
+for v in 420 440; do
 	for f in lib*.cpp; do
 		f="${f%.*}" #remove extension
 		echo ---------------make fake $f.so $v --------------------
