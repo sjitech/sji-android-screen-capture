@@ -14,6 +14,8 @@ status_t Fence::wait(unsigned int timeout) {}
     status_t Fence::unflatten(void const* buffer, size_t size, int fds[], size_t count) {}
 #endif
 
+GraphicBuffer::GraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage) {}
+GraphicBuffer::~GraphicBuffer() {}
 ANativeWindowBuffer* GraphicBuffer::getNativeBuffer() const {}
 status_t GraphicBuffer::lock(uint32_t usage, void** vaddr) {}
 status_t GraphicBuffer::unlock() {}

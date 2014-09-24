@@ -29,7 +29,7 @@
 #define ABORT_ERRNO(fmt, arg...) ({_LOG("[errno %d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(0);})
 #define ABORT(fmt, arg...)  ({_LOG(fmt ". Now exit\n", ##arg); exit(0);})
 
-static void _LOG(const char* format, ...) {
+extern "C" void _LOG(const char* format, ...) {
     char buf[4096];
     int cnt;
     va_list va;
@@ -100,7 +100,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     sp<Fence> mFence;
     PixelFormat mFormat;
     sp<GraphicBuffer> mGBuf;
-    sp<IGraphicBufferAlloc> mGBufAllocator;
     int mGBufUsage;
     char* mGBufData;
 
@@ -112,12 +111,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mIsGBufferRequested = false;
         mFence = Fence::NO_FENCE;
         mGBufData = NULL;
-
-        LOG("getComposerService");
-        sp<ISurfaceComposer> composer(ComposerService::getComposerService());
-        LOG("createGraphicBufferAlloc");
-        mGBufAllocator = composer->createGraphicBufferAlloc();
-        if (mGBufAllocator==NULL) ABORT("createGraphicBufferAlloc err:unknown", err);
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
@@ -156,26 +149,26 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         if (mGBuf==NULL) {
             mFormat = format;
             mGBufUsage = usage;
-            status_t err = 0;
             LOG("createGraphicBuffer");
-            mGBuf = mGBufAllocator->createGraphicBuffer(mWidth, mHeight, mFormat, GRALLOC_USAGE_HW_RENDER|GRALLOC_USAGE_SW_READ_OFTEN|GRALLOC_USAGE_SW_WRITE_OFTEN, &err);
-            if (err || mGBuf==NULL) ABORT("createGraphicBuffer err:%d", err);
+            mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, usage|GRALLOC_USAGE_SW_READ_OFTEN);
+            if (mGBuf==NULL) ABORT("new GraphicBuffer error");
             LOG("mGBuf:%p", mGBuf.get());
 
             LOG("getNativeBuffer");
             ANativeWindowBuffer* nb = mGBuf->getNativeBuffer();
             LOG("getNativeBuffer result:%p w:%d h:%d f:%d stride:%d handle:%p", nb, nb->width, nb->height, nb->format, nb->stride, nb->handle);
 
-            LOG("lock gbuf");
-            err = mGBuf->lock(2/*mGBufUsage|GRALLOC_USAGE_SW_READ_OFTEN*/, (void**)&mGBufData);
-            if (err) ABORT("lock gbuf err:%d", err);
-            LOG("mGBuf lock data ptr:%p", mGBufData);
-            if (!err) {
-                LOG("unlock gbuf");
-                err = mGBuf->unlock();
-                if (err) ABORT("unlock gbuf err:%d", err);
+            if (mGBuf != NULL) {
+                LOG("lock gbuf");
+                status_t err = mGBuf->lock(GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mGBufData);
+                if (err || !mGBufData) ABORT("lock gbuf err:%d", err);
+                LOG("mGBuf lock data ptr:%p", mGBufData);
+                // if (!err) {
+                //     LOG("unlock gbuf");
+                //     err = mGBuf->unlock();
+                //     if (err) ABORT("unlock gbuf err:%d", err);
+                // }
             }
-            mGBufData = (char*)malloc(2000*2000*4);
         }
         else if (format != mFormat)  ABORT("dequeueBuffer fmt:%d!=%d", format, mFormat);
 
@@ -199,23 +192,13 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->transformHint = 0;
         output->numPendingBuffers = 0;
 
-            if (mFence && mFence->isValid()) {
-                LOG("wait fence");
-                mFence->wait(-1);
-            }
+        // if (mFence && mFence->isValid()) {
+        //     LOG("wait fence");
+        //     mFence->wait(-1);
+        // }
 
-            LOG("lock gbuf");
-//            mGBufData = NULL;
-            status_t err = mGBuf->lock(2/*mGBufUsage|GRALLOC_USAGE_SW_READ_OFTEN*/, (void**)&mGBufData);
-            LOG("lock gbuf err:%d mGBufData:%p", err, mGBufData);
-            // if (err) ABORT("lock gbuf err:%d", err);
-            // LOG("mGBuf lock data ptr:%p", mGBufData);
-//            if (mGBufData != NULL)
-//                 printf("********************* data:%d", mGBufData[10]);
-            if (!err) {
-                LOG("unlock gbuf");
-                err = mGBuf->unlock();
-            }
+        LOG("********************* data:%d\n", mGBufData[10]);
+
         _unlock();
         return 0;
     }
@@ -301,30 +284,8 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
 int main(int argc, char** argv) {
     LOG("start. pid %d", getpid());
-    int err;
-    int64_t interval_mms = -1;
-    bool isGetFormat = false;
-    const char* tmps;
-    int width, height, internal_width, bytesPerPixel;
-
     mainThreadId = gettid();
-    //for fb0
-    int fb = -1;
-    char* mapbase = NULL;
-    size_t lastMapSize = 0;
-
-    if (argc>1) {
-        double fps = atof(argv[1]);
-        if (fps==0) {
-            //
-        }
-        else {
-            interval_mms = ((double)1000000)/fps;
-            LOG("use fps=%.3lf (interval=%.3lfms)", fps, (double)interval_mms/1000);
-        }
-    } else {
-        isGetFormat = true;
-    }
+    status_t err;
 
     LOG("set sig handler for SIGINT, SIGHUP, SIGPIPE");
     signal(SIGINT, on_SIGINT);

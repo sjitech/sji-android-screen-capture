@@ -2,7 +2,6 @@
 #define HFILE_libui
 
 #include "libutils.h"
-#include <stdio.h>
 
 namespace android {
 
@@ -60,7 +59,7 @@ private:
     int mFenceFd;
 };
 
-typedef struct android_native_base_t {
+typedef struct android_native_base_t { //from window.h
     int magic;
     int version;
     void* reserved[4];
@@ -68,7 +67,7 @@ typedef struct android_native_base_t {
     void (*decRef)(struct android_native_base_t* base);
 } android_native_base_t;
 
-typedef struct ANativeWindowBuffer {
+typedef struct ANativeWindowBuffer { //from window.h
     struct android_native_base_t common;
     int width;
     int height;
@@ -80,24 +79,22 @@ typedef struct ANativeWindowBuffer {
     void* reserved_proc[8];
 } ANativeWindowBuffer_t;
 
+extern "C" void _LOG(const char* format, ...);
+
 struct GraphicBuffer {
+    GraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage);
+    ~GraphicBuffer();
     ANativeWindowBuffer* getNativeBuffer() const;
     status_t lock(uint32_t usage, void** vaddr);
     status_t unlock();
     void incStrong(const void* id) const {
-        fprintf(stderr, "GraphicBuffer::incStrong id=%p\n", id);
-//        fprintf(stderr, "getNativeBuffer()=%p\n", getNativeBuffer());
-//        fprintf(stderr, "getNativeBuffer()->common.incRef=%p\n", getNativeBuffer()->common.incRef);
-//        fprintf(stderr, "((android_native_base_t*)id)->magic=%p\n", ((android_native_base_t*)id)->magic);
-//        getNativeBuffer()->common.incRef((struct android_native_base_t*)id);
+        _LOG("GraphicBuffer::incStrong id=%p *********************************\n", id);
     }
     void decStrong(const void* id) const {
-        fprintf(stderr, "GraphicBuffer::decStrong id=%p\n", id);
-//        fprintf(stderr, "getNativeBuffer()=%p\n", getNativeBuffer());
-//        fprintf(stderr, "getNativeBuffer()->common.decRef=%p\n", getNativeBuffer()->common.decRef);
-//        fprintf(stderr, "((android_native_base_t*)id)->magic=%p\n", ((android_native_base_t*)id)->magic);
-//        getNativeBuffer()->common.decRef((struct android_native_base_t*)id);
+        _LOG("GraphicBuffer::decStrong id=%p ********-****-***-***-***********\n", id);
     }
+private:
+    char __data[sizeof(void*)*64+sizeof(ANativeWindowBuffer)];
 };
 
 } //end of namespace android
