@@ -24,8 +24,7 @@ echo ---------------make get-raw-image-220 --------------------
 g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=220 -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/get-raw-image-220 || exit 1
 
 for v in 400 420; do
-	for f in lib*.cpp; do
-		f="${f%.*}" #remove extension
+	for f in libgui libbinder libutils; do
 		echo ---------------make fake $f.so $v --------------------
 		g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
