@@ -465,10 +465,9 @@ function doCapture(outputStream, q) {
             forEachValueIn(dev.consumerMap, function (res) {
               if (res.setHeader) { //------------------for http response ----------------
                 if (res.q.type === 'ajpg') {
-                  if (res.headersSent && res.output/*unsent data array*/ && res.output.length) {
-                    log(res.__tag + ' drop ' + res.output.length + ' frames');
-                    res.__droppedFrames = (res.__droppedFrames || 0) + res.output.length;
-                    res.output.length = res.outputEncodings.length = 0;
+                  if (res.output.length/*unsent data array*/ && res.headersSent) {
+                    log(res.__tag + ' drop frame ' + capture.frameIndex);
+                    res.__droppedFrames = (res.__droppedFrames || 0) + 1;
                   } else { //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
                     write(res, Buffer.concat([res.__bytesWritten ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.lastImage, MULTIPART_CRLF_INNER_HEAD]));
                     res.__sentFrames = (res.__sentFrames || 0) + 1;
