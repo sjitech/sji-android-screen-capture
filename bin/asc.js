@@ -398,7 +398,10 @@ function sendTouchEvent(dev, q) {
   }
 }
 function setDeviceOrientation(dev, orientation) {
-  return spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000});
+  spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+}
+function turnOnScreen(dev) {
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(q, force_ajpg) {
@@ -491,7 +494,7 @@ function doCapture(outputStream, q) {
     childProc.stderr.on('data', function (buf) {
       capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer, stringifyError(buf.toString()) || 'unknown error: strange output of capture process');
     });
-    dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000});
+    turnOnScreen(dev);
   }
   dev.consumerMap[res.__tag] = res;
   scheduleUpdateLiveUI();
@@ -731,10 +734,10 @@ function streamWeb_handler(req, res) {
       if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187])) {
         return end(res, chk.err);
       }
-      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000});
+      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
       return end(res, 'OK');
-    case '/turnScreenOn':
-      dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000});
+    case '/turnOnScreen':
+      turnOnScreen(dev);
       return end(res, 'OK');
     case '/setOrientation':
       if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
