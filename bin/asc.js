@@ -20,7 +20,7 @@ var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logF
 true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, defaultFps: 0, minFps: 0, maxFps: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpRequests: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}});
 
 function spawn(tag, _path, args, _on_close, _opt) {
-  var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead1, logHead2;
+  var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2, needLogStdout = !opt.noDetailLog && !opt.noLogStdout;
   opt.stdio = opt.stdio || ['ignore'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/];
   !opt.noDetailLog && log(tag + ' spawn \"' + _path + '\" with args: ' + JSON.stringify(args));
 
@@ -29,9 +29,8 @@ function spawn(tag, _path, args, _on_close, _opt) {
   !opt.noDetailLog && log(tag + (childProc.pid ? ' spawned' : ' not spawned'));
   childProc.pid && (childProcMap[childProc.pid] = childProc);
 
-  childProc.stdout && (on_close || !opt.noDetailLog && !opt.noLogStdout) && childProc.stdout.on('data', function (buf) {
-    on_close && stdoutBufAry.push(buf);
-    !opt.noDetailLog && !opt.noLogStdout && log(buf, {noNewLine: true, head: (logHead1 = logHead1 || tag + '>')});
+  childProc.stdout && (on_close || needLogStdout) && childProc.stdout.on('data', function (buf) {
+    stdoutBufAry.push(buf);
   });
   childProc.stderr && childProc.stderr.on('data', function (buf) {
     on_close && stderrBufAry.push(buf);
@@ -47,15 +46,14 @@ function spawn(tag, _path, args, _on_close, _opt) {
     !opt.noDetailLog && log(tag + ' ' + (childProc.__err = stringifyError(err)));
   });
   childProc.on('close', function (ret, signal) { //exited or failed to spawn
-    !opt.noDetailLog && log(tag + ' exited:' + (ret === null || ret === undefined ? '' : (' ' + ret)) + (signal ? (' ' + (signal || '')) : ''));
     delete childProcMap[childProc.pid];
     clearTimeout(childProc.__timeoutTimer);
     !childProc.__err && signal && (childProc.__err = 'error: killed by ' + signal);
-    if (on_close) {
-      var stderr = childProc.__err || Buffer.concat(stderrBufAry).toString(), stdout = Buffer.concat(stdoutBufAry).toString();
-      stdoutBufAry.length = stderrBufAry.length = 0;
-      on_close(ret, stdout, stderr);
-    }
+    var stderr = on_close && (childProc.__err || Buffer.concat(stderrBufAry).toString()), stdout = (on_close || needLogStdout) && Buffer.concat(stdoutBufAry).toString();
+    stdoutBufAry.length = stderrBufAry.length = 0;
+    needLogStdout && log(stdout, {noNewLine: true, head: tag + '>'});
+    !opt.noDetailLog && log(tag + ' exited:' + (ret === null || ret === undefined ? '' : (' ' + ret)) + (signal ? (' ' + (signal || '')) : ''));
+    on_close && on_close(ret, stdout, stderr);
   });
   childProc.stdin && childProc.stdin.on('error', function (err) {
     !opt.noDetailLog && log(tag + '[stdin] ' + stringifyError(err));
