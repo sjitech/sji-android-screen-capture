@@ -21,6 +21,7 @@
 
 #include "libcutils.h"
 #include "libgui.h"
+#include "libui.h"
 
 #define FRAME_BUFFER_DEV "/dev/graphics/fb0"
 
@@ -102,6 +103,8 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     sp<GraphicBuffer> mGBuf;
     int mGBufUsage;
     char* mGBufData;
+    int mInternalWidth;
+    int mBytesPerPixel;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::ctor");
@@ -149,6 +152,8 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         if (mGBuf==NULL) {
             mFormat = format;
             mGBufUsage = usage;
+            mBytesPerPixel = bytesPerPixel(format);
+            LOG("bytesPerPixel: %d", mBytesPerPixel);
             LOG("createGraphicBuffer");
             mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, usage|GRALLOC_USAGE_SW_READ_OFTEN);
             if (mGBuf==NULL) ABORT("new GraphicBuffer error");
@@ -157,6 +162,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("getNativeBuffer");
             ANativeWindowBuffer* nb = mGBuf->getNativeBuffer();
             LOG("getNativeBuffer result:%p w:%d h:%d f:%d stride:%d handle:%p", nb, nb->width, nb->height, nb->format, nb->stride, nb->handle);
+            mInternalWidth = nb->stride;
 
             if (mGBuf != NULL) {
                 LOG("lock gbuf");
@@ -192,12 +198,26 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->transformHint = 0;
         output->numPendingBuffers = 0;
 
-        // if (mFence && mFence->isValid()) {
-        //     LOG("wait fence");
-        //     mFence->wait(-1);
-        // }
+        if (mFence && mFence->isValid()) {
+            LOG("wait fence");
+            mFence->wait(-1);
+        }
 
-        LOG("********************* data:%d\n", mGBufData[10]);
+        LOG("********************* data[10]:%d\n", mGBufData[10]);
+        if (mInternalWidth > mWidth) {
+            char* p1 = mGBufData;
+            char* p2 = mGBufData;
+            int size1 = mWidth*mBytesPerPixel;
+            int size2 = mInternalWidth*mBytesPerPixel;
+            for (int h=0; h < mHeight; h++, p2 += size2, p1+= size1)
+                memmove(p1, p2, size1);
+
+            static bool b = false;
+            if (!b) {
+                write(1, mGBufData, size2*mHeight);
+                b = true;
+            }
+        }
 
         _unlock();
         return 0;

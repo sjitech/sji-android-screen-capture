@@ -19,3 +19,8 @@ GraphicBuffer::~GraphicBuffer() {}
 ANativeWindowBuffer* GraphicBuffer::getNativeBuffer() const {}
 status_t GraphicBuffer::lock(uint32_t usage, void** vaddr) {}
 status_t GraphicBuffer::unlock() {}
+
+namespace android {
+	ssize_t bytesPerPixel(PixelFormat format) {}
+	ssize_t bitsPerPixel(PixelFormat format) {}
+};
