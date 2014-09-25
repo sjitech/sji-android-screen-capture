@@ -17,19 +17,19 @@ var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, 
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_f\d+(?:\.\d+)?[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpRequests'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, defaultFps: 0, minFps: 0, maxFps: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpRequests: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}});
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, defaultFps: 0, minFps: 0, maxFps: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpRequests: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
-  var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2, needLogStdout = !opt.noDetailLog && !opt.noLogStdout;
+  var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2, logStdout = opt.log && !opt.noLogStdout;
   opt.stdio = opt.stdio || ['ignore'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/];
-  !opt.noDetailLog && log(tag + ' spawn \"' + _path + '\" with args: ' + JSON.stringify(args));
+  opt.log && log(tag + ' spawn \"' + _path + '\" with args: ' + JSON.stringify(args));
 
   childProc = child_process.spawn(_path, args, opt);
   childProc.__tag = tag = tag + (childProc.pid ? '[pid_' + childProc.pid + ']' : '');
-  !opt.noDetailLog && log(tag + (childProc.pid ? ' spawned' : ' not spawned'));
+  opt.log && log(tag + (childProc.pid ? ' spawned' : ' not spawned'));
   childProc.pid && (childProcMap[childProc.pid] = childProc);
 
-  childProc.stdout && (on_close || needLogStdout) && childProc.stdout.on('data', function (buf) {
+  childProc.stdout && (on_close || logStdout) && childProc.stdout.on('data', function (buf) {
     stdoutBufAry.push(buf);
   });
   childProc.stderr && childProc.stderr.on('data', function (buf) {
@@ -38,25 +38,25 @@ function spawn(tag, _path, args, _on_close, _opt) {
   });
   opt.timeout && (childProc.__timeoutTimer = setTimeout(function () {
     childProc.__err = 'error: timeout';
-    !opt.noDetailLog && log(tag + ' kill due to timeout(' + opt.timeout + 's)');
+    opt.log && log(tag + ' kill due to timeout(' + opt.timeout + 's)');
     childProc.kill('SIGKILL');
   }, opt.timeout));
 
   childProc.on('error', function (err) {
-    !opt.noDetailLog && log(tag + ' ' + (childProc.__err = stringifyError(err)));
+    opt.log && log(tag + ' ' + (childProc.__err = stringifyError(err)));
   });
   childProc.on('close', function (ret, signal) { //exited or failed to spawn
-    delete childProcMap[childProc.pid];
+    childProc.pid && delete childProcMap[childProc.pid];
     clearTimeout(childProc.__timeoutTimer);
     !childProc.__err && signal && (childProc.__err = 'error: killed by ' + signal);
-    var stderr = on_close && (childProc.__err || Buffer.concat(stderrBufAry).toString()), stdout = (on_close || needLogStdout) && Buffer.concat(stdoutBufAry).toString();
+    var stderr = on_close && (childProc.__err || Buffer.concat(stderrBufAry).toString()), stdout = (on_close || logStdout) && Buffer.concat(stdoutBufAry).toString();
     stdoutBufAry.length = stderrBufAry.length = 0;
-    needLogStdout && log(stdout, {noNewLine: true, head: tag + '>'});
-    !opt.noDetailLog && log(tag + ' exited:' + (ret === null || ret === undefined ? '' : (' ' + ret)) + (signal ? (' ' + (signal || '')) : ''));
+    logStdout && log(stdout, {noNewLine: true, head: tag + '>'});
+    opt.log && log(tag + ' exited:' + (ret === null || ret === undefined ? '' : (' ' + ret)) + (signal ? (' ' + (signal || '')) : ''));
     on_close && on_close(ret, stdout, stderr);
   });
   childProc.stdin && childProc.stdin.on('error', function (err) {
-    !opt.noDetailLog && log(tag + '[stdin] ' + stringifyError(err));
+    opt.log && log(tag + '[stdin] ' + stringifyError(err));
   });
   return childProc;
 }
@@ -161,7 +161,7 @@ function getFileSizeSync(filePath) {
 
 function FilenameInfo(filename, device) {
   ((filename = filename && filename.match(re_filename)) && (this.device = querystring.unescape(filename[2])) && (!device || this.device === device))
-      && (this.origFilename = filename[1]) && (this.origTimestamp = filename[3]) && (this.type = filename[4] || filename[6]) && (filename[4]/*isVideo*/ || (this.frameIndexStr = filename[5]) !== '') && (this.isValid = filename[0]);
+      && (this.src = filename[1]) && (this.timestamp = filename[3]) && (this.type = filename[4] || filename[6]) && (filename[4]/*isVideo*/ || (this.frameIndexStr = filename[5]) !== '') && (this.isValid = filename[0]);
 }
 FilenameInfo.prototype.toString = function () {
   return this.isValid;
@@ -202,7 +202,7 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(), accessKeyTimestamp: ''});
+  return devMgr[device] || (devMgr[device] = {device: device, info: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(), accessKeyTimestamp: '', subOutputDir: ''});
 }
 function newAutoAccessKeyIfStreamWebPublic() {
   return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : 'auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
@@ -237,10 +237,10 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
     !mode && deviceList.forEach(function (device) {
       if (devMgr[device].status === 'OK' && Date.now() - (devMgr[device].lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
         devMgr[device].lastKeepAliveDateMs = Date.now();
-        spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'echo', 'alive'), {timeout: cfg.adbEchoTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+        spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'echo', 'alive'), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
       }
     });
-  }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, noDetailLog: !cfg.logAllAdbCommands}); //end of GetAllDevices
+  }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
 var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.incremental;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.build.version.sdk;', 'getprop', 'ro.product.cpu.abi;',
@@ -301,9 +301,9 @@ function prepareDeviceFile(dev, force/*optional*/) {
           }
           setDeviceOrientation(dev, 'free');
           return on_complete();
-        }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000}); //end of FinishPrepareFile
-      }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000}); //end of PushFileToDevice
-    }, {timeout: cfg.adbCheckDeviceTimeout * 1000}); //end of CheckDevice
+        }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true}); //end of FinishPrepareFile
+      }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
+    }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckDevice
   }
 }
 function getDispSize(dev, stdout) {
@@ -385,7 +385,7 @@ function sendTouchEvent(dev, q) {
 
     cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell'), function/*on_close*/() {
       dev.touchShell = null;
-    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]}));
+    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
     cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.device + ']' + ' exec: '});
     cmd && dev.touchShell.stdin.write(cmd + '\n');
 
@@ -396,10 +396,10 @@ function sendTouchEvent(dev, q) {
   }
 }
 function setDeviceOrientation(dev, orientation) {
-  spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+  spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(q, force_ajpg) {
@@ -444,7 +444,7 @@ function doCapture(outputStream, q) {
         '-f', 'androidgrab', '-r', q.fps, '-i', dev.so_file, (q._filter ? ['-vf', '\'' + q._filter + '\''] : []),
         '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
         ')', '2>', cfg.androidLogPath
-    ), {noLogStdout: true});
+    ), {noLogStdout: true, log: true});
     childProc.on('close', function () {
       capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer, childProc.__err);
       capture === dev.capture && clearTimeout(capture.delayKillTimer);
@@ -465,9 +465,11 @@ function doCapture(outputStream, q) {
             forEachValueIn(dev.consumerMap, function (res) {
               if (res.setHeader) { //------------------for http response ----------------
                 if (res.q.type === 'ajpg') {
-                  if (res.output.length/*unsent data array*/ && res.headersSent) {
-                    log(res.__tag + ' drop frame ' + capture.frameIndex);
-                    res.__droppedFrames = (res.__droppedFrames || 0) + 1;
+                  if (res.output.length && (res.outputEncodings[0] === undefined || res.outputEncodings[1] === undefined)) { //check unsent data array.  Because Http header use ascii outputEncoding, so use this to differ with Buffer data
+                    var dropFrames = res.outputEncodings[0] === undefined ? res.output.length : res.output.length - 1;
+                    cfg.logFpsStatistic && log(res.__tag + ' drop frame ' + (capture.frameIndex - dropFrames) + (dropFrames > 1 ? ' - ' + (capture.frameIndex - 1) : ''));
+                    res.__droppedFrames = (res.__droppedFrames || 0) + dropFrames;
+                    res.output.length = res.outputEncodings.length = res.output.length - dropFrames; //remove unsent data
                   } else { //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
                     write(res, Buffer.concat([res.__bytesWritten ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.lastImage, MULTIPART_CRLF_INNER_HEAD]));
                     res.__sentFrames = (res.__sentFrames || 0) + 1;
@@ -532,16 +534,20 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, reason) {
   }
 }
 function doRecord(q/*same as capture*/) {
-  var origFilename = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg';
+  var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', dev = devMgr[q.device], outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
+  dev.subOutputDir && fs.writeFile(outPathNoExt + '.mp4', log.nonEmpty);
+  dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
+  dev.subOutputDir && cfg.alsoRecordAsWebM && fs.writeFile(outPathNoExt + '.webm', log.nonEmpty);
+  dev.subOutputDir && cfg.alsoRecordAsWebM && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', q.fps, '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/,
-      cfg.outputDir + '/' + origFilename + '.mp4', (cfg.alsoRecordAsWebM ? cfg.outputDir + '/' + origFilename + '.webm' : [])
-  ), {stdio: ['pipe'/*stdin*/, 'pipe'/*stdout*/, 'pipe'/*stderr*/]});
+      outPathNoExt + '.mp4', (cfg.alsoRecordAsWebM ? outPathNoExt + '.webm' : [])
+  ), {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true});
   childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin, 'recording time is too long');
   childProc.stdin.__tag = REC_TAG;
   doCapture(childProc.stdin, q);
-  return 'OK: ' + origFilename + '.mp4' + (cfg.alsoRecordAsWebM ? ' ' + origFilename + '.webm' : '');
+  return 'OK: ' + src + '.mp4' + (cfg.alsoRecordAsWebM ? ' ' + src + '.webm' : '');
 }
 
 function scheduleUpdateLiveUI() {
@@ -639,8 +645,8 @@ function streamWeb_handler(req, res) {
         return end(res, 'error: no live image');
       }
       q.filename = querystring.escape(q.device) + '~live_' + dev.capture.q._FpsScaleRotate + '_' + dev.capture.q.timestamp + '.ajpg~frame' + String.fromCharCode(65 + String(dev.capture.frameIndex).length - 1) + dev.capture.frameIndex + '.jpg';
-      fs.writeFile(cfg.outputDir + '/' + q.filename, dev.capture.lastImage, function (err) {
-        return end(res, stringifyError(err));
+      fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.lastImage, function (err) {
+        err && log(err) || dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, log.nonEmpty);
       });
       return end(res, 'OK: ' + q.filename);
     case '/liveViewer.html':  //-------------------------show live capture (Just as a sample) ------------------------
@@ -664,8 +670,8 @@ function streamWeb_handler(req, res) {
         }
         var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html'), recordingTimestamp = dev.consumerMap[REC_TAG] && dev.consumerMap[REC_TAG].q.timestamp;
         filenameAry.forEach(function (filename) {
-          (filename = new FilenameInfo(filename, q.device)).isValid && isImage === (filename.type === 'jpg') && (isImage || filename.origTimestamp !== recordingTimestamp)
-          && (filenameMap[isImage ? filename.origTimestamp + filename.frameIndexStr : filename.origTimestamp] = filename);
+          (filename = new FilenameInfo(filename, q.device)).isValid && isImage === (filename.type === 'jpg') && (isImage || filename.timestamp !== recordingTimestamp)
+          && (filenameMap[isImage ? filename.timestamp + filename.frameIndexStr : filename.timestamp] = filename);
         });
         var sortedKeys = Object.keys(filenameMap).sort().reverse();
         if (!isImage) { //videoViewer
@@ -673,12 +679,12 @@ function streamWeb_handler(req, res) {
             return end(res, sortedKeys.length ? '`fileindex`: file not found' : 'error: file not found');
           }
           return end(res, replaceCommonDeviceVarInHtml(htmlCache[urlPath], dev)
-              .replace(/@fileindex\b/g, q.fileindex).replace(/@origFilename\b/g, querystring.escape(q.filename.origFilename))
-              .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.origTimestamp))
+              .replace(/@fileindex\b/g, q.fileindex).replace(/@src\b/g, querystring.escape(q.filename.src))
+              .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
               .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, sortedKeys.length - 1)
               .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, Math.max(q.fileindex - 1, 0))
-              .replace(/@fileSize_mp4\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.origFilename + '.mp4').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
-              .replace(/@fileSize_webm\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.origFilename + '.webm').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
+              .replace(/@fileSize_mp4\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.mp4').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
+              .replace(/@fileSize_webm\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.webm').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
               .replace(/_unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               , 'text/html');
         } else {
@@ -728,16 +734,19 @@ function streamWeb_handler(req, res) {
         return end(res, JSON.stringify('OK'), 'text/json');
       }
     case '/sendKey':
-      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187])) {
+      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187]) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
         return end(res, chk.err);
       }
-      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
       return end(res, 'OK');
     case '/turnOnScreen':
+      if (Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+        return end(res, chk.err);
+      }
       turnOnScreen(dev);
       return end(res, 'OK');
     case '/setOrientation':
-      if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
+      if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free']) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
         return end(res, chk.err);
       }
       setDeviceOrientation(dev, q.orientation);
@@ -770,6 +779,12 @@ function adminWeb_handler(req, res) {
           || q.orientation && !chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
         return end(res, chk.err);
       }
+      try {
+        q.action === 'setAccessKey' && q.subOutputDir && !fs.existsSync(cfg.outputDir + '/' + q.subOutputDir) && fs.mkdirSync(cfg.outputDir + '/' + q.subOutputDir);
+      } catch (err) {
+        return end(res, stringifyError(err));
+      }
+      q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
       q.accessKey = q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic());
       forEachValueIn(dev.consumerMap, function (res) {
         (q.action === 'stopRecording' && res.__tag === REC_TAG || q.action === 'startRecording' && (q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate || res.__tag === REC_TAG) || q.action === 'stopLiveView' && res.__tag !== REC_TAG || q.accessKey !== dev.accessKey)
@@ -783,7 +798,7 @@ function adminWeb_handler(req, res) {
     case '/cmd':
       return spawn('[cmd]', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
-      }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, noDetailLog: !cfg.logAllAdbCommands});
+      }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
       q.fps = q.fps === undefined ? String(cfg.defaultFps) : q.fps;
       q.scale = q.scale === undefined ? String(cfg.defaultScale) : q.scale;
@@ -836,7 +851,7 @@ function adminWeb_handler(req, res) {
       });
       return process.exit(0);
     case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
-      loadResourceSync();
+      reloadResource();
       return end(res, 'OK');
     case '/set':
       if (q[q._confKey = 'streamWebBaseURL'] !== undefined) {
@@ -925,7 +940,7 @@ function discoverDevices(ipSeg123) {
             prepareDeviceFile(getOrCreateDevCtx(device));
           }
           discoverNextDevice();
-        }, {timeout: cfg.discover_timeout * 1000, noDetailLog: !cfg.logAllAdbCommands});
+        }, {timeout: cfg.discover_timeout * 1000, log: cfg.logAllAdbCommands});
       }
       scheduleUpdateLiveUI();
     }
@@ -938,7 +953,7 @@ function stopDiscover() {
   scheduleUpdateLiveUI();
 }
 
-function loadResourceSync() {
+function reloadResource() {
   scheduleUpdateWholeUI();
   fs.readdirSync('./html').forEach(function (filename) {
     htmlCache['/' + filename] = fs.readFileSync('./html/' + filename).toString();
@@ -951,7 +966,7 @@ function loadResourceSync() {
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
 }
 
-loadResourceSync();
+reloadResource();
 spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], function/*on_close*/(ret) {
   if (ret !== 0) {
     log('Failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add adb\'s dir into PATH env var or set full path of ffmpeg to "adb" in config.json or your own config file', {stderr: true});
@@ -967,5 +982,5 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
       });
     });
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000 + 50);
-  }, {timeout: 10 * 1000});
-}, {timeout: 30 * 1000});
+  }, {timeout: 10 * 1000, log: true});
+}, {timeout: 30 * 1000, log: true});

@@ -51,6 +51,7 @@
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
   "androidWorkDir": "/data/local/tmp/sji-asc",
   "androidLogPath": "/data/local/tmp/sji-asc.log",
+  "maxProcesses": 64,
   "adbGetDeviceListTimeout": 5,
   "adbEchoTimeout": 5,
   "adbCheckDeviceTimeout": 10,

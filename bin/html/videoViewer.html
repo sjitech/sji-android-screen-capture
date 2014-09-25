@@ -37,10 +37,10 @@
     <div style="margin-top: 8px">
       Download:&nbsp;&nbsp;&nbsp;
       <div>
-        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
+        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
       </div>
       <div>
-        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
+        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
       </div>
     </div>
   </div>
@@ -48,8 +48,8 @@
 <div style="text-align: center; margin-top: 56px">
   <div id="viewerContainer" style="display: inline-block">
     <video id="viewer" autoplay controls>
-      <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.mp4" type="video/mp4">
-      <source id="viewerSrc_webm" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@origFilename.webm" type="video/webm">
+      <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4" type="video/mp4">
+      <source id="viewerSrc_webm" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm" type="video/webm">
       <p>Your browser does not support H.264/MP4 or WebM in &lt;video&gt; tag</p>
     </video>
   </div>
