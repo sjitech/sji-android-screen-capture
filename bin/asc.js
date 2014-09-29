@@ -43,7 +43,7 @@ function spawn(tag, _path, args, _on_close, _opt) {
   }, opt.timeout));
 
   childProc.on('error', function (err) {
-    opt.log && log(tag + ' ' + (childProc.__err = stringifyError(err)));
+    (childProc.__err = stringifyError(err)) === 'Error: spawn OK' ? (childProc.__err = '') : (opt.log && log(tag + ' ' + childProc.__err));
   });
   childProc.on('close', function (ret, signal) { //exited or failed to spawn
     childProc.pid && delete childProcMap[childProc.pid];
@@ -465,9 +465,10 @@ function _startNewCaptureProcess(dev, q) {
     });
   });
   turnOnScreen(dev);
+  scheduleUpdateLiveUI();
 }
 function doCapture(dev, outputStream, q) {
-  !dev.capture && _startNewCaptureProcess(dev, q);
+  (q.__needNewCapture = !dev.capture) && _startNewCaptureProcess(dev, q);
   var res = outputStream, capture = dev.capture;
   dev.consumerMap[res.__tag] = res;
   scheduleUpdateLiveUI();
@@ -483,6 +484,7 @@ function doCapture(dev, outputStream, q) {
   }, cfg.fpsStatisticInterval * 1000));
   res.setHeader && res.setHeader('Content-Type', res.q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
+  q.type === 'jpg' && capture.image && !q.__needNewCapture && clearTimeout(status.updateLiveUITimer); //remove unnecessary update
 }
 function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/) {
   var dev = devMgr[res.q.device];
