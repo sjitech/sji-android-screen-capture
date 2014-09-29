@@ -9,11 +9,11 @@
   </style>
 </head>
 <body>
-<div style="text-align: center; width: 100%; position: fixed; top: 0; background-color: ghostwhite; white-space: nowrap">
-  Saved Images (<b style="color: blue">@count</b>)
+<div style="text-align: center; width: 100%; position: fixed; top: 0; background-color: ghostwhite">
+  <span style="white-space: nowrap">Saved Images (<b style="color: blue">@count</b>)</span>
   <button style="float: right" onclick="$('.imgContainer').each(function(){AscUtil.rotateChildLocally(this)})">Rotate All</button>
 </div>
-<div style="text-align: center; width: 100%; margin-top: 28px">
+<div style="text-align: left; width: 100%; margin-top: 28px">
   <!--repeatBegin-->
   <div class="imgContainer" onclick="AscUtil.rotateChildLocally(this)">
     <img src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@filename"/>

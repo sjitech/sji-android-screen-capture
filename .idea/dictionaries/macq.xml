@@ -44,6 +44,7 @@
       <w>lookahead</w>
       <w>loopback</w>
       <w>maxage</w>
+      <w>meminfo</w>
       <w>mousedown</w>
       <w>mousemove</w>
       <w>mouseout</w>

@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-<div style="text-align: center; width: 100%; position: fixed; top:0; z-index: 90">
+<div style="text-align: center; width: 100%; position: fixed; top:0; z-index: 90; white-space: nowrap">
   <div class="toolbar">
     <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
       &lt;&lt;
@@ -28,12 +28,13 @@
     (Total:<b style="color:blue">@fileCount</b>)
   </div>
   <div class="toolbar">
+    Showing
     <span id="currentVideoType"></span>
-    <button id="btnShow_mp4">Show MP4</button>
-    <button id="btnShow_webm">Show WebM</button>
-    <button style="float: right" onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
+    <button id="btnShow_mp4">MP4</button>
+    <button id="btnShow_webm">WebM</button>
   </div>
   <div style="float: right; text-align: right">
+    <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
     <div style="margin-top: 8px">
       Download:&nbsp;&nbsp;&nbsp;
       <div>
@@ -45,7 +46,7 @@
     </div>
   </div>
 </div>
-<div style="text-align: center; margin-top: 56px">
+<div style="text-align: center; margin-top: 56px; margin-right: 128px; position: relative; z-index: 100">
   <div id="viewerContainer" style="display: inline-block">
     <video id="viewer" autoplay controls>
       <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4" type="video/mp4">
@@ -83,7 +84,7 @@
       var currentVideoType = currentSrc && (currentSrc.match(/mp4|webm/) || {})[0];
       $('#btnShow_mp4').prop('disabled', currentVideoType === 'mp4');
       $('#btnShow_webm').prop('disabled', currentVideoType === 'webm');
-      $('#currentVideoType').text(currentVideoType === 'mp4' ? 'Showing MP4' : currentVideoType === 'webm' ? 'Showing WebM' : 'Unknown Type');
+      $('#currentVideoType').text(currentVideoType === 'mp4' ? 'MP4' : currentVideoType === 'webm' ? 'WebM' : '?');
     }
 
     setSrcStatus();
