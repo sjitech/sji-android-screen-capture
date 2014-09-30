@@ -757,7 +757,7 @@ function adminWeb_handler(req, res) {
         return end(res, stringifyError(err));
       }
       q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
-      q.accessKey = q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic());
+      q.accessKey = (q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic()));
       forEachValueIn(dev.consumerMap, function (res) {
         (q.action === 'stopRecording' && res.__tag === REC_TAG || q.action === 'startRecording' && (q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate || res.__tag === REC_TAG) || q.action === 'stopLiveView' && res.__tag !== REC_TAG || q.accessKey !== dev.accessKey)
         && endCaptureConsumer(res);
@@ -786,15 +786,13 @@ function adminWeb_handler(req, res) {
                 .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey))
                 .replace(/@fps\b/g, q.fps).replace(/@scale\b/g, q.scale).replace(/@rotate\b/g, q.rotate)
                 .replace(new RegExp('_selectedIf_rotate_' + (q.rotate || '0'), 'g'), 'selected')
-                .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, '')) //remove last slash
+                .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, ''))
                 .replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
                 .replace(/#localStreamWebBaseURL\b/g, (cfg.streamWeb_protocol + '://localhost:' + cfg.streamWeb_port + '/'))
                 .replace(/_checkedIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'checked')
                 .replace(/@hideIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'display:none')
-                .replace(/@hideIf_no_local_ffmpeg\b/g, ffmpegOK ? '' : 'display:none')
-                .replace(/@hideIf_local_ffmpeg\b/g, ffmpegOK ? 'display:none' : '')
+                .replace(/@hideIf_no_local_ffmpeg\b/g, ffmpegOK ? '' : 'display:none').replace(/@hideIf_local_ffmpeg\b/g, ffmpegOK ? 'display:none' : '')
                 .replace(/@appVer\b/g, status.appVer)
-                .replace(/_showIf_local_ffmpeg\b/g, ffmpegOK ? '' : 'style="display:none"')
                 .replace(/@discover_from_ip\b/g, '*.*.*.' + cfg.discover_from_ip_part4)
                 .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
             ;
