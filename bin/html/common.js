@@ -4,10 +4,9 @@ var AscUtil = {showEventsOnly: false, debug: false};
   'use strict';
   AscUtil.setTouchHandler = function (liveImage, touchServerUrl, rootRotator) {
     var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
-    var evtAry = [];
+    var evtAry = [], touchstart_delaySendTimer, touchstart_e;
     var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
     var typeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
-    var dummyObj = {};
     !typeMap && console.log({changedTouches: null, touches: null}); //just to avoid compiler warning
 
     $liveImage
@@ -26,28 +25,42 @@ var AscUtil = {showEventsOnly: false, debug: false};
           ;
         })
         .on('touchstart', function (e) { //touch handler for mobile browser
+          if (isMultiTouch(e.originalEvent)) {
+            AscUtil.showEventsOnly && console.log(Date.now() + ' multi-touch down');
+            $liveImage.unbind('touchmove touchend touchcancel touchleave');
+            clearTimeout(touchstart_delaySendTimer);
+            touchstart_delaySendTimer = touchstart_e = null;
+            return; //skip multi-touch
+          }
           saveOrSendMouseAction(e);
           $liveImage
               .on('touchmove', function (e) {
-                if (!(e.originalEvent && (e.originalEvent.changedTouches || e.originalEvent.touches || dummyObj).length > 1)) {
-                  e.preventDefault(); //prevent scroll page only if not touched by multi-finger
+                if (isMultiTouch(e.originalEvent)) {
+                  AscUtil.showEventsOnly && console.log('multi-touch move');
+                  $liveImage.unbind('touchmove touchend touchcancel touchleave'); //ignore multi-touch
+                } else {
+                  e.preventDefault(); //prevent scrolling/resizing page only if not touched by multi-finger
+                  saveOrSendMouseAction(e);
                 }
-                saveOrSendMouseAction(e);
               })
               .on('touchend touchcancel touchleave', function (e) {
                 saveOrSendMouseAction(e);
                 $liveImage.unbind('touchmove touchend touchcancel touchleave');
               })
               .unbind('mousedown') //need not mousedown event anymore
+              .on('contextmenu', function () {
+                return false;
+              })
           ;
         })
         .on('dragstart', function () {
           return false; //e.preventDefault() has no effect
         })
-        .on('contextmenu', function () {
-          return false;
-        })
     ;
+
+    function isMultiTouch(_e) {
+      return _e && (_e.changedTouches && _e.changedTouches.length > 1 || _e.touches && _e.touches.length > 1);
+    }
 
     function saveOrSendMouseAction(e) {
       if (AscUtil.debug) {
@@ -102,15 +115,21 @@ var AscUtil = {showEventsOnly: false, debug: false};
       }
 
       if (AscUtil.showEventsOnly) {
-        console.log(e.type + ' ' + e.xPer.toFixed(5) + ' ' + e.yPer.toFixed(5));
-        if (e.originalEvent && (e.originalEvent.changedTouches || e.originalEvent.touches || dummyObj).length > 1) {
-          console.log('touches: ' + (e.originalEvent.changedTouches || e.originalEvent.touches).length);
-        }
+        console.log(Date.now() + ' ' + e.type + ' ' + e.xPer.toFixed(5) + ' ' + e.yPer.toFixed(5));
       } else {
-        if (evtAry.length) {
-          evtAry.push(e);
+        if (e.type === 'touchstart' && !touchstart_delaySendTimer) {
+          touchstart_e = e;
+          touchstart_delaySendTimer = setTimeout(function () {
+            evtAry.length ? evtAry.push(e) : sendMouseAction(e);
+          }, 20);
         } else {
-          sendMouseAction(e);
+          if (touchstart_delaySendTimer) {
+            clearTimeout(touchstart_delaySendTimer);
+            touchstart_delaySendTimer = null;
+            evtAry.length ? evtAry.push(touchstart_e) : sendMouseAction(touchstart_e);
+            touchstart_e = null;
+          }
+          evtAry.length ? evtAry.push(e) : sendMouseAction(e);
         }
       }
     }
