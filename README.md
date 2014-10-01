@@ -4,7 +4,7 @@ sji-android-screen-capture
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
 This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
 No Root Required: You need NOT root your android device)
-It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari. Windows/Mac/Linux/Unix
+It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari, IE. Windows/Mac/Linux/Unix
 
 New: Recorded file can be auto converted to H.264/MP4 and WebM video format if you'v installed ffmpeg in local PC.
 New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 2.2~4.4)
@@ -18,13 +18,15 @@ New: We will enhance performance to 30 frames/second full screen in about 2 mont
 
 [Screenshot]
 
-Live View<br>
-<img src="doc/liveview.png" /><br>
-Recorded Videos<br>
-<img src="doc/recorded.png" /><br>
-Menu<br>
-<img src="doc/screenshot-menu.png" /><br>
-Menu(AdminTool)<br>
+Home<br>
+<img src="doc/home.png" /><br>
+Live Viewer<br>
+<img src="doc/liveViewer.png" /><br>
+Recorded Video Viewer<br>
+<img src="doc/videoViewer.png" /><br>
+Saved Image Viewer<br>
+<img src="doc/imageViewer.png" /><br>
+AdminTool<br>
 <img src="doc/AdminTool.png" /><br>
 
 [How to use]
@@ -54,7 +56,7 @@ Chrome,Firefox,Safari are well supported.
 
 ===================
 [Note]
-    Currently tested in android 2.2~4.4.  With PC Browser Chrome 33, Firefox 27, Safari 7.
+    Currently tested in android 2.2~4.4.  With PC Browser Chrome 33, Firefox 27, Safari 7, IE8+.
     Host OS can be Windows/Mac/Linux (Unix should also be OK, but not tested).
     Build: src/build_all.sh has been tested in Mac OS X 10.7 64bit and Ubuntu 12 64bit,
     Android NDK r8 or r9. Gcc 4.4.3 or 4.8.
