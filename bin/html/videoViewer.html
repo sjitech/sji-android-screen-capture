@@ -28,10 +28,9 @@
     (Total:<b style="color:blue">@fileCount</b>)
   </div>
   <div class="toolbar">
-    Showing
-    <span id="currentVideoType"></span>
-    <button id="btnShow_mp4">MP4</button>
-    <button id="btnShow_webm">WebM</button>
+    <span style="font-weight: bolder; color: #0000ff; border: 1px solid #000000">Showing <span id="currentVideoType"></span></span>
+    <button id="btnShow_mp4">Show MP4</button>
+    <button id="btnShow_webm">Show WebM</button>
   </div>
   <div style="float: right; text-align: right">
     <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
@@ -82,8 +81,8 @@
       }
 
       var currentVideoType = currentSrc && (currentSrc.match(/mp4|webm/) || {})[0];
-      $('#btnShow_mp4').prop('disabled', currentVideoType === 'mp4');
-      $('#btnShow_webm').prop('disabled', currentVideoType === 'webm');
+      $('#btnShow_mp4').css('display', currentVideoType === 'mp4' ? 'none' : '');
+      $('#btnShow_webm').css('display', currentVideoType === 'webm' ? 'none' : '');
       $('#currentVideoType').text(currentVideoType === 'mp4' ? 'MP4' : currentVideoType === 'webm' ? 'WebM' : '?');
     }
 
