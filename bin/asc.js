@@ -313,17 +313,15 @@ function getTouchDeviceInfo(dev, stdout) {
   dev.touch.modernStyle = stdout.indexOf('INPUT_PROP_DIRECT') >= 0;
   stdout.split(/add device \d+: /).some(function (devInfo) {
     var match = {};
-    if ((match['0030'] = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/)) /*ABS_MT_TOUCH_MAJOR*/ &&
-        (match['0035'] = devInfo.match(/\D*0035.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_X*/ &&
-        (match['0036'] = devInfo.match(/\D*0036.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_Y*/ &&
-        (match['0039'] = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/)) /*ABS_MT_TRACKING_ID*/) {
-      if ((dev.touch.modernStyle && devInfo.indexOf('INPUT_PROP_DIRECT') >= 0) ||
-          (!dev.touch.modernStyle && !devInfo.match(/\n +name: +.*pen/))) {
+    if ((match['0035'] = devInfo.match(/\D*0035.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_X*/ && (match['0036'] = devInfo.match(/\D*0036.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_Y*/) {
+      if ((dev.touch.modernStyle && devInfo.indexOf('INPUT_PROP_DIRECT') >= 0) || (!dev.touch.modernStyle && !devInfo.match(/\n +name: +.*pen/))) {
         dev.touch.w = Math.floor((Number(match['0035'][1]) + 1) / 2) * 2;
         dev.touch.h = Math.floor((Number(match['0036'][1]) + 1) / 2) * 2;
         if (!dev.touch.w || !dev.touch.h) {
           log('[GetTouchDevInfo ' + dev.device + ']' + ' strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
         } else {
+          match['0030'] = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/) || {1: 32}; //ABS_MT_TOUCH_MAJOR
+          match['0039'] = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/) || {1: 1}; //ABS_MT_TRACKING_ID
           dev.touch.avgContactSize = Math.max(Math.ceil(match['0030'][1] / 2), 1);
           dev.touch.maxTrackId = Number(match['0039'][1]);
           (match['003a'] = devInfo.match(/\D*003a.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgPressure = Math.max(Math.ceil(match['003a'][1] / 2), 1)); //ABS_MT_PRESSURE
