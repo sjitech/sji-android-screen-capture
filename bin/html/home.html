@@ -232,7 +232,7 @@
           if (elementId.slice(0, 10) === 'devStatus_') {
             var device = elementId.slice(10);
             var cls = !text ? '' : text === 'preparing' ? 'devPrep' : text === 'OK' ? 'devOK' : 'devErr';
-            (text === 'OK' || text === 'preparing') && $e.hide();
+            (text === 'OK' || text === 'preparing') ? $e.hide() : $e.show();
             $('#' + 'row1_' + device).prop('class', cls);
             $('#' + 'row2_' + device).prop('class', cls);
             text === 'OK' && devAry.push(htmlIdDecode(device));
