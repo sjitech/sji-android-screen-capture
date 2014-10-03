@@ -67,17 +67,10 @@ extern "C" void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
-static int64_t microSecondOfNow() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return ((int64_t) t.tv_sec) * (1000 * 1000) + t.tv_usec;
-}
-
 static int mainThreadId = 0;
 
 static void cleanup(const char* msg) {
-    if (gettid() != mainThreadId) return;
-    ABORT("%s", msg);
+    if (gettid() == mainThreadId) ABORT("%s", msg);
 }
 
 static void on_SIGPIPE(int signum) {
@@ -105,6 +98,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     char* mGBufData;
     int mInternalWidth;
     int mBytesPerPixel;
+    bool mHaveData;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::ctor");
@@ -112,8 +106,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mHeight = h;
         mInUsing = 0;
         mIsGBufferRequested = false;
-        mFence = Fence::NO_FENCE;
         mGBufData = NULL;
+        mHaveData = false;
+        mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
@@ -164,17 +159,15 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("getNativeBuffer result:%p w:%d h:%d f:%d stride:%d handle:%p", nb, nb->width, nb->height, nb->format, nb->stride, nb->handle);
             mInternalWidth = nb->stride;
 
-            if (mGBuf != NULL) {
-                LOG("lock gbuf");
-                status_t err = mGBuf->lock(GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mGBufData);
-                if (err || !mGBufData) ABORT("lock gbuf err:%d", err);
-                LOG("mGBuf lock data ptr:%p", mGBufData);
-                // if (!err) {
-                //     LOG("unlock gbuf");
-                //     err = mGBuf->unlock();
-                //     if (err) ABORT("unlock gbuf err:%d", err);
-                // }
-            }
+            LOG("lock gbuf");
+            status_t err = mGBuf->lock(GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mGBufData);
+            if (err || !mGBufData) ABORT("lock gbuf err:%d", err);
+            LOG("mGBuf lock data ptr:%p", mGBufData);
+            LOG("clear mGBuf data content");
+            memset(mGBufData, 0xff, mInternalWidth*mHeight*mBytesPerPixel);
+//            LOG("unlock gbuf");
+//            err = mGBuf->unlock();
+//            if (err) ABORT("unlock gbuf err:%d", err);
         }
         else if (format != mFormat)  ABORT("dequeueBuffer fmt:%d!=%d", format, mFormat);
 
@@ -198,29 +191,35 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->transformHint = 0;
         output->numPendingBuffers = 0;
 
-        if (mFence && mFence->isValid()) {
-            LOG("wait fence");
-            mFence->wait(-1);
-        }
-
-        LOG("********************* data[10]:%d\n", mGBufData[10]);
-        if (mInternalWidth > mWidth) {
-            char* p1 = mGBufData;
-            char* p2 = mGBufData;
-            int size1 = mWidth*mBytesPerPixel;
-            int size2 = mInternalWidth*mBytesPerPixel;
-            for (int h=0; h < mHeight; h++, p2 += size2, p1+= size1)
-                memmove(p1, p2, size1);
-
-            static bool b = false;
-            if (!b) {
-                write(1, mGBufData, size2*mHeight);
-                b = true;
-            }
-        }
+        mHaveData = true;
+        LOG("********************* data[10]:%d data[10000]:%d\n", mGBufData[10], mGBufData[10000]);
+        this->output();
 
         _unlock();
         return 0;
+    }
+
+    void output() {
+        static bool b = false;
+        if (b) return;
+        if (!mHaveData) return;
+        if (mFence && mFence->isValid()) {
+            LOG("wait fence************************************");
+            mFence->wait(-1);
+        }
+
+        // char* buf = (char*)malloc(mWidth*mHeight*mBytesPerPixel);
+        // char* dst = buf;
+        // char* src = mGBufData;
+        // int rowSize = mWidth*mBytesPerPixel;
+        // int internalRowSize = mInternalWidth*mBytesPerPixel;
+        // for (int h=0; h < mHeight; h++, src += internalRowSize, dst+= rowSize)
+        //     memmove(dst, src, rowSize);
+        write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
+        LOG("output OK***************************************************************");
+        close(1);
+        exit(0);
+        b = true;
     }
 
     #if (ANDROID_VER>=440)
@@ -246,10 +245,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         case NATIVE_WINDOW_FORMAT:
             LOG("query NATIVE_WINDOW_FORMAT");
             *value = mFormat;
-            break;
-        case NATIVE_WINDOW_CONSUMER_USAGE_BITS:
-            LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
-            *value = GRALLOC_USAGE_SW_READ_OFTEN;
             break;
         default:
             LOG("query %d", what);
@@ -291,8 +286,8 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
     inline void _lock() {
         while (android_atomic_cmpxchg(/*old:*/0, /*new:*/1, /*target:*/&mInUsing) /*return !=0 means failed*/) {
-            LOG("failed to lock, so sleep a while then lock again");
-            usleep(1);
+            if (gettid() != mainThreadId) LOG("failed to lock, so sleep a while then lock again");
+            usleep(10*1000);
         }
     }
 
@@ -332,7 +327,7 @@ int main(int argc, char** argv) {
     LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h);
     LOG("virtDisp: w:%d h:%d", virtDispRect.right, virtDispRect.bottom);
 
-    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
+    MyGraphicBufferProducer* bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
 
     LOG("createDisplay");
     sp<IBinder> virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);
@@ -349,7 +344,14 @@ int main(int argc, char** argv) {
     LOG("closeGlobalTransaction");
     SurfaceComposerClient::closeGlobalTransaction();
 
-    LOG("...");
+    // for(;;) {
+    //     bufProducer->_lock();
+    //     bufProducer->output();
+    //     bufProducer->_unlock();
+    //     LOG("...");
+    //     usleep(1000*1000/30);
+    // }
+
     IPCThreadState::self()->joinThreadPool(/*isMain*/true);
     ABORT("unexpected here");
 }
