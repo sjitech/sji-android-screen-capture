@@ -241,7 +241,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
   }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
-var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.incremental;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.build.version.sdk;', 'getprop', 'ro.product.cpu.abi;',
+var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'xxx;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.build.version.sdk;', 'getprop', 'ro.product.cpu.abi;',
   'echo', '====;', 'getevent' , '-pS', ';', 'echo', '====;', 'cat' , '/proc/meminfo', ';'];
 var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = ['echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit', ';', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth="', ';',
   'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo', ';',
