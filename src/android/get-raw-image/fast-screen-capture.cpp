@@ -99,6 +99,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mInternalWidth;
     int mBytesPerPixel;
     bool mHaveData;
+    int mConsumerUsage;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::ctor");
@@ -109,6 +110,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mGBufData = NULL;
         mHaveData = false;
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+        mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
@@ -146,11 +148,11 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
         if (mGBuf==NULL) {
             mFormat = format;
-            mGBufUsage = usage;
+            mGBufUsage = (usage&~GRALLOC_USAGE_SW_READ_MASK)|mConsumerUsage;
             mBytesPerPixel = bytesPerPixel(format);
             LOG("bytesPerPixel: %d", mBytesPerPixel);
             LOG("createGraphicBuffer");
-            mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, usage|GRALLOC_USAGE_SW_READ_OFTEN);
+            mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, mGBufUsage);
             if (mGBuf==NULL) ABORT("new GraphicBuffer error");
             LOG("mGBuf:%p", mGBuf.get());
 
@@ -160,7 +162,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             mInternalWidth = nb->stride;
 
             LOG("lock gbuf");
-            status_t err = mGBuf->lock(GRALLOC_USAGE_SW_READ_OFTEN, (void**)&mGBufData);
+            status_t err = mGBuf->lock(mConsumerUsage, (void**)&mGBufData);
             if (err || !mGBufData) ABORT("lock gbuf err:%d", err);
             LOG("mGBuf lock data ptr:%p", mGBufData);
             LOG("clear mGBuf data content");
@@ -218,7 +220,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
         LOG("output OK***************************************************************");
         close(1);
-        exit(0);
+        // exit(0);
         b = true;
     }
 
@@ -245,6 +247,10 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         case NATIVE_WINDOW_FORMAT:
             LOG("query NATIVE_WINDOW_FORMAT");
             *value = mFormat;
+            break;
+        case NATIVE_WINDOW_CONSUMER_USAGE_BITS:
+            LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
+            *value = mConsumerUsage;
             break;
         default:
             LOG("query %d", what);
@@ -327,7 +333,7 @@ int main(int argc, char** argv) {
     LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h);
     LOG("virtDisp: w:%d h:%d", virtDispRect.right, virtDispRect.bottom);
 
-    MyGraphicBufferProducer* bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
+    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
 
     LOG("createDisplay");
     sp<IBinder> virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);
