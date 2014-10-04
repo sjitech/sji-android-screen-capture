@@ -93,7 +93,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     bool mIsGBufferRequested;
     sp<Fence> mFence;
     PixelFormat mFormat;
-    sp<GraphicBuffer> mGBuf;
+    GraphicBuffer* mGBuf;
     int mGBufUsage;
     char* mGBufData;
     int mInternalWidth;
@@ -107,6 +107,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mHeight = h;
         mInUsing = 0;
         mIsGBufferRequested = false;
+        mGBuf = NULL;
         mGBufData = NULL;
         mHaveData = false;
         mFence = Fence::NO_FENCE;
@@ -155,7 +156,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("createGraphicBuffer");
             mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, mGBufUsage);
             if (mGBuf==NULL) ABORT("new GraphicBuffer error");
-            LOG("mGBuf:%p", mGBuf.get());
+            LOG("mGBuf:%p", mGBuf);
 
             LOG("getNativeBuffer");
             ANativeWindowBuffer* nb = mGBuf->getNativeBuffer();
