@@ -109,6 +109,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mIsGBufferRequested = false;
         mGBufData = NULL;
         mHaveData = false;
+        mFence = Fence::NO_FENCE;
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
         mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
     }
