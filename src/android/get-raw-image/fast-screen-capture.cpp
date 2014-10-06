@@ -22,6 +22,7 @@
 #include "libcutils.h"
 #include "libgui.h"
 #include "libui.h"
+#include "libskia.h"
 
 #define FRAME_BUFFER_DEV "/dev/graphics/fb0"
 
@@ -85,6 +86,9 @@ static void on_SIGHUP(int signum) {
 
 // hack android OS head file
 using namespace android;
+
+// static pthread_mutex_t mMutex;
+// static pthread_cond_t mCond;
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mWidth;
@@ -195,8 +199,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->transformHint = 0;
         output->numPendingBuffers = 0;
 
-        mHaveData = true;
-        LOG("********************* data[10]:%d data[10000]:%d\n", mGBufData[10], mGBufData[10000]);
+        // LOG("********************* data[10]:%d data[10000]:%d\n", mGBufData[10], mGBufData[10000]);
         this->output();
 
         _unlock();
@@ -204,26 +207,26 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     void output() {
-        static bool b = false;
-        if (b) return;
-        if (!mHaveData) return;
+        static int frames = 0;
+        // write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
         if (mFence && mFence->isValid()) {
             LOG("wait fence************************************");
             mFence->wait(-1);
         }
-
-        // char* buf = (char*)malloc(mWidth*mHeight*mBytesPerPixel);
-        // char* dst = buf;
-        // char* src = mGBufData;
-        // int rowSize = mWidth*mBytesPerPixel;
-        // int internalRowSize = mInternalWidth*mBytesPerPixel;
-        // for (int h=0; h < mHeight; h++, src += internalRowSize, dst+= rowSize)
-        //     memmove(dst, src, rowSize);
-        write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
-        LOG("output OK***************************************************************");
-        close(1);
-        // exit(0);
-        b = true;
+        LOG("encode to jpeg");
+        SkData* streamData;
+        {
+            SkBitmap b;
+            if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*mBytesPerPixel)) ABORT("failed to setConfig");
+            b.setPixels(mGBufData);
+            SkDynamicMemoryWStream stream;
+            if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 1)) ABORT("failed to encode to jpeg");
+            LOG("get jpeg");
+            streamData = stream.copyToData();
+            write(1, streamData->p, streamData->size);
+            if (++frames == 30) exit(0);
+        }
+        delete streamData;
     }
 
     #if (ANDROID_VER>=440)
@@ -315,6 +318,9 @@ int main(int argc, char** argv) {
     signal(SIGHUP, on_SIGHUP);
     signal(SIGPIPE, on_SIGPIPE);
 
+    // pthread_mutex_init(&mMutex, NULL);
+    // pthread_cond_init(&mCond, NULL);
+
     LOG("startThreadPool");
     ProcessState::self()->startThreadPool();
 
@@ -351,6 +357,9 @@ int main(int argc, char** argv) {
     SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
     LOG("closeGlobalTransaction");
     SurfaceComposerClient::closeGlobalTransaction();
+
+    // pthread_cond_wait(&mCond, &mutex.mMutex);
+    // pthread_cond_signal(&mCond);
 
     // for(;;) {
     //     bufProducer->_lock();
