@@ -150,7 +150,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         #endif
         _lock();
 
-        if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
+        if (w > mWidth || h > mHeight) ABORT("dequeueBuffer w:%d>%d h:%d>%d", w, mWidth, h, mHeight);
 
         if (mGBuf==NULL) {
             mFormat = format;
@@ -171,8 +171,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             status_t err = mGBuf->lock(mConsumerUsage, (void**)&mGBufData);
             if (err || !mGBufData) ABORT("lock gbuf err:%d", err);
             LOG("mGBuf lock data ptr:%p", mGBufData);
-            LOG("clear mGBuf data content");
-            memset(mGBufData, 0xff, mInternalWidth*mHeight*mBytesPerPixel);
 //            LOG("unlock gbuf");
 //            err = mGBuf->unlock();
 //            if (err) ABORT("unlock gbuf err:%d", err);
@@ -207,12 +205,13 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     void output() {
-        static int frames = 0;
-        // write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
         if (mFence && mFence->isValid()) {
             LOG("wait fence************************************");
             mFence->wait(-1);
         }
+        write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
+        return;
+        exit(0);
         LOG("encode to jpeg");
         SkData* streamData;
         {
@@ -220,11 +219,10 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*mBytesPerPixel)) ABORT("failed to setConfig");
             b.setPixels(mGBufData);
             SkDynamicMemoryWStream stream;
-            if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 1)) ABORT("failed to encode to jpeg");
+            if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 100)) ABORT("failed to encode to jpeg");
             LOG("get jpeg");
             streamData = stream.copyToData();
-            write(1, streamData->p, streamData->size);
-            if (++frames == 30) exit(0);
+            write(1/*stdout*/, streamData->p, streamData->size);
         }
         delete streamData;
     }
@@ -332,13 +330,15 @@ int main(int argc, char** argv) {
     LOG("getDisplayInfo");
     err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getDisplayInfo err:%d", err);
+    LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h);
 
     Rect mainDispRect, virtDispRect;
-    mainDispRect.right = mainDispInfo.w;
-    mainDispRect.bottom = mainDispInfo.h;
-    virtDispRect.right = mainDispInfo.w;
-    virtDispRect.bottom = mainDispInfo.h;
-    LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h);
+    // mainDispRect.right = mainDispInfo.w;
+    // mainDispRect.bottom = mainDispInfo.h;
+    mainDispRect.right = mainDispRect.bottom = mainDispInfo.h;
+    //virtDispRect.right = mainDispInfo.w;
+    // virtDispRect.bottom = mainDispInfo.h;
+    virtDispRect.right = virtDispRect.bottom = mainDispInfo.h;
     LOG("virtDisp: w:%d h:%d", virtDispRect.right, virtDispRect.bottom);
 
     sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
