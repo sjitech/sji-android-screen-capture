@@ -23,6 +23,7 @@
 #include "libgui.h"
 #include "libui.h"
 #include "libskia.h"
+#include "libstagefright.h"
 
 #define FRAME_BUFFER_DEV "/dev/graphics/fb0"
 
@@ -150,7 +151,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         #endif
         _lock();
 
-        if (w > mWidth || h > mHeight) ABORT("dequeueBuffer w:%d>%d h:%d>%d", w, mWidth, h, mHeight);
+        if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
 
         if (mGBuf==NULL) {
             mFormat = format;
@@ -205,13 +206,18 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     void output() {
+        static int counterDown = 3;
+        if (--counterDown > 0) {
+            LOG("count down: %d", counterDown);
+            return;
+        }
         if (mFence && mFence->isValid()) {
             LOG("wait fence************************************");
             mFence->wait(-1);
         }
         write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
-        return;
         exit(0);
+        return;
         LOG("encode to jpeg");
         SkData* streamData;
         {
@@ -321,6 +327,42 @@ int main(int argc, char** argv) {
 
     LOG("startThreadPool");
     ProcessState::self()->startThreadPool();
+#if 0
+    sp<AMessage> format = new AMessage;
+    format->setInt32("width", virtDispRect.right);
+    format->setInt32("height", virtDispRect.bottom);
+    format->setString("mime", "video/avc");
+    format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
+    format->setInt32("bitrate", 4000000);
+    format->setFloat("frame-rate", 60);
+    format->setInt32("i-frame-interval", 10);
+
+    LOG("Creating ALooper");
+    sp<ALooper> looper = new ALooper;
+    looper->setName("screenrecord_looper");
+    LOG("Starting ALooper");
+    looper->start();
+
+    LOG("Creating codec");
+    sp<MediaCodec> codec = MediaCodec::CreateByType(looper, "video/avc", true);
+    if (codec.get() == NULL)
+        ABORT("ERROR: unable to create video/avc codec instance\n");
+    LOG("configure codec");
+    err = codec->configure(format, NULL, NULL, MediaCodec::CONFIGURE_FLAG_ENCODE);
+    if (err)
+        ABORT("ERROR: unable to configure codec (err=%d)\n", err);
+
+    LOG("Creating buffer producer");
+    sp<IGraphicBufferProducer> bufferProducer;
+    err = codec->createInputSurface(&bufferProducer);
+    if (err)
+        ABORT("ERROR: unable to create codec input surface (err=%d)\n", err);
+
+    LOG("Starting codec");
+    err = codec->start();
+    if (err)
+        ABORT("ERROR: unable to start codec (err=%d)\n", err);
+#endif
 
     LOG("getBuiltInDisplay");
     sp<IBinder> mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
@@ -330,18 +372,22 @@ int main(int argc, char** argv) {
     LOG("getDisplayInfo");
     err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getDisplayInfo err:%d", err);
-    LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h);
+    LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h); //sample: w:720 h:1280
 
     Rect mainDispRect, virtDispRect;
-    // mainDispRect.right = mainDispInfo.w;
-    // mainDispRect.bottom = mainDispInfo.h;
-    mainDispRect.right = mainDispRect.bottom = mainDispInfo.h;
-    //virtDispRect.right = mainDispInfo.w;
+    mainDispRect.right = mainDispInfo.h;
+    mainDispRect.bottom = mainDispInfo.h;
+    // virtDispRect.left = -(mainDispInfo.h-mainDispInfo.w);
+    virtDispRect.right = mainDispInfo.h;
+    virtDispRect.bottom = mainDispInfo.h;
+    // mainDispRect.right = mainDispRect.bottom = mainDispInfo.h;
+    // virtDispRect.right = mainDispInfo.w;
     // virtDispRect.bottom = mainDispInfo.h;
-    virtDispRect.right = virtDispRect.bottom = mainDispInfo.h;
-    LOG("virtDisp: w:%d h:%d", virtDispRect.right, virtDispRect.bottom);
+    // virtDispRect.right = virtDispRect.bottom = mainDispInfo.h;
+    LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
+    LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
 
-    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispRect.right, virtDispRect.bottom);
+    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(mainDispInfo.w, mainDispInfo.h);
 
     LOG("createDisplay");
     sp<IBinder> virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);
@@ -352,11 +398,47 @@ int main(int argc, char** argv) {
     LOG("setDisplaySurface");
     SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
     LOG("setDisplayProjection");
-    SurfaceComposerClient::setDisplayProjection(virtDisp, 0, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
+    SurfaceComposerClient::setDisplayProjection(virtDisp, 1, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
     LOG("setDisplayLayerStack");
     SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
     LOG("closeGlobalTransaction");
     SurfaceComposerClient::closeGlobalTransaction();
+
+#if 0
+    Vector<sp<ABuffer> > buffers;
+    LOG("getOutputBuffers");
+    err = codec->getOutputBuffers(&buffers);
+    if (err)
+        ABORT("prepareEncoder ret:%d", err);
+
+    while (true) {
+        size_t bufIndex, offset, size;
+        int64_t ptsUsec;
+        uint32_t flags;
+
+        LOG("dequeueOutputBuffer");
+        err = codec->dequeueOutputBuffer(&bufIndex, &offset, &size, &ptsUsec, &flags, 250000);
+        switch (err) {
+        case 0:
+            if ((flags & MediaCodec::BUFFER_FLAG_CODECCONFIG) != 0) {
+                LOG("Got codec config buffer (%u bytes); ignoring", size);
+                size = 0;
+            }
+            if (size != 0) {
+                LOG("Got data in buffer %d, size=%d, pts=%lld", bufIndex, size, ptsUsec);
+            }
+
+            LOG("releaseOutputBuffer");
+            err = codec->releaseOutputBuffer(bufIndex);
+            LOG("releaseOutputBuffer ret:%d", err);
+            break;
+        default:
+            LOG("dequeueOutputBuffer ret:%d", err);
+            // exit(0);
+            // return err;
+        }
+    }
+#endif
 
     // pthread_cond_wait(&mCond, &mutex.mMutex);
     // pthread_cond_signal(&mCond);
