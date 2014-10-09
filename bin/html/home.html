@@ -39,66 +39,62 @@
   <table id="device_tbl" style="width:100%; border-collapse: collapse; border: 1px solid #000000">
     <!--repeatBegin-->
     <tr id="row1_$device" style="border-top: 1px solid #000000">
-      <td rowspan="2" style="text-align: left; vertical-align: top">
+      <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap">#device</span>
-        <span style="background-color: darkgray">&nbsp;</span>
-        <span id="devInfo_$device"></span>
-        <span id="devStatus_$device"></span>
-        <div style="padding-left: 8px; white-space: nowrap">
-          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
-            View
-          </a>
-          <span class="captureIndicator" id="liveViewCount_$device"></span>
-          <a id="stopLiveView_$device" class="button" href="/deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop All Live View" style="display: none">
-            x
-          </a>
-          <span style="@hideIf_no_local_ffmpeg">
-            <span style="background-color: darkgray">&nbsp;</span>
-            <a class="button" href="/deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')">
-              REC
-            </a>
-            <span class="captureIndicator" id="recordingCount_$device"></span>
-            <a id="stopRecording_$device" class="button" href="/deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop Recording" style="display: none">
-              x
-            </a>
-          </span>
-          <span style="background-color: darkgray">&nbsp;</span>
-          <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device">
-            Videos
-          </a>
-          <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device">
-            Imgs
-          </a>
-          <span style="background-color: darkgray">&nbsp;</span>
-          <a class="internal" href="/cmd?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
-            Log
-          </a>
-          <a class="internal" href="/cmd?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
-            Top
-          </a>
-        </div>
-      </td>
-      <td style="text-align: right; vertical-align: top; white-space: nowrap; width: 1px; height: 1px">
-        <form action="/deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')">
+        <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')" style="display: inline-block; white-space: nowrap; float: right">
           <input type="hidden" name="adminKey" value="#adminKey"/>
           <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
           <!--<button type="submit" class="internal">Set</button>-->
-          <label>
-            AccKey:<input type="text" name="accessKey" value="#accessKey" size="4" style="margin: 0" />
+          <label title="Access Key">
+            &nbsp;<input type="text" name="accessKey" value="#accessKey" style="width: 40px; margin: 0; vertical-align: top" />
           </label>
         </form>
-      </td>
-      <td style="text-align: left; vertical-align: top; white-space: nowrap; width: 1px">
-        <div id="accessKeyTimestamp">#accessKeyTimestamp</div>
+        <span id="devStatus_$device"></span>
+        <span style="float: right">
+          &nbsp;<span id="devInfo_$device"></span>
+        </span>
       </td>
     </tr>
     <tr id="row2_$device">
-      <td style="text-align: left; vertical-align: top; white-space: nowrap; width: 1px">
-        <div class="captureIndicator" id="captureParameter_$device"></div>
-      </td>
-      <td style="text-align: left; vertical-align: top; white-space: nowrap; width: 1px">
-        <div id="captureTimestamp_$device"></div>
+      <td style="text-align: left; vertical-align: top">
+        <span style="white-space: nowrap">
+          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
+            View
+          </a>
+          <span class="captureIndicator" id="liveViewCount_$device"></span>
+          <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop All Live View" style="display: none">
+            x
+          </a>
+        </span>
+        <span style="@hideIf_no_local_ffmpeg; white-space: nowrap">
+          <span style="background-color: darkgray">&nbsp;</span>
+          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')">
+            Rec
+          </a>
+          <span class="captureIndicator" id="recordingCount_$device"></span>
+          <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop Recording" style="display: none">
+            x
+          </a>
+        </span>
+        <span style="background-color: darkgray">&nbsp;</span>
+        <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device">
+          Vids
+        </a>
+        <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device">
+          Imgs
+        </a>
+        <span style="background-color: darkgray">&nbsp;</span>
+        <a class="internal SLog" href="getServerLog?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=256000" target="log_$device" title="Server Log about this device">
+          SLog
+        </a>
+        <a class="internal" href="cmd?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
+          L
+        </a>
+        <a class="internal" href="cmd?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
+          T
+        </a>
+        <span class="captureIndicator" id="captureParameter_$device" style="float: right"></span>
       </td>
     </tr>
     <!--repeatEnd-->
@@ -107,7 +103,7 @@
 <div class="expandable" style="position: fixed; top: 1px; right: 1px; max-width:80%; max-height:90%">
   <div>AdminTool</div>
   <div>
-    <form action="/getServerLog" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+    <form action="getServerLog" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Get Server Log</button>
       <label>
@@ -130,10 +126,10 @@
         </label>
       </div>
     </form>
-    <form action="/discover" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+    <form action="discover" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit" title="Discover Remote Devices Which running ADB Server in TCP/IP Mode">Discover Devices</button>
-      <a id="discoveringStatus" href="/stopDiscover?adminKey=@adminKey" target="resultIFrame" style="background-color: blue; color: white; font-size: 1em; margin-left: 16px; display: block"></a>
+      <a id="discoveringStatus" href="stopDiscover?adminKey=@adminKey" target="resultIFrame" style="background-color: blue; color: white; font-size: 1em; margin-left: 16px; display: block"></a>
       <div style="margin-left: 16px">
         <label>
           IP<input type="text" name="from" value="@discover_from_ip" maxlength="15" style="width: 100px"/>-<input type="text" name="to" value="@discover_to_ip_part4" maxlength="3" size="3"/>
@@ -156,7 +152,7 @@
         </label>
       </div>
     </form>
-    <form action="/set" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+    <form action="set" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       Stream Web: <span style="border: 1px solid #000000; padding: 2px;">@result_streamWebBaseURL</span>
       <br>
@@ -169,43 +165,43 @@
       </label>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="/prepareAllDevices?adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')">
+      <a class="button" href="prepareAllDevices?adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')">
         Prepare
       </a>
       All Devices forcibly
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="/reloadResource?adminKey=@adminKey" target="resultIFrame">
+      <a class="button" href="reloadResource?adminKey=@adminKey" target="resultIFrame">
         Reload
       </a>
       Internal Files
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">#logFpsStatistic_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">#logFpsStatistic_negBtn</a>
       Log FPS Statistic
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">#logAllAdbCommands_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">#logAllAdbCommands_negBtn</a>
       Log All ADB Commands
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">#logHttpReqDetail_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">#logHttpReqDetail_negBtn</a>
       Log HTTP Request Detail
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">#logFfmpegDebugInfo_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">#logFfmpegDebugInfo_negBtn</a>
       Log FFMPEG Debug Info
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">#logAllHttpReqRes_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">#logAllHttpReqRes_negBtn</a>
       Log All Http Req/Res
     </div>
     <div>
-      <a class="button" href="/set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">#showDisconnectedDevices_negBtn</a>
+      <a class="button" href="set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">#showDisconnectedDevices_negBtn</a>
       Show Disconnected Devices
     </div>
     <div style="border-top: 1px solid lightgray">
-      <a class="button" href="/stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
+      <a class="button" href="stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
         Stop Server
       </a>
     </div>
@@ -218,7 +214,7 @@
   var appVer = '@appVer', ver = '', devAry = [];
   (function queryStatus() {
     $('#darkMask').hide();
-    $.ajax('/status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
+    $.ajax('status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
       .done(function (status) {
         if (status.appVer !== appVer) {
           document.location.reload(true);
@@ -257,7 +253,7 @@
 
   function adb(cmd, timeout, device) {
     (device ? [device] : devAry).forEach(function (device) {
-      $.ajax('/cmd?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
+      $.ajax('cmd?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
         .done(function (res) {
           console.log(device + ': ' + res);
         })

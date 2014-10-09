@@ -200,10 +200,10 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(), accessKeyTimestamp: '', subOutputDir: ''});
+  return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: ''});
 }
-function newAutoAccessKeyIfStreamWebPublic() {
-  return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : 'auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
+function newAutoAccessKeyIfStreamWebPublic(firstTime) {
+  return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '***********' : '') + '****' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
 }
 
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means repeatScanInBackground */, on_gotAllRealDev) {
@@ -241,10 +241,10 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
   }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
-var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'xxx;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.build.version.sdk;', 'getprop', 'ro.product.cpu.abi;',
-  'echo', '====;', 'getevent' , '-pS', ';', 'echo', '====;', 'cat' , '/proc/meminfo', ';'];
+var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
+  'echo', '====;', 'getevent' , '-pS', ';'];
 var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = ['echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit', ';', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth="', ';',
-  'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo', ';',
+  'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo', ';', 'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo', ';',
   'echo', '====;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', ';', './dlopen', './get-raw-image-420', './get-raw-image-400', './get-raw-image-220', '2>/dev/null;'];
 
 function prepareDeviceFile(dev, force/*optional*/) {
@@ -262,20 +262,16 @@ function prepareDeviceFile(dev, force/*optional*/) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
       var parts = stdout.trim().split(/\s*====\s*/);
-      if (parts.length < 5) {
+      if (parts.length !== 4 && parts.length !== 7) {
         return on_complete('unknown error: failed to check device');
       }
       dev.CrCount = Math.max(0, stdout.match(/\r?\r?\n$/)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/); //in unix/linux this will be 0
       dev.info = parts[1].split(/\r*\n/);
-      dev.info[4] = 'api' + (dev.apiLevel = dev.info[4]);
-      dev.sysVer = (dev.info[3] + '.0.0').split('.').slice(0, 3).join('.'); // 4.2 -> 4.2.0
-      dev.armv = dev.info[5].slice(0, 9) === 'armeabi-v' && parseInt(dev.info[5].slice(9)) >= 7 ? 7 : 5; //armeabi-v7a -> 7
-      dev.info[5].slice(0, 9) === 'armeabi-v' && (dev.info[5] = 'arm:' + dev.info[5].slice(8));
+      dev.sysVer = (dev.info[2] + '.0.0').split('.').slice(0, 3).join('.'); // 4.2 -> 4.2.0
+      dev.armv = dev.info[3].slice(0, 9) === 'armeabi-v' && parseInt(dev.info[3].slice(9)) >= 7 ? 7 : 5; //armeabi-v7a -> 7
+      dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[2]);
-      dev.memSize = (parts[3] = parts[3].match(/\d+/)) && parts[3][0];
-      getDispSize(dev, parts[4]);
-      dev.cpuCount = Number(parts[5]);
-      if (parts[0] === prepareDeviceFile.ver && !force && (dev.so_file = parts[6] && parts[6].trim())) {
+      if (parts.length === 7 && getMoreInfo(dev, parts.slice(3)) && parts[0] === prepareDeviceFile.ver && !force) {
         return on_complete();
       }
       return spawn('[PushFileToDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'push', './android', cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
@@ -287,16 +283,12 @@ function prepareDeviceFile(dev, force/*optional*/) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
           var parts = stdout.trim().split(/\s*====\s*/);
-          if (parts.length !== 4) {
+          if (parts.length !== 5) {
             return on_complete('unknown error: failed to finish preparing device file');
-          }
-          if (parts[0]) {
+          } else if (parts[0]) {
             return on_complete(stringifyError(parts[0]));
-          }
-          getDispSize(dev, parts[1]);
-          dev.cpuCount = Number(parts[2]);
-          if (!(dev.so_file = parts[3] && parts[3].trim())) {
-            return on_complete('unknown error: prepareFile OK but failed to check internal so files');
+          } else if (!getMoreInfo(dev, parts.slice(1))) {
+            return on_complete('unknown error: failed to ' + (!dev.so_file ? 'check internal lib files' : !dev.disp ? 'check display size' : '?'));
           }
           setDeviceOrientation(dev, 'free');
           return on_complete();
@@ -305,8 +297,11 @@ function prepareDeviceFile(dev, force/*optional*/) {
     }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckDevice
   }
 }
-function getDispSize(dev, stdout) {
-  stdout && (stdout = stdout.match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(stdout[1], stdout[2]), h: Math.max(stdout[1], stdout[2])});
+function getMoreInfo(dev, ary) {
+  (ary[0] = ary[0].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[0][1], ary[0][2]), h: Math.max(ary[0][1], ary[0][2])});
+  dev.cpuCount = Number(ary[1]) || 1;
+  (ary[2] = ary[2].match(/\d+/)) && (dev.memSize = Number(ary[2][0]));
+  return (dev.so_file = ary[3].trim()) && dev.disp;
 }
 function getTouchDeviceInfo(dev, stdout) {
   dev.touchStatus = 'error: touch device not found' /*do not change this string*/;  //almost impossible
@@ -411,21 +406,16 @@ function chkCaptureParameter(dev, q, force_ajpg) {
   (q.scale = q.scale ? q.scale[0]/*orig str*/ : '') && (q._FpsScaleRotate += (w ? 'w' + w : '') + (h ? 'h' + h : ''));
   (q.rotate = q.rotate || '') && (q._FpsScaleRotate += 'r' + q.rotate);
   if (dev) {
-    q._FpsScaleRotateDisp = 'Fps:' + q.fps;
+    q.timestamp = getTimestamp();
+    q._FpsScaleRotateDisp = q.fps + 'FPS ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
     if (q.scale) {
-      if (dev.disp) {
-        var _w = Math.ceil((w || dev.disp.w / dev.disp.h * h) / 2) * 2, _h = Math.ceil((h || dev.disp.h / dev.disp.w * w) / 2) * 2;
-        q._FpsScaleRotateDisp += ' Size:' + _w + 'x' + _h;
-        q._filter = 'scale=' + _w + ':' + _h;
-      } else {
-        q._FpsScaleRotateDisp += ' Size:' + q.scale;
-        q._filter = 'scale=' + 'ceil(' + (w || ('iw/ih*' + h) ) + '/2)*2' + ':' + 'ceil(' + (h || ('ih/iw*' + w) ) + '/2)*2';
-      }
+      var _w = Math.ceil((w || dev.disp.w / dev.disp.h * h) / 2) * 2, _h = Math.ceil((h || dev.disp.h / dev.disp.w * w) / 2) * 2;
+      q._FpsScaleRotateDisp = _w + 'x' + _h + ' ' + q._FpsScaleRotateDisp;
+      q._filter = 'scale=' + _w + ':' + _h;
     }
-    q.rotate && (q._FpsScaleRotateDisp += ' Landscape');
+    q.rotate && (q._FpsScaleRotateDisp = 'Land ' + q._FpsScaleRotateDisp);
     q.rotate && (q._filter = (q._filter ? q._filter + ',' : '') + 'transpose=2');
   }
-  q.timestamp = getTimestamp();
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
@@ -519,9 +509,9 @@ function doRecord(dev, q/*same as capture*/) {
 }
 
 function scheduleUpdateLiveUI() {
-  clearTimeout(status.updateLiveUITimer);
-  status.updateLiveUITimer = setTimeout(function () {
-    if (Object.keys(status.consumerMap).length) {
+  if (Object.keys(status.consumerMap).length) {
+    clearTimeout(status.updateLiveUITimer);
+    status.updateLiveUITimer = setTimeout(function () {
       var sd = {}, json;
       sd.discoveringStatus = status.discoveringIp ? (status.discoveringIp + ' (Click to Cancel)' ) : '';
       forEachValueIn(devMgr, function (dev) {
@@ -530,10 +520,9 @@ function scheduleUpdateLiveUI() {
           var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
           sd['liveViewCount_' + id] = liveViewCount ? '(' + liveViewCount + ')' : '';
           sd['recordingCount_' + id] = dev.consumerMap[REC_TAG] ? '(1)' : '';
-          sd['devInfo_' + id] = dev.info.join(' ') + (dev.cpuCount ? (' ' + dev.cpuCount + 'cpu') : '') + (dev.memSize ? ' ' + (dev.memSize / 1024).toFixed() + 'M' : '') + (dev.disp ? (' ' + dev.disp.w + 'x' + dev.disp.h) : '');
+          sd['devInfo_' + id] = dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h);
           sd['devStatus_' + id] = dev.status === 'OK' && dev.touchStatus && dev.touchStatus !== 'OK' ? dev.touchStatus : dev.status;
           sd['captureParameter_' + id] = dev.capture ? dev.capture.q._FpsScaleRotateDisp : '';
-          sd['captureTimestamp_' + id] = dev.capture ? stringifyTimestampShort(dev.capture.q.timestamp) : '';
         }
       });
       if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
@@ -547,8 +536,8 @@ function scheduleUpdateLiveUI() {
           delete status.consumerMap[res.__tag];
         }
       });
-    }
-  }, 0);
+    }, 0);
+  }
 }
 function scheduleUpdateWholeUI() {
   clearTimeout(status.updateWholeUITimer);
@@ -585,18 +574,21 @@ function replaceComVar(html, dev) {
   return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, htmlIdEncode(dev.device))
       .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey));
 }
+function isAccessKeyDiff(dev, accessKey) {
+  return accessKey !== dev.accessKey && accessKey !== dev.accessKey.slice(11);
+}
 
 function streamWeb_handler(req, res) {
   if (req.url.length > 4096 || req.method !== 'GET' || req.url === '/favicon.ico') {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
-  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || (q.type === 'jpg' && q.timestamp));
+  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
   res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
-  if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey && (chk.err = 'access denied')) {
+  if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && isAccessKeyDiff(dev, q.accessKey) && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
   setDefaultHttpHeaderAndInitCloseHandler(res);
@@ -755,15 +747,14 @@ function adminWeb_handler(req, res) {
         return end(res, stringifyError(err));
       }
       q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
-      q.accessKey = (q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic()));
+      q.accessKey = (q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/false)));
       forEachValueIn(dev.consumerMap, function (res) {
-        (q.action === 'stopRecording' && res.__tag === REC_TAG || q.action === 'startRecording' && (q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate || res.__tag === REC_TAG) || q.action === 'stopLiveView' && res.__tag !== REC_TAG || q.accessKey !== dev.accessKey)
+        (q.action === 'stopRecording' && res.__tag === REC_TAG || q.action === 'startRecording' && (q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate || res.__tag === REC_TAG) || q.action === 'stopLiveView' && res.__tag !== REC_TAG || isAccessKeyDiff(dev, q.accessKey))
         && endCaptureConsumer(res);
       });
       !Object.keys(dev.consumerMap).length && dev.capture && endCaptureProcess(dev);
-      if (q.accessKey !== dev.accessKey) {
-        dev.accessKeyTimestamp = stringifyTimestampShort(getTimestamp());
-        dev.accessKey = q.accessKey;
+      if (isAccessKeyDiff(dev, q.accessKey)) {
+        dev.accessKey = q.accessKey ? getTimestamp().slice(4, 14) + '.' + q.accessKey : '';
         scheduleUpdateWholeUI();
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
@@ -804,7 +795,7 @@ function adminWeb_handler(req, res) {
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
           return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
             return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
-                : (joinedStr + replaceComVar(htmlBlock, devMgr[device]).replace(/#accessKeyTimestamp\b/g, htmlEncode(devMgr[device].accessKeyTimestamp || 'unchanged')));
+                : (joinedStr + replaceComVar(htmlBlock, devMgr[device]));
           }, ''/*initial joinedStr*/);
         }), 'text/html');
       });
@@ -850,6 +841,12 @@ function adminWeb_handler(req, res) {
         return end(res, chk.err);
       }
       q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
+      q.device && (res.__oldWrite = res.write) && (res.write = function (buf) {
+        forEachValueIn(Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/), function (s, i, lineAry) {
+          (buf = (s.indexOf(q.device) >= 0 || s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
+          i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
+        });
+      }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(q.device));
       return fs.createReadStream(q._logFilePath, q.mode ? {start: q.mode === 'tail' ? q._fileSize - q.size : 0, end: q.mode === 'tail' ? q._fileSize - 1 : q.size - 1} : null)
           .on('error',function (err) {
             end(res, stringifyError(err));
