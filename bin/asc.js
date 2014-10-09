@@ -250,12 +250,10 @@ var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = ['echo', '====;', 'cd', cfg.androidWorkDir
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
     log('[PrepareDeviceFile for ' + dev.device + '] begin');
-    dev.status = 'preparing';
-    scheduleUpdateLiveUI();
-    var on_complete = function (err) {
-      log('[PrepareFileToDevice ' + dev.device + '] ' + (err || 'OK'));
-      dev.status = err || 'OK';
-      scheduleUpdateLiveUI();
+    dev.status !== 'preparing' && (dev.status = 'preparing') && scheduleUpdateWholeUI();
+    var on_complete = function (status) {
+      log('[PrepareFileToDevice ' + dev.device + '] ' + status);
+      dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
     spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cat', cfg.androidWorkDir + '/version;', ADB_GET_DEV_BASIC_INFO_CMD_ARGS, ADB_GET_DEV_EXTRA_INFO_CMD_ARGS), function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
@@ -272,7 +270,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[2]);
       if (parts.length === 7 && getMoreInfo(dev, parts.slice(3)) && parts[0] === prepareDeviceFile.ver && !force) {
-        return on_complete();
+        return on_complete('OK');
       }
       return spawn('[PushFileToDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'push', './android', cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
         if (ret !== 0) {
@@ -291,7 +289,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
             return on_complete('unknown error: failed to ' + (!dev.so_file ? 'check internal lib files' : !dev.disp ? 'check display size' : '?'));
           }
           setDeviceOrientation(dev, 'free');
-          return on_complete();
+          return on_complete('OK');
         }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true}); //end of FinishPrepareFile
       }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
     }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckDevice
@@ -520,8 +518,6 @@ function scheduleUpdateLiveUI() {
           var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
           sd['liveViewCount_' + id] = liveViewCount ? '(' + liveViewCount + ')' : '';
           sd['recordingCount_' + id] = dev.consumerMap[REC_TAG] ? '(1)' : '';
-          sd['devInfo_' + id] = dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h);
-          sd['devStatus_' + id] = dev.status === 'OK' && dev.touchStatus && dev.touchStatus !== 'OK' ? dev.touchStatus : dev.status;
           sd['captureParameter_' + id] = dev.capture ? dev.capture.q._FpsScaleRotateDisp : '';
         }
       });
@@ -795,7 +791,10 @@ function adminWeb_handler(req, res) {
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
           return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
             return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
-                : (joinedStr + replaceComVar(htmlBlock, devMgr[device]));
+                : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
+                .replace(/#devInfo\b/g, htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)))
+                .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus) : dev.status))
+                .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
           }, ''/*initial joinedStr*/);
         }), 'text/html');
       });

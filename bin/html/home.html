@@ -38,9 +38,9 @@
   <div style="@hideIf_local_ffmpeg; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
   <table id="device_tbl" style="width:100%; border-collapse: collapse; border: 1px solid #000000">
     <!--repeatBegin-->
-    <tr id="row1_$device" style="border-top: 1px solid #000000">
+    <tr id="row1_$device" style="border-top: 1px solid #000000" class="@devStatusClass">
       <td style="text-align: left; vertical-align: top">
-        <span style="white-space: nowrap">#device</span>
+        <span style="white-space: nowrap" class="deviceSN">#device</span>
         <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')" style="display: inline-block; white-space: nowrap; float: right">
           <input type="hidden" name="adminKey" value="#adminKey"/>
           <input type="hidden" name="action" value="setAccessKey"/>
@@ -50,13 +50,13 @@
             &nbsp;<input type="text" name="accessKey" value="#accessKey" style="width: 40px; margin: 0; vertical-align: top" />
           </label>
         </form>
-        <span id="devStatus_$device"></span>
+        <span>#devErr</span>
         <span style="float: right">
-          &nbsp;<span id="devInfo_$device"></span>
+          &nbsp;<span>#devInfo</span>
         </span>
       </td>
     </tr>
-    <tr id="row2_$device">
+    <tr id="row2_$device" class="@devStatusClass">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap">
           <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
@@ -85,8 +85,8 @@
           Imgs
         </a>
         <span style="background-color: darkgray">&nbsp;</span>
-        <a class="internal SLog" href="getServerLog?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=256000" target="log_$device" title="Server Log about this device">
-          SLog
+        <a class="internal SLog" href="getServerLog?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
+          Log
         </a>
         <a class="internal" href="cmd?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
           L
@@ -211,7 +211,7 @@
 
 <script src="jquery.js" type="text/javascript"></script>
 <script>
-  var appVer = '@appVer', ver = '', devAry = [];
+  var appVer = '@appVer', ver = '';
   (function queryStatus() {
     $('#darkMask').hide();
     $.ajax('status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
@@ -221,18 +221,10 @@
           return;
         }
         ver = status.ver;
-        devAry = [];
         $.each(status.data, function (elementId, text) {
           var $e = $('#' + elementId);
           $e.text(text);
-          if (elementId.slice(0, 10) === 'devStatus_') {
-            var device = elementId.slice(10);
-            var cls = !text ? '' : text === 'preparing' ? 'devPrep' : text === 'OK' ? 'devOK' : 'devErr';
-            (text === 'OK' || text === 'preparing') ? $e.hide() : $e.show();
-            $('#' + 'row1_' + device).prop('class', cls);
-            $('#' + 'row2_' + device).prop('class', cls);
-            text === 'OK' && devAry.push(htmlIdDecode(device));
-          } else if (elementId.slice(0, 14) === 'liveViewCount_') {
+          if (elementId.slice(0, 14) === 'liveViewCount_') {
             $('#' + 'stopLiveView_' + elementId.slice(14)).css('display', text ? '' : 'none');
           } else if (elementId.slice(0, 15) === 'recordingCount_') {
             $('#' + 'stopRecording_' + elementId.slice(15)).css('display', text ? '' : 'none');
@@ -245,14 +237,19 @@
           queryStatus();
         } else {
           $('#darkMask').show();
-          devAry = [];
           setTimeout(queryStatus, 10 * 1000);
         }
       });
   })();
 
+  var _devAry = $('.deviceSN').toArray().reduce(function (resAry, el) {
+    return resAry.push($(el).text()) && resAry;
+  }, []);
+  console.log(JSON.stringify(_devAry));
+
   function adb(cmd, timeout, device) {
-    (device ? [device] : devAry).forEach(function (device) {
+    var devAry = Array.isArray(device) ? device : device ? [device] : _devAry;
+    devAry.forEach(function (device) {
       $.ajax('cmd?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
         .done(function (res) {
           console.log(device + ': ' + res);
@@ -260,12 +257,6 @@
         .fail(function (jqXHR, textStatus) {
           console.log(device + ': ' + textStatus);
         });
-    });
-  }
-
-  function htmlIdDecode(text) {
-    return text.replace(/_([^_]+)_/g, function (match, sub1) {
-      return String.fromCharCode(Number('0x' + sub1));
     });
   }
 </script>
