@@ -15,8 +15,8 @@
   <link rel="stylesheet" type="text/css" href="common.css">
 </head>
 <body onunload="">
-<div style="text-align: left; width: 100%; position: fixed; top:0">
-  <form class="toolbar" style="white-space: nowrap">
+<div class="toolbar" style="text-align: left; width: 100%; position: fixed; top:0; height: 56px">
+  <form style="white-space: nowrap; height: 27px">
     <input type="hidden" name="adminKey" value="#adminKey"/>
     <button type="submit" title="Set default value">Set</button>
     <label class="infoWithTip" title="Frames per Second. @minFps >= value <= @maxFps">
@@ -32,11 +32,11 @@
       </select>
     </label>
   </form>
-  <iframe class="toolbar" name="resultIFrame"></iframe>
+  <iframe name="resultIFrame"></iframe>
 </div>
-<div style="margin-top: 62px; text-align: center">
+<div style="margin-top: 56px; text-align: center">
   <div style="@hideIf_local_ffmpeg; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
-  <table id="device_tbl" style="width:100%; border-collapse: collapse; border: 1px solid #000000">
+  <table id="device_tbl" style="max-width:100%; border-collapse: collapse; border: 1px solid #000000">
     <!--repeatBegin-->
     <tr id="row1_$device" style="border-top: 1px solid #000000" class="@devStatusClass">
       <td style="text-align: left; vertical-align: top">
@@ -69,7 +69,7 @@
         </span>
         <span style="@hideIf_no_local_ffmpeg; white-space: nowrap">
           <span style="background-color: darkgray">&nbsp;</span>
-          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')">
+          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')" title="Record">
             Rec
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
@@ -78,13 +78,12 @@
           </a>
         </span>
         <span style="background-color: darkgray">&nbsp;</span>
-        <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device">
+        <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device" title="Recorded Videos">
           Vids
         </a>
-        <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device">
+        <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device" title="Saved Images">
           Imgs
         </a>
-        <span style="background-color: darkgray">&nbsp;</span>
         <a class="internal SLog" href="getServerLog?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
           Log
         </a>
@@ -101,7 +100,7 @@
   </table>
 </div>
 <div class="expandable" style="position: fixed; top: 1px; right: 1px; max-width:80%; max-height:90%">
-  <div>AdminTool</div>
+  <div>Admin</div>
   <div>
     <form action="getServerLog" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
@@ -165,10 +164,13 @@
       </label>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="prepareAllDevices?adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')">
+      <a class="button" href="prepareAllDevices?adminKey=@adminKey&mode=checkPrepare" target="resultIFrame" title="prepare all device files">
         Prepare
       </a>
-      All Devices forcibly
+      All Devices
+      <a class="button" href="prepareAllDevices?adminKey=@adminKey&mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
+        forcibly
+      </a>
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <a class="button" href="reloadResource?adminKey=@adminKey" target="resultIFrame">

@@ -5,13 +5,13 @@
   <title>Recorded Video of #device</title>
   <link rel="stylesheet" type="text/css" href="common.css">
   <style>
-    .toolbar > a[href$="fileindex=@fileindex"] {visibility: hidden}
-    .toolbar > a[href*="fileindex=@fileindex&"] {visibility: hidden}
+    .toolbar a[href$="fileindex=@fileindex"] {color: lightgray}
+    .toolbar a[href*="fileindex=@fileindex&"] {color: lightgray}
   </style>
 </head>
 <body>
-<div style="text-align: center; width: 100%; position: fixed; top:0; z-index: 90; white-space: nowrap">
-  <div class="toolbar">
+<div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; white-space: nowrap">
+  <div style="margin-right: 128px">
     <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
       &lt;&lt;
     </a>
@@ -27,21 +27,25 @@
     </a>
     (Total:<b style="color:blue">@fileCount</b>)
   </div>
-  <div class="toolbar">
-    <span id="currentVideoType" style="font-weight: bolder; font-size: larger; color: #0000ff; border: 1px solid #000000">loading</span>
+  <div id="currentVideoType" style="font-weight: bolder; margin-right: 128px">
+    loading
+  </div>
+</div>
+<div style="position: fixed; right: 0; top: 0; text-align: right; background-color: ghostwhite; width: 128px; z-index: 99">
+  <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
+  <div>
     <button id="btnShow_mp4" style="display: none">Show MP4</button>
+  </div>
+  <div>
     <button id="btnShow_webm" style="display: none">Show WebM</button>
   </div>
-  <div style="float: right; text-align: right">
-    <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
-    <div style="margin-top: 8px">
-      Download:&nbsp;&nbsp;&nbsp;
-      <div>
-        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
-      </div>
-      <div>
-        <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
-      </div>
+  <div style="margin-top: 8px">
+    Download:&nbsp;&nbsp;&nbsp;
+    <div>
+      <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
+    </div>
+    <div>
+      <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
     </div>
   </div>
 </div>

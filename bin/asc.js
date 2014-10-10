@@ -203,10 +203,10 @@ function getOrCreateDevCtx(device/*device serial number*/) {
   return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: ''});
 }
 function newAutoAccessKeyIfStreamWebPublic(firstTime) {
-  return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '***********' : '') + '****' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
+  return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '-----------' : '') + '_auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
 }
 
-function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means repeatScanInBackground */, on_gotAllRealDev) {
+function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
   return spawn('[GetAllDevices]', cfg.adb, cfg.adbOption.concat('devices'), function/*on_close*/(ret, stdout) {
     var deviceList = [], parts;
     if (ret === 0) {
@@ -217,9 +217,9 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
             deviceList.push(device);
             var dev = getOrCreateDevCtx(device);
             (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + device);
-            dev.status === ERR_DEV_NOT_FOUND && (cfg.showDisconnectedDevices ? scheduleUpdateLiveUI() : scheduleUpdateWholeUI());
+            dev.status === ERR_DEV_NOT_FOUND && scheduleUpdateWholeUI();
             dev.status === ERR_DEV_NOT_FOUND && (dev.status = dev.touchStatus = '');
-            (mode || !dev.status) && prepareDeviceFile(dev, mode === 'forcePrepare');
+            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status) && prepareDeviceFile(dev, mode === 'forcePrepare');
           }
         }
       });
@@ -228,7 +228,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
       if (deviceList.indexOf(dev.device) < 0 && dev.status !== ERR_DEV_NOT_FOUND) {
         dev.status && log('[GetAllDevices] device disconnected: ' + dev.device);
         dev.status = ERR_DEV_NOT_FOUND;
-        cfg.showDisconnectedDevices ? scheduleUpdateLiveUI() : scheduleUpdateWholeUI();
+        scheduleUpdateWholeUI();
       }
     });
     on_gotAllRealDev && on_gotAllRealDev(deviceList);
@@ -765,7 +765,7 @@ function adminWeb_handler(req, res) {
       if (!chkCaptureParameter(null, q, /*force_ajpg:*/true)) {
         return end(res, chk.err);
       }
-      return scanAllDevices(/*mode:*/'checkPrepare', function/*on_gotAllRealDev*/(realDeviceList) {
+      return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
         var result_streamWebBaseURL = cfg.streamWebBaseURL || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html']
                 .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey))
@@ -851,7 +851,7 @@ function adminWeb_handler(req, res) {
             end(res, stringifyError(err));
           }).pipe(res);
     case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
-      scanAllDevices(/*mode:*/'forcePrepare');
+      scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
     case '/discover':
       if (!chk('from', q.from) || !chk('to', q.to_ip_part4 = Number(q.to), 1, 254) || !chk('port', q.port = Number(q.port), 1024, 65535) || !chk('maxFound', q.maxFound = Number(q.maxFound), 1, 254) || !chk('timeout', (q.timeout = Number(q.timeout) || 0), 0.1, 99) || !chk('totalTimeout', (q.totalTimeout = Number(q.totalTimeout) || 0), 0.1, 99)) {
