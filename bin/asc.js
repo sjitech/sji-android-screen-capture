@@ -212,14 +212,15 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
     if (ret === 0) {
       stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
         if ((parts = lineStr.split('\t')).length > 1) {
-          var device = parts[0];
+          var device = parts[0], _status = parts[1];
           if (/[^?]/.test(device) && deviceList.indexOf(device) < 0) { //exclude SN such as ??????
             deviceList.push(device);
             var dev = getOrCreateDevCtx(device);
             (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + device);
             dev.status === ERR_DEV_NOT_FOUND && scheduleUpdateWholeUI();
             dev.status === ERR_DEV_NOT_FOUND && (dev.status = dev.touchStatus = '');
-            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status) && prepareDeviceFile(dev, mode === 'forcePrepare');
+            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status) && prepareDeviceFile(dev, mode === 'forcePrepare');
+            dev._status = _status;
           }
         }
       });
