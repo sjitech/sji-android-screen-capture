@@ -59,7 +59,7 @@
     <a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=187" target="resultIFrame">Apps</a>
   </div>
 </div>
-<div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
+<div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100; background-color: #f0f0f0">
   <div id="lblLoading">loading</div>
   <div id="viewerContainer" style="display: inline-block">
     <img id="viewer" src="capture?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate"/>
@@ -110,12 +110,12 @@
 <script src="jquery.js" type="text/javascript"></script>
 <script src="common.js" type="text/javascript"></script>
 <script>
-  $('#lblLoading').hide();
   AscUtil.setTouchHandler(document.getElementById('viewer'), 'touch?device=@device&accessKey=@accessKey');
   $('#lblBrowserAgentStr').text('Current browser agent string: ' + navigator.userAgent);
   if (!/chrome|firefox/i.test(navigator.userAgent) && (!/safari/i.test(navigator.userAgent) || /android/i.test(navigator.userAgent))) {
     AscUtil.loopLoadImage(document.getElementById('viewer'));
   }
+  $('#lblLoading').hide();
 </script>
 </body>
 </html>

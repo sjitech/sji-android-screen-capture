@@ -11,7 +11,7 @@
 </head>
 <body>
 <div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; white-space: nowrap">
-  <div style="margin-right: 128px">
+  <div style="margin-right: 140px">
     <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
       &lt;&lt;
     </a>
@@ -27,11 +27,11 @@
     </a>
     (Total:<b style="color:blue">@fileCount</b>)
   </div>
-  <div id="currentVideoType" style="font-weight: bolder; margin-right: 128px">
+  <div id="currentVideoType" style="font-weight: bolder; margin-right: 140px">
     loading
   </div>
 </div>
-<div style="position: fixed; right: 0; top: 0; text-align: right; background-color: ghostwhite; width: 128px; z-index: 99">
+<div style="position: fixed; right: 0; top: 0; text-align: right; background-color: ghostwhite; width: 140px; z-index: 99">
   <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
   <div>
     <button id="btnShow_mp4" style="display: none">Show MP4</button>
@@ -40,16 +40,22 @@
     <button id="btnShow_webm" style="display: none">Show WebM</button>
   </div>
   <div style="margin-top: 8px">
-    Download:&nbsp;&nbsp;&nbsp;
-    <div>
-      <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4(@fileSize_mp4)</a>
-    </div>
-    <div>
-      <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM(@fileSize_webm)</a>
-    </div>
+    Download:
+  </div>
+  <div>
+    <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4</a>
+  </div>
+  <div>
+    :@fileSize_mp4
+  </div>
+  <div style="margin-top: 4px">
+    <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM</a>
+  </div>
+  <div>
+    :@fileSize_webm
   </div>
 </div>
-<div style="text-align: center; margin-top: 56px; margin-right: 128px; position: relative; z-index: 100">
+<div style="text-align: center; margin-top: 56px; margin-right: 140px; position: relative; z-index: 100; background-color: #f0f0f0">
   <div id="viewerContainer" style="display: inline-block">
     <video id="viewer" autoplay controls>
       <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4" type="video/mp4">
