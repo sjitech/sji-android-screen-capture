@@ -261,6 +261,16 @@
         });
     });
   }
+
+  var $frmSLog = $('form[action="getServerLog"]');
+  $(document).on('mouseover click', '.SLog', function (e) {
+    var $this = $(e.currentTarget);
+    $this.prop('href', $this.prop('href')
+      .replace(/&logHowManyDaysAgo=[^&]*/, '&logHowManyDaysAgo=' + $frmSLog.find('[name="logHowManyDaysAgo"]:checked').val())
+      .replace(/&mode=[^&]*/, '&mode=' + $frmSLog.find('[name="mode"] option:selected').val())
+      .replace(/&size=[^&]*/, '&size=' + Math.max(Number($frmSLog.find('[name="size"]').val()) || 64000, 512000))
+    );
+  });
 </script>
 </body>
 </html>
