@@ -90,6 +90,11 @@ using namespace android;
 
 // static pthread_mutex_t mMutex;
 // static pthread_cond_t mCond;
+sp<IBinder> mainDisp;
+
+static bool isRotated() {
+
+}
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mWidth;
@@ -365,7 +370,7 @@ int main(int argc, char** argv) {
 #endif
 
     LOG("getBuiltInDisplay");
-    sp<IBinder> mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
+    mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
     if (mainDisp.get()==NULL) ABORT("getBuiltInDisplay err:unknown");
 
     DisplayInfo mainDispInfo;
@@ -374,20 +379,15 @@ int main(int argc, char** argv) {
     if (err) ABORT("getDisplayInfo err:%d", err);
     LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h); //sample: w:720 h:1280
 
+    int mainDispSizeS = mainDispInfo.w, mainDispSizeL = mainDispInfo.h;
+    int virtDispSizeS = mainDispSizeS/*can be changed*/, virtDispSizeL = mainDispSizeL*virtDispSizeS/mainDispSizeS;
     Rect mainDispRect, virtDispRect;
-    mainDispRect.right = mainDispInfo.h;
-    mainDispRect.bottom = mainDispInfo.h;
-    // virtDispRect.left = -(mainDispInfo.h-mainDispInfo.w);
-    virtDispRect.right = mainDispInfo.h;
-    virtDispRect.bottom = mainDispInfo.h;
-    // mainDispRect.right = mainDispRect.bottom = mainDispInfo.h;
-    // virtDispRect.right = mainDispInfo.w;
-    // virtDispRect.bottom = mainDispInfo.h;
-    // virtDispRect.right = virtDispRect.bottom = mainDispInfo.h;
+    mainDispRect.right = mainDispRect.bottom = mainDispSizeL;
+    virtDispRect.right = virtDispRect.bottom = virtDispSizeL;
     LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
     LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
 
-    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(mainDispInfo.w, mainDispInfo.h);
+    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL);
 
     LOG("createDisplay");
     sp<IBinder> virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);

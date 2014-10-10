@@ -40,7 +40,14 @@ private:
 struct DisplayInfo {
     uint32_t w;
     uint32_t h;
-    char __data[sizeof(void*)*16];
+#if (ANDROID_VER>=420)
+    float xdpi;
+    float ydpi;
+    float fps;
+    float density;
+    uint8_t orientation;
+#endif
+    char __data[sizeof(void*)*256];
 };
 
 #if (ANDROID_VER>=420)
@@ -152,6 +159,30 @@ struct DisplayInfo {
 
         virtual sp<ISurfaceComposerClient> createConnection() = 0;
         virtual sp<IGraphicBufferAlloc> createGraphicBufferAlloc() = 0;
+        /*
+        virtual sp<IDisplayEventConnection> createDisplayEventConnection() = 0;
+        virtual sp<IBinder> createDisplay(const String8& displayName, bool secure) = 0;
+        #if (ANDROID_VER>=440)
+            virtual void destroyDisplay(const sp<IBinder>& display) = 0;
+        #endif
+        virtual sp<IBinder> getBuiltInDisplay(int32_t id) = 0;
+        virtual void setTransactionState(const Vector<ComposerState>& state, const Vector<DisplayState>& displays, uint32_t flags) = 0;
+        virtual void bootFinished() = 0;
+        #if (ANDROID_VER>=440)
+            virtual bool authenticateSurfaceTexture(const sp<IGraphicBufferProducer>& surface) const = 0;
+        #elif (ANDROID_VER>=420)
+            virtual bool authenticateSurfaceTexture(const sp<ISurfaceTexture>& surface) const = 0;
+        #endif
+        #if (ANDROID_VER>=420)
+            virtual status_t captureScreen(const sp<IBinder>& display, sp<IMemoryHeap>* heap, uint32_t* width, uint32_t* height, PixelFormat* format, uint32_t reqWidth, uint32_t reqHeight, uint32_t minLayerZ, uint32_t maxLayerZ) = 0;
+        #endif
+        virtual void blank(const sp<IBinder>& display) = 0;
+        virtual void unblank(const sp<IBinder>& display) = 0;
+        virtual status_t getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info) = 0;
+        #if (ANDROID_VER>=440)
+            virtual status_t captureScreen(const sp<IBinder>& display, const sp<IGraphicBufferProducer>& producer, uint32_t reqWidth, uint32_t reqHeight, uint32_t minLayerZ, uint32_t maxLayerZ) = 0;
+        #endif
+        */
     };
 
     class ComposerService {
