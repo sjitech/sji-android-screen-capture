@@ -36,9 +36,9 @@
 </div>
 <div style="margin-top: 56px; text-align: center">
   <div style="@hideIf_local_ffmpeg; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
-  <table id="device_tbl" style="max-width:100%; border-collapse: collapse; border: 1px solid #000000">
+  <table id="device_tbl" style="max-width:100%; border-collapse: collapse; display: inline-block">
     <!--repeatBegin-->
-    <tr id="row1_$device" style="border-top: 1px solid #000000" class="@devStatusClass">
+    <tr id="row1_$device" class="@devStatusClass">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap" class="deviceSN">#device</span>
         <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')" style="display: inline-block; white-space: nowrap; float: right">
@@ -56,7 +56,7 @@
         </span>
       </td>
     </tr>
-    <tr id="row2_$device" class="@devStatusClass">
+    <tr id="row2_$device" class="@devStatusClass" style="border-bottom: 1px solid #000000">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap">
           <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
