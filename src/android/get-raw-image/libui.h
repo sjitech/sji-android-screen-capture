@@ -79,8 +79,6 @@ typedef struct ANativeWindowBuffer { //from window.h
     void* reserved_proc[8];
 } ANativeWindowBuffer_t;
 
-extern "C" void _LOG(const char* format, ...);
-
 struct GraphicBuffer {
     GraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage);
     ~GraphicBuffer();
@@ -88,10 +86,14 @@ struct GraphicBuffer {
     status_t lock(uint32_t usage, void** vaddr);
     status_t unlock();
     void incStrong(const void* id) const {
-        _LOG("GraphicBuffer::incStrong id=%p *********************************\n", id);
+        #ifdef LOG
+            LOG("GraphicBuffer::incStrong id=%p *********************************\n", id);
+        #endif
     }
     void decStrong(const void* id) const {
-        _LOG("GraphicBuffer::decStrong id=%p ********-****-***-***-***********\n", id);
+        #ifdef LOG
+            LOG("GraphicBuffer::decStrong id=%p ********-****-***-***-***********\n", id);
+        #endif
     }
 private:
     char __data[sizeof(void*)*64+sizeof(ANativeWindowBuffer)];

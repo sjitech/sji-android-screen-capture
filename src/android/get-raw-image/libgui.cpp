@@ -2,7 +2,7 @@
 using namespace android;
 
 ScreenshotClient::ScreenshotClient() {}
-#if (ANDROID_VER>=440)
+#if (ANDROID_VER>=430)
     ScreenshotClient::~ScreenshotClient() {}
 #endif
 #if (ANDROID_VER>=420)
@@ -29,11 +29,7 @@ size_t ScreenshotClient::getSize() const {}
     status_t SurfaceComposerClient::getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info) {}
     void SurfaceComposerClient::openGlobalTransaction() {}
     void SurfaceComposerClient::closeGlobalTransaction(bool synchronous) {}
-    #if (ANDROID_VER>=440)
-        void SurfaceComposerClient::setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer) {}
-    #elif (ANDROID_VER>=420)
-        void SurfaceComposerClient::setDisplaySurface(const sp<IBinder>& token, const sp<ISurfaceTexture>& bufferProducer) {}
-    #endif
+    void SurfaceComposerClient::setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer) {}
     void SurfaceComposerClient::setDisplayLayerStack(const sp<IBinder>& token, uint32_t layerStack) {}
     void SurfaceComposerClient::setDisplayProjection(const sp<IBinder>& token, uint32_t orientation, const Rect& layerStackRect, const Rect& displayRect) {}
 
@@ -44,22 +40,16 @@ size_t ScreenshotClient::getSize() const {}
     ISurfaceComposer::~ISurfaceComposer() {}
 
 
-    #if (ANDROID_VER>=440)
+    #if (ANDROID_VER>=430)
         const String16& IGraphicBufferProducer::getInterfaceDescriptor() const {}
         IGraphicBufferProducer::IGraphicBufferProducer() {}
         IGraphicBufferProducer::~IGraphicBufferProducer() {}
         status_t BnGraphicBufferProducer::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
-
     #elif (ANDROID_VER>=420)
         const String16& ISurfaceTexture::getInterfaceDescriptor() const {}
         ISurfaceTexture::ISurfaceTexture() {}
         ISurfaceTexture::~ISurfaceTexture() {}
         status_t BnSurfaceTexture::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
-
-        size_t ISurfaceTexture::QueueBufferInput::getFlattenedSize() const {}
-        size_t ISurfaceTexture::QueueBufferInput::getFdCount() const {}
-        status_t ISurfaceTexture::QueueBufferInput::flatten(void* buffer, size_t size, int fds[], size_t count) const {}
-        status_t ISurfaceTexture::QueueBufferInput::unflatten(void const* buffer, size_t size, int fds[], size_t count) {}
     #endif
 
 #elif (ANDROID_VER>=400)

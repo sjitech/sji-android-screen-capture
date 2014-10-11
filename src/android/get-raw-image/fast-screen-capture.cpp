@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <signal.h>
+#include <pthread.h>
 
 #if (ANDROID_VER < 420)
     #error must define ANDROID_VER >= 420
@@ -32,7 +33,7 @@
 #define ABORT_ERRNO(fmt, arg...) ({_LOG("[errno %d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(0);})
 #define ABORT(fmt, arg...)  ({_LOG(fmt ". Now exit\n", ##arg); exit(0);})
 
-extern "C" void _LOG(const char* format, ...) {
+static void _LOG(const char* format, ...) {
     char buf[4096];
     int cnt;
     va_list va;
@@ -88,12 +89,32 @@ static void on_SIGHUP(int signum) {
 // hack android OS head file
 using namespace android;
 
-// static pthread_mutex_t mMutex;
-// static pthread_cond_t mCond;
-sp<IBinder> mainDisp;
+static pthread_mutex_t mMutex;
+static pthread_cond_t mCond;
+sp<ISurfaceComposer> __cs;
+sp<IBinder> mainDisp, virtDisp;
+sp<IGraphicBufferProducer> bufProducer;
+int mainDispSizeS, mainDispSizeL, virtDispSizeS, virtDispSizeL;
+Rect mainDispRect, virtDispRect;
 
-static bool isRotated() {
+static int getOrientation() {
+    DisplayInfo mainDispInfo;
+    status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
+    if (err) ABORT("getDisplayInfo err:%d", err);
+    return mainDispInfo.orientation;
+}
 
+static void setVirtualDisplay(int orientation) {
+    LOG("openGlobalTransaction");
+    SurfaceComposerClient::openGlobalTransaction();
+    LOG("setDisplaySurface");
+    SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
+    LOG("setDisplayProjection");
+    SurfaceComposerClient::setDisplayProjection(virtDisp, orientation, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
+    LOG("setDisplayLayerStack");
+    SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
+    LOG("closeGlobalTransaction");
+    SurfaceComposerClient::closeGlobalTransaction();
 }
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
@@ -110,8 +131,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mBytesPerPixel;
     bool mHaveData;
     int mConsumerUsage;
+    bool mOrientation;
 
-    MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
+    MyGraphicBufferProducer(int w, int h, int orientation) : BnGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::ctor");
         mWidth = w;
         mHeight = h;
@@ -123,10 +145,12 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mFence = Fence::NO_FENCE;
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
         mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
+        mOrientation = orientation;
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::dtor");
+        delete mGBuf;
     }
 
     /*virtual*/ status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) {
@@ -145,6 +169,8 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
     #if (ANDROID_VER>=440)
         /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>* fence, bool async, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
+    #elif (ANDROID_VER>=430)
+        /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>* fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
     #elif (ANDROID_VER>=420)
         /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>& fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
     #endif
@@ -155,6 +181,12 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
         #endif
         _lock();
+
+        int orient = getOrientation();
+        if (orient != mOrientation) {
+            setVirtualDisplay(orient);
+            mOrientation = orient;
+        }
 
         if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
 
@@ -184,7 +216,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         else if (format != mFormat)  ABORT("dequeueBuffer fmt:%d!=%d", format, mFormat);
 
         *slot = 0;
-        #if (ANDROID_VER>=440)
+        #if (ANDROID_VER>=430)
             *fence = mFence; //set NULL cause android crash!!
         #elif (ANDROID_VER>=420)
             fence = mFence;
@@ -211,7 +243,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     void output() {
-        static int counterDown = 3;
+        static int counterDown = 2;
         if (--counterDown > 0) {
             LOG("count down: %d", counterDown);
             return;
@@ -273,9 +305,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         return err;
     }
 
-    #if (ANDROID_VER>=440)
-        //
-    #elif (ANDROID_VER>=420)
+    #if (ANDROID_VER<440)
     /*virtual*/ status_t setSynchronousMode(bool enabled) {
         LOG("setSynchronousMode %d", enabled);
         return 0;
@@ -327,8 +357,8 @@ int main(int argc, char** argv) {
     signal(SIGHUP, on_SIGHUP);
     signal(SIGPIPE, on_SIGPIPE);
 
-    // pthread_mutex_init(&mMutex, NULL);
-    // pthread_cond_init(&mCond, NULL);
+    pthread_mutex_init(&mMutex, NULL);
+    pthread_cond_init(&mCond, NULL);
 
     LOG("startThreadPool");
     ProcessState::self()->startThreadPool();
@@ -368,41 +398,35 @@ int main(int argc, char** argv) {
     if (err)
         ABORT("ERROR: unable to start codec (err=%d)\n", err);
 #endif
+    LOG("getComposerService");
+    __cs = ComposerService::getComposerService();
 
     LOG("getBuiltInDisplay");
-    mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
+    mainDisp = __cs->getBuiltInDisplay(0 /*1 is hdmi*/);
     if (mainDisp.get()==NULL) ABORT("getBuiltInDisplay err:unknown");
 
     DisplayInfo mainDispInfo;
     LOG("getDisplayInfo");
-    err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
+    err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getDisplayInfo err:%d", err);
-    LOG("mainDispInfo: w:%d h:%d", mainDispInfo.w, mainDispInfo.h); //sample: w:720 h:1280
+    LOG("mainDispInfo: w:%d h:%d orient:%d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation); //sample: w:720 h:1280
 
-    int mainDispSizeS = mainDispInfo.w, mainDispSizeL = mainDispInfo.h;
-    int virtDispSizeS = mainDispSizeS/*can be changed*/, virtDispSizeL = mainDispSizeL*virtDispSizeS/mainDispSizeS;
-    Rect mainDispRect, virtDispRect;
+    mainDispSizeS = mainDispInfo.w;
+    mainDispSizeL = mainDispInfo.h;
+    virtDispSizeS = mainDispSizeS/*can be changed*/;
+    virtDispSizeL = mainDispSizeL*virtDispSizeS/mainDispSizeS;
     mainDispRect.right = mainDispRect.bottom = mainDispSizeL;
     virtDispRect.right = virtDispRect.bottom = virtDispSizeL;
     LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
     LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
 
-    sp<IGraphicBufferProducer> bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL);
+    bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL, mainDispInfo.orientation);
 
     LOG("createDisplay");
-    sp<IBinder> virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);
+    virtDisp = __cs->createDisplay(String8("ScreenRecorder"), false /*secure*/);
     if (virtDisp.get()==NULL) ABORT("createDisplay err:unknown");
 
-    LOG("openGlobalTransaction");
-    SurfaceComposerClient::openGlobalTransaction();
-    LOG("setDisplaySurface");
-    SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
-    LOG("setDisplayProjection");
-    SurfaceComposerClient::setDisplayProjection(virtDisp, 1, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
-    LOG("setDisplayLayerStack");
-    SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
-    LOG("closeGlobalTransaction");
-    SurfaceComposerClient::closeGlobalTransaction();
+    setVirtualDisplay(mainDispInfo.orientation);
 
 #if 0
     Vector<sp<ABuffer> > buffers;

@@ -9,7 +9,7 @@ namespace android {
 class ScreenshotClient {
 public:
     ScreenshotClient();
-    #if (ANDROID_VER>=440)
+    #if (ANDROID_VER>=430)
         ~ScreenshotClient();
     #endif
     #if (ANDROID_VER>=420)
@@ -111,7 +111,7 @@ struct DisplayInfo {
         GRALLOC_USAGE_PROTECTED             = 0x00004000,
     };
 
-    #if (ANDROID_VER>=440)
+    #if (ANDROID_VER>=430)
         class IGraphicBufferProducer;
     #elif (ANDROID_VER>=420)
         class ISurfaceTexture;
@@ -121,13 +121,13 @@ struct DisplayInfo {
     public:
         static sp<IBinder> getBuiltInDisplay(int32_t id); //id: 0:main 1:HDMI
         static sp<IBinder> createDisplay(const String8& displayName, bool secure);
-        #if (ANDROID_VER>=440)
+        #if (ANDROID_VER>=430)
             static void destroyDisplay(const sp<IBinder>& display);
         #endif
         static status_t getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info);
         static void openGlobalTransaction();
         static void closeGlobalTransaction(bool synchronous = false);
-        #if (ANDROID_VER>=440)
+        #if (ANDROID_VER>=430)
             static void setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer);
         #elif (ANDROID_VER>=420)
             static void setDisplaySurface(const sp<IBinder>& token, const sp<ISurfaceTexture>& bufferProducer);
@@ -146,10 +146,7 @@ struct DisplayInfo {
         virtual ~IGraphicBufferAlloc();
 
         virtual sp<GraphicBuffer> createGraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage, status_t* error) = 0;
-        // virtual GraphicBuffer* createGraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage, status_t* error) = 0;
     };
-
-    class ISurfaceComposerClient;
 
     class ISurfaceComposer: public IInterface {
     public:
@@ -157,32 +154,26 @@ struct DisplayInfo {
         ISurfaceComposer();
         virtual ~ISurfaceComposer();
 
-        virtual sp<ISurfaceComposerClient> createConnection() = 0;
+        virtual void/*sp<ISurfaceComposerClient>*/ createConnection() = 0;
         virtual sp<IGraphicBufferAlloc> createGraphicBufferAlloc() = 0;
-        /*
-        virtual sp<IDisplayEventConnection> createDisplayEventConnection() = 0;
+        virtual void/*sp<IDisplayEventConnection>*/ createDisplayEventConnection() = 0;
         virtual sp<IBinder> createDisplay(const String8& displayName, bool secure) = 0;
         #if (ANDROID_VER>=440)
             virtual void destroyDisplay(const sp<IBinder>& display) = 0;
         #endif
         virtual sp<IBinder> getBuiltInDisplay(int32_t id) = 0;
-        virtual void setTransactionState(const Vector<ComposerState>& state, const Vector<DisplayState>& displays, uint32_t flags) = 0;
+        virtual void setTransactionState(/*...*/) = 0;
         virtual void bootFinished() = 0;
-        #if (ANDROID_VER>=440)
-            virtual bool authenticateSurfaceTexture(const sp<IGraphicBufferProducer>& surface) const = 0;
-        #elif (ANDROID_VER>=420)
-            virtual bool authenticateSurfaceTexture(const sp<ISurfaceTexture>& surface) const = 0;
-        #endif
-        #if (ANDROID_VER>=420)
-            virtual status_t captureScreen(const sp<IBinder>& display, sp<IMemoryHeap>* heap, uint32_t* width, uint32_t* height, PixelFormat* format, uint32_t reqWidth, uint32_t reqHeight, uint32_t minLayerZ, uint32_t maxLayerZ) = 0;
+        virtual bool authenticateSurfaceTexture(/*...*/) const = 0;
+        #if (ANDROID_VER<430)
+            virtual status_t captureScreen(/*...*/) = 0;
         #endif
         virtual void blank(const sp<IBinder>& display) = 0;
         virtual void unblank(const sp<IBinder>& display) = 0;
         virtual status_t getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info) = 0;
-        #if (ANDROID_VER>=440)
-            virtual status_t captureScreen(const sp<IBinder>& display, const sp<IGraphicBufferProducer>& producer, uint32_t reqWidth, uint32_t reqHeight, uint32_t minLayerZ, uint32_t maxLayerZ) = 0;
+        #if (ANDROID_VER>=430)
+            virtual status_t captureScreen(/*...*/) = 0;
         #endif
-        */
     };
 
     class ComposerService {
@@ -194,14 +185,20 @@ struct DisplayInfo {
     typedef void* EGLDisplay;
     typedef void* EGLSyncKHR;
 
-    #if (ANDROID_VER>=440)
-        class IGraphicBufferProducer : public IInterface {
-        public:
-            enum {
-                BUFFER_NEEDS_REALLOCATION = 0x1,
-                RELEASE_ALL_BUFFERS       = 0x2,
-            };
-            struct QueueBufferInput {
+    class
+    #if (ANDROID_VER>=430)
+        IGraphicBufferProducer
+    #elif (ANDROID_VER>=420)
+        ISurfaceTexture
+    #endif
+     : public IInterface {
+    public:
+        enum {
+            BUFFER_NEEDS_REALLOCATION = 0x1,
+            RELEASE_ALL_BUFFERS       = 0x2,
+        };
+        struct QueueBufferInput {
+            #if (ANDROID_VER>=440)
                 int64_t timestamp;
                 int isAutoTimestamp;
                 Rect crop;
@@ -209,81 +206,73 @@ struct DisplayInfo {
                 uint32_t transform;
                 int async;
                 sp<Fence> fence;
-            };
-            struct QueueBufferOutput {
-                uint32_t width;
-                uint32_t height;
-                uint32_t transformHint;
-                uint32_t numPendingBuffers;
-            };
-
-            virtual const String16& getInterfaceDescriptor() const;
-            IGraphicBufferProducer();
-            virtual ~IGraphicBufferProducer();
-
-            virtual status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) = 0;
-            virtual status_t setBufferCount(int bufferCount) = 0;
-            virtual status_t dequeueBuffer(int *slot, sp<Fence>* fence, bool async, uint32_t w, uint32_t h, uint32_t format, uint32_t usage) = 0;
-            virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) = 0;
-            virtual void     cancelBuffer(int slot, const sp<Fence>& fence) = 0;
-            virtual int      query(int what, int* value) = 0;
-            virtual status_t connect(const sp<IBinder>& token, int api, bool producerControlledByApp, QueueBufferOutput* output) = 0;
-            virtual status_t disconnect(int api) = 0;
-        };
-
-        class BnGraphicBufferProducer : public BnInterface<IGraphicBufferProducer> {
-        public:
-            virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
-        };
-
-    #elif (ANDROID_VER>=420)
-        #define IGraphicBufferProducer ISurfaceTexture
-        #define BnGraphicBufferProducer BnSurfaceTexture
-        
-        class ISurfaceTexture : public IInterface {
-        public:
-            enum {
-                BUFFER_NEEDS_REALLOCATION = 0x1,
-                RELEASE_ALL_BUFFERS       = 0x2,
-            };
-
-            struct QueueBufferInput : public Flattenable {
-                size_t getFlattenedSize() const;
-                size_t getFdCount() const;
-                status_t flatten(void* buffer, size_t size, int fds[], size_t count) const;
-                status_t unflatten(void const* buffer, size_t size, int fds[], size_t count);
+            #else
+                void* vtbl;
                 int64_t timestamp;
                 Rect crop;
                 int scalingMode;
                 uint32_t transform;
                 sp<Fence> fence;
-            };
-            struct QueueBufferOutput {
-                uint32_t width;
-                uint32_t height;
-                uint32_t transformHint;
-                uint32_t numPendingBuffers;
-            };
+            #endif
+        };
+        struct QueueBufferOutput {
+            uint32_t width;
+            uint32_t height;
+            uint32_t transformHint;
+            uint32_t numPendingBuffers;
+        };
 
+        #if (ANDROID_VER>=430)
+            virtual const String16& getInterfaceDescriptor() const;
+            IGraphicBufferProducer();
+            virtual ~IGraphicBufferProducer();
+        #elif (ANDROID_VER>=420)
             virtual const String16& getInterfaceDescriptor() const;
             ISurfaceTexture();
             virtual ~ISurfaceTexture();
+        #endif
 
-            virtual status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) = 0;
-            virtual status_t setBufferCount(int bufferCount) = 0;
+        virtual status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) = 0;
+        virtual status_t setBufferCount(int bufferCount) = 0;
+        #if (ANDROID_VER>=440)
+            virtual status_t dequeueBuffer(int *slot, sp<Fence>* fence, bool async, uint32_t w, uint32_t h, uint32_t format, uint32_t usage) = 0;
+        #elif (ANDROID_VER>=430)
+            virtual status_t dequeueBuffer(int *slot, sp<Fence>* fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage) = 0;
+        #elif (ANDROID_VER>=420)
             virtual status_t dequeueBuffer(int *slot, sp<Fence>& fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage) = 0;
-            virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) = 0;
+        #endif
+        virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) = 0;
+        #if (ANDROID_VER>=440)
+            virtual void     cancelBuffer(int slot, const sp<Fence>& fence) = 0;
+        #elif (ANDROID_VER>=420)
             virtual void     cancelBuffer(int slot, sp<Fence> fence) = 0;
-            virtual int      query(int what, int* value) = 0;
+        #endif
+        virtual int      query(int what, int* value) = 0;
+        #if (ANDROID_VER<440)
             virtual status_t setSynchronousMode(bool enabled) = 0;
+        #endif
+        #if (ANDROID_VER>=440)
+            virtual status_t connect(const sp<IBinder>& token, int api, bool producerControlledByApp, QueueBufferOutput* output) = 0;
+        #elif (ANDROID_VER>=420)
             virtual status_t connect(int api, QueueBufferOutput* output) = 0;
-            virtual status_t disconnect(int api) = 0;
-        };
+        #endif
+        virtual status_t disconnect(int api) = 0;
+    };
 
+    #if (ANDROID_VER>=430)
+        class BnGraphicBufferProducer : public BnInterface<IGraphicBufferProducer> {
+        public:
+            virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
+        };
+    #elif (ANDROID_VER>=420)
         class BnSurfaceTexture : public BnInterface<ISurfaceTexture> {
         public:
             virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
         };
+    #endif
+    #if (ANDROID_VER<430)
+        #define IGraphicBufferProducer ISurfaceTexture
+        #define BnGraphicBufferProducer BnSurfaceTexture
     #endif
 
 #elif (ANDROID_VER>=400)

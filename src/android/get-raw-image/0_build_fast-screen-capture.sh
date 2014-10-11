@@ -19,7 +19,7 @@ export CPPFLAGS="-fno-rtti -fno-exceptions -fmax-errors=5"
 mkdir bin 2>/dev/null
 rm -f *.so
 
-for v in 420 440; do
+for v in 420 430 440; do
 	for f in lib*.cpp; do
 		f="${f%.*}" #remove extension
 		echo ---------------make fake $f.so $v --------------------
