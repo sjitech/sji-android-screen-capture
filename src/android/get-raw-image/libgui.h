@@ -203,7 +203,7 @@ private:
         #if (ANDROID_VER<440)
             //PixelFormatInfo
             size_t PixelFormatInfo_version;
-            size_t PixelFormatInfo_dummy[16];
+            size_t PixelFormatInfo_dummy[15];
 
             DisplayInfo() {
                 PixelFormatInfo_version = 0; //means need not set PixelFormatInfo after this field
