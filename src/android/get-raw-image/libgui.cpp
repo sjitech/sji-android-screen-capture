@@ -23,9 +23,7 @@ size_t ScreenshotClient::getSize() const {}
 #if (ANDROID_VER>=420)
     sp<IBinder> SurfaceComposerClient::getBuiltInDisplay(int32_t id) {}
     sp<IBinder> SurfaceComposerClient::createDisplay(const String8& displayName, bool secure) {}
-    #if (ANDROID_VER>=440)
-        void SurfaceComposerClient::destroyDisplay(const sp<IBinder>& display) {}
-    #endif
+    void SurfaceComposerClient::destroyDisplay(const sp<IBinder>& display) {}
     status_t SurfaceComposerClient::getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info) {}
     void SurfaceComposerClient::openGlobalTransaction() {}
     void SurfaceComposerClient::closeGlobalTransaction(bool synchronous) {}

@@ -112,9 +112,7 @@ private:
     public:
         static sp<IBinder> getBuiltInDisplay(int32_t id); //id: 0:main 1:HDMI
         static sp<IBinder> createDisplay(const String8& displayName, bool secure);
-        #if (ANDROID_VER>=430)
-            static void destroyDisplay(const sp<IBinder>& display);
-        #endif
+        static void destroyDisplay(const sp<IBinder>& display); //>=4.4
         static status_t getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info);
         static void openGlobalTransaction();
         static void closeGlobalTransaction(bool synchronous = false);
@@ -148,6 +146,7 @@ private:
         virtual const String16& getInterfaceDescriptor() const;
         ISurfaceComposer();
         virtual ~ISurfaceComposer();
+        static sp<ISurfaceComposer> asInterface(const sp<IBinder>& obj);
 
         virtual void/*sp<ISurfaceComposerClient>*/ createConnection() = 0;
         virtual sp<IGraphicBufferAlloc> createGraphicBufferAlloc() = 0;
@@ -169,8 +168,6 @@ private:
         #if (ANDROID_VER>=430)
             virtual status_t captureScreen(/*...*/) = 0;
         #endif
-
-        static sp<ISurfaceComposer> asInterface(const sp<IBinder>& obj);
     };
 
     struct ComposerState { //from LayerState.h

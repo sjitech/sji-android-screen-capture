@@ -130,7 +130,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mBytesPerPixel;
     bool mHaveData;
     int mConsumerUsage;
-    bool mCanOutput;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
         LOG("MyGraphicBufferProducer::ctor w:%d h:%d ++++++++++++++++++++++++++++++++", w, h);
@@ -144,7 +143,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mFence = Fence::NO_FENCE;
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
         mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
-        mCanOutput = false;
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
@@ -180,13 +178,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
         #endif
         _lock();
-
-        int orient = getOrient();
-        if (orient != virtDispState->orientation) {
-            setVirtDispOrient(orient);
-            mCanOutput = false;
-        } else
-            mCanOutput = true;
 
         if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
 
@@ -235,15 +226,17 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->transformHint = 0;
         output->numPendingBuffers = 0;
 
-        // LOG("********************* data[10]:%d data[10000]:%d\n", mGBufData[10], mGBufData[10000]);
-        this->output();
+        int orient = getOrient();
+        if (orient != virtDispState->orientation)
+            setVirtDispOrient(orient);
+        else
+            this->output();
 
         _unlock();
         return 0;
     }
 
     void output() {
-        if (!mCanOutput) return;
         // static int counterDown = 2;
         // if (--counterDown > 0) {
         //     LOG("count down: %d", counterDown);
@@ -349,6 +342,14 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 };
 
 int main(int argc, char** argv) {
+    #if (ANDROID_VER>=430)
+        //force loader fails in android 4.3
+        if (getpid()==0) {
+            sp<IBinder> tmp;
+            SurfaceComposerClient::destroyDisplay(tmp);
+        }
+    #endif
+
     LOG("start. pid %d", getpid());
     mainThreadId = gettid();
     status_t err;
@@ -415,8 +416,9 @@ int main(int argc, char** argv) {
 
     mainDispSizeS = mainDispInfo.w;
     mainDispSizeL = mainDispInfo.h;
-    virtDispSizeS = 400; //mainDispSizeS/*can be changed*/;
-    virtDispSizeL = virtDispSizeS*mainDispSizeL/mainDispSizeS;
+    virtDispSizeS = 400;
+    // virtDispSizeS = mainDispSizeS; //can be changed
+    virtDispSizeL = ((float)virtDispSizeS*mainDispSizeL/mainDispSizeS+1)/2*2;
     mainDispRect.right = mainDispRect.bottom = mainDispSizeL;
     virtDispRect.right = virtDispRect.bottom = virtDispSizeL;
     LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
