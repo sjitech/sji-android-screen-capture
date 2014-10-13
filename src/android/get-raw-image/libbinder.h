@@ -92,6 +92,20 @@ protected:
     virtual IBinder*        onAsBinder() { return this; }
 };
 
+class IServiceManager : public IInterface {
+public:
+    virtual const String16& getInterfaceDescriptor() const;
+    IServiceManager();
+    virtual ~IServiceManager();
+
+    virtual sp<IBinder>         getService( const String16& name) const = 0;
+    virtual sp<IBinder>         checkService( const String16& name) const = 0;
+    virtual status_t            addService( /*const String16& name, const sp<IBinder>& service, bool allowIsolated = false*/) = 0;
+    virtual void/*Vector<String16>*/    listServices() = 0;
+};
+
+sp<IServiceManager> defaultServiceManager();
+
 } //end of namespace android
 
 #endif //end of lib

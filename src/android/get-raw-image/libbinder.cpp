@@ -31,3 +31,5 @@ void            BBinder::detachObject(const void* objectID) {}
 BBinder*        BBinder::localBinder() {}
                 BBinder::~BBinder() {}
 status_t        BBinder::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
+
+sp<IServiceManager> android::defaultServiceManager() {}

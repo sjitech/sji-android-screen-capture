@@ -96,25 +96,24 @@ sp<IBinder> mainDisp, virtDisp;
 sp<IGraphicBufferProducer> bufProducer;
 int mainDispSizeS, mainDispSizeL, virtDispSizeS, virtDispSizeL;
 Rect mainDispRect, virtDispRect;
+Vector<ComposerState> _emptyComposerStates; //dummy
+Vector<DisplayState > _displayStates;
+DisplayState* virtDispState = NULL;
 
-static int getOrientation() {
+static int getOrient() {
     DisplayInfo mainDispInfo;
     status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getDisplayInfo err:%d", err);
     return mainDispInfo.orientation;
 }
 
-static void setVirtualDisplay(int orientation) {
-    LOG("openGlobalTransaction");
-    SurfaceComposerClient::openGlobalTransaction();
-    LOG("setDisplaySurface");
-    SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
-    LOG("setDisplayProjection");
-    SurfaceComposerClient::setDisplayProjection(virtDisp, orientation, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
-    LOG("setDisplayLayerStack");
-    SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
-    LOG("closeGlobalTransaction");
-    SurfaceComposerClient::closeGlobalTransaction();
+static void setVirtDispOrient(int orient) {
+    LOG("begin setVirtDispOrient(orient:%d) ****************************", orient);
+    virtDispState->what = DisplayState::eDisplayProjectionChanged;
+    virtDispState->orientation = orient;
+    LOG("setTransactionState", orient);
+    __cs->setTransactionState(_emptyComposerStates, _displayStates, 0); //No wait. But SurfaceComposerClient::setDisplayProjection cause wait max 5 seconds, so do not use SurfaceComposerClient
+    LOG("end setVirtDispOrient(orient:%d)", orient);
 }
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
@@ -131,10 +130,10 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mBytesPerPixel;
     bool mHaveData;
     int mConsumerUsage;
-    bool mOrientation;
+    bool mCanOutput;
 
-    MyGraphicBufferProducer(int w, int h, int orientation) : BnGraphicBufferProducer() {
-        LOG("MyGraphicBufferProducer::ctor");
+    MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
+        LOG("MyGraphicBufferProducer::ctor w:%d h:%d ++++++++++++++++++++++++++++++++", w, h);
         mWidth = w;
         mHeight = h;
         mInUsing = 0;
@@ -145,11 +144,11 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mFence = Fence::NO_FENCE;
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
         mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
-        mOrientation = orientation;
+        mCanOutput = false;
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
-        LOG("MyGraphicBufferProducer::dtor");
+        LOG("MyGraphicBufferProducer::dtor --------------------------------");
         delete mGBuf;
     }
 
@@ -182,11 +181,12 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         #endif
         _lock();
 
-        int orient = getOrientation();
-        if (orient != mOrientation) {
-            setVirtualDisplay(orient);
-            mOrientation = orient;
-        }
+        int orient = getOrient();
+        if (orient != virtDispState->orientation) {
+            setVirtDispOrient(orient);
+            mCanOutput = false;
+        } else
+            mCanOutput = true;
 
         if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
 
@@ -243,17 +243,18 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     void output() {
-        static int counterDown = 2;
-        if (--counterDown > 0) {
-            LOG("count down: %d", counterDown);
-            return;
-        }
+        if (!mCanOutput) return;
+        // static int counterDown = 2;
+        // if (--counterDown > 0) {
+        //     LOG("count down: %d", counterDown);
+        //     return;
+        // }
         if (mFence && mFence->isValid()) {
             LOG("wait fence************************************");
             mFence->wait(-1);
         }
         write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
-        exit(0);
+        //exit(0);
         return;
         LOG("encode to jpeg");
         SkData* streamData;
@@ -276,7 +277,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         /*virtual*/ void cancelBuffer(int slot, sp<Fence> fence)
     #endif
     {
-        ABORT("cancelBuffer");
+        LOG("cancelBuffer");
     }
 
     /*virtual*/ int query(int what, int* value) { //what is defined in window.h
@@ -331,12 +332,12 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ status_t disconnect(int api) {
-        ABORT("disconnected by gui system");
+        LOG("disconnected by gui system");
     }
 
     inline void _lock() {
         while (android_atomic_cmpxchg(/*old:*/0, /*new:*/1, /*target:*/&mInUsing) /*return !=0 means failed*/) {
-            if (gettid() != mainThreadId) LOG("failed to lock, so sleep a while then lock again");
+            if (gettid() != mainThreadId) LOG("failed to lock, so sleep a while then lock again *********************");
             usleep(10*1000);
         }
     }
@@ -399,7 +400,8 @@ int main(int argc, char** argv) {
         ABORT("ERROR: unable to start codec (err=%d)\n", err);
 #endif
     LOG("getComposerService");
-    __cs = ComposerService::getComposerService();
+    String16 svcName("SurfaceFlinger");
+    __cs = ISurfaceComposer::asInterface(defaultServiceManager()->getService(svcName));
 
     LOG("getBuiltInDisplay");
     mainDisp = __cs->getBuiltInDisplay(0 /*1 is hdmi*/);
@@ -413,20 +415,31 @@ int main(int argc, char** argv) {
 
     mainDispSizeS = mainDispInfo.w;
     mainDispSizeL = mainDispInfo.h;
-    virtDispSizeS = mainDispSizeS/*can be changed*/;
-    virtDispSizeL = mainDispSizeL*virtDispSizeS/mainDispSizeS;
+    virtDispSizeS = 400; //mainDispSizeS/*can be changed*/;
+    virtDispSizeL = virtDispSizeS*mainDispSizeL/mainDispSizeS;
     mainDispRect.right = mainDispRect.bottom = mainDispSizeL;
     virtDispRect.right = virtDispRect.bottom = virtDispSizeL;
     LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
     LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
 
-    bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL, mainDispInfo.orientation);
-
     LOG("createDisplay");
     virtDisp = __cs->createDisplay(String8("ScreenRecorder"), false /*secure*/);
     if (virtDisp.get()==NULL) ABORT("createDisplay err:unknown");
 
-    setVirtualDisplay(mainDispInfo.orientation);
+    bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL);
+
+    LOG("prepare displayStates");
+    _displayStates.add();
+    virtDispState = _displayStates.editArray();
+    virtDispState->what = DisplayState::eSurfaceChanged|DisplayState::eLayerStackChanged|DisplayState::eDisplayProjectionChanged;
+    virtDispState->token = virtDisp;
+    virtDispState->surface = bufProducer;
+    virtDispState->orientation = mainDispInfo.orientation;
+    virtDispState->viewport = mainDispRect;
+    virtDispState->frame = virtDispRect;
+    virtDispState->layerStack = 0;
+    LOG("setTransactionState");
+    __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
 
 #if 0
     Vector<sp<ABuffer> > buffers;
@@ -475,6 +488,7 @@ int main(int argc, char** argv) {
     //     usleep(1000*1000/30);
     // }
 
+    LOG("joinThreadPool");
     IPCThreadState::self()->joinThreadPool(/*isMain*/true);
     ABORT("unexpected here");
 }

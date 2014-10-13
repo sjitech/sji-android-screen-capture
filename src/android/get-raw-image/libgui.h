@@ -37,19 +37,6 @@ private:
     */
 };
 
-struct DisplayInfo {
-    uint32_t w;
-    uint32_t h;
-#if (ANDROID_VER>=420)
-    float xdpi;
-    float ydpi;
-    float fps;
-    float density;
-    uint8_t orientation;
-#endif
-    char __data[sizeof(void*)*256];
-};
-
 #if (ANDROID_VER>=420)
     // from window.h  attributes queriable with query()
     enum {
@@ -67,23 +54,23 @@ struct DisplayInfo {
     };
 
     // from window.h parameter for NATIVE_WINDOW_[API_][DIS]CONNECT
-    // enum {
-    //     NATIVE_WINDOW_API_EGL = 1,
-    //     NATIVE_WINDOW_API_CPU = 2,
-    //     NATIVE_WINDOW_API_MEDIA = 3,
-    //     NATIVE_WINDOW_API_CAMERA = 4,
-    // };
+    enum {
+         NATIVE_WINDOW_API_EGL = 1,
+         NATIVE_WINDOW_API_CPU = 2,
+         NATIVE_WINDOW_API_MEDIA = 3,
+         NATIVE_WINDOW_API_CAMERA = 4,
+    };
     
     //from graphics.h
     enum {
         HAL_PIXEL_FORMAT_RGBA_8888          = 1,
-        // HAL_PIXEL_FORMAT_RGBX_8888          = 2,
-        // HAL_PIXEL_FORMAT_RGB_888            = 3,
-        // HAL_PIXEL_FORMAT_RGB_565            = 4,
-        // HAL_PIXEL_FORMAT_BGRA_8888          = 5,
-        // HAL_PIXEL_FORMAT_RGBA_5551          = 6,
-        // HAL_PIXEL_FORMAT_RGBA_4444          = 7,
-        // HAL_PIXEL_FORMAT_YV12   = 0x32315659, // YCrCb 4:2:0 Planar
+        HAL_PIXEL_FORMAT_RGBX_8888          = 2,
+        HAL_PIXEL_FORMAT_RGB_888            = 3,
+        HAL_PIXEL_FORMAT_RGB_565            = 4,
+        HAL_PIXEL_FORMAT_BGRA_8888          = 5,
+        HAL_PIXEL_FORMAT_RGBA_5551          = 6,
+        HAL_PIXEL_FORMAT_RGBA_4444          = 7,
+        HAL_PIXEL_FORMAT_YV12   = 0x32315659, // YCrCb 4:2:0 Planar
     };
 
     //from gralloc.h
@@ -115,7 +102,11 @@ struct DisplayInfo {
         class IGraphicBufferProducer;
     #elif (ANDROID_VER>=420)
         class ISurfaceTexture;
+        #define IGraphicBufferProducer ISurfaceTexture
+        #define BnGraphicBufferProducer BnSurfaceTexture
     #endif
+
+    struct DisplayInfo;
 
     class SurfaceComposerClient {
     public:
@@ -127,11 +118,7 @@ struct DisplayInfo {
         static status_t getDisplayInfo(const sp<IBinder>& display, DisplayInfo* info);
         static void openGlobalTransaction();
         static void closeGlobalTransaction(bool synchronous = false);
-        #if (ANDROID_VER>=430)
-            static void setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer);
-        #elif (ANDROID_VER>=420)
-            static void setDisplaySurface(const sp<IBinder>& token, const sp<ISurfaceTexture>& bufferProducer);
-        #endif
+        static void setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer);
         static void setDisplayLayerStack(const sp<IBinder>& token, uint32_t layerStack);
         static void setDisplayProjection(const sp<IBinder>& token, uint32_t orientation, const Rect& layerStackRect, const Rect& displayRect);
     };
@@ -148,8 +135,16 @@ struct DisplayInfo {
         virtual sp<GraphicBuffer> createGraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage, status_t* error) = 0;
     };
 
+    struct ComposerState;
+    struct DisplayState;
+
     class ISurfaceComposer: public IInterface {
     public:
+        enum {
+            eSynchronous = 0x01,
+            eAnimation   = 0x02,
+        };
+
         virtual const String16& getInterfaceDescriptor() const;
         ISurfaceComposer();
         virtual ~ISurfaceComposer();
@@ -162,7 +157,7 @@ struct DisplayInfo {
             virtual void destroyDisplay(const sp<IBinder>& display) = 0;
         #endif
         virtual sp<IBinder> getBuiltInDisplay(int32_t id) = 0;
-        virtual void setTransactionState(/*...*/) = 0;
+        virtual void setTransactionState(const Vector<ComposerState>& state, const Vector<DisplayState>& displays, uint32_t flags) = 0;
         virtual void bootFinished() = 0;
         virtual bool authenticateSurfaceTexture(/*...*/) const = 0;
         #if (ANDROID_VER<430)
@@ -174,16 +169,55 @@ struct DisplayInfo {
         #if (ANDROID_VER>=430)
             virtual status_t captureScreen(/*...*/) = 0;
         #endif
+
+        static sp<ISurfaceComposer> asInterface(const sp<IBinder>& obj);
+    };
+
+    struct ComposerState { //from LayerState.h
+        //sp<ISurfaceComposerClient> client;
+        //layer_state_t state;
+    };
+
+    struct DisplayState { //from LayerState.h
+        enum {
+            eSurfaceChanged             = 0x01,
+            eLayerStackChanged          = 0x02,
+            eDisplayProjectionChanged   = 0x04
+        };
+        uint32_t what;
+        sp<IBinder> token;
+        sp<IGraphicBufferProducer> surface;
+        uint32_t layerStack;
+        uint32_t orientation;
+        Rect viewport;
+        Rect frame;
+    };
+
+    struct DisplayInfo {
+        uint32_t w;
+        uint32_t h;
+        float xdpi;
+        float ydpi;
+        float fps;
+        float density;
+        uint8_t orientation;
+        bool secure;
+        uint8_t reserved[2];
+        #if (ANDROID_VER<440)
+            //PixelFormatInfo
+            size_t PixelFormatInfo_version;
+            size_t PixelFormatInfo_dummy[16];
+
+            DisplayInfo() {
+                PixelFormatInfo_version = 0; //means need not set PixelFormatInfo after this field
+            }
+        #endif
     };
 
     class ComposerService {
     public:
         static sp<ISurfaceComposer> getComposerService();
     };
-
-    typedef int64_t nsecs_t;
-    typedef void* EGLDisplay;
-    typedef void* EGLSyncKHR;
 
     class
     #if (ANDROID_VER>=430)
@@ -270,16 +304,6 @@ struct DisplayInfo {
             virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
         };
     #endif
-    #if (ANDROID_VER<430)
-        #define IGraphicBufferProducer ISurfaceTexture
-        #define BnGraphicBufferProducer BnSurfaceTexture
-    #endif
-
-#elif (ANDROID_VER>=400)
-    class SurfaceComposerClient {
-    public:
-        static status_t getDisplayInfo(int32_t id, DisplayInfo* info);
-    };
 #endif
 
 } //end of namespace android

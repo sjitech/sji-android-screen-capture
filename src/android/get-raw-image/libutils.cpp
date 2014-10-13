@@ -27,3 +27,10 @@ void RefBase::onLastWeakRef(const void* id) {}
 #if (ANDROID_VER<440)
 	Flattenable::~Flattenable() {}
 #endif
+
+VectorImpl::VectorImpl(size_t itemSize, uint32_t flags) {}
+VectorImpl::~VectorImpl() {}
+ssize_t VectorImpl::add() {}
+void*   VectorImpl::editArrayImpl() {}
+void*   VectorImpl::editItemLocation(size_t index) {}
+void    VectorImpl::finish_vector() {}

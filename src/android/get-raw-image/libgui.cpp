@@ -34,11 +34,11 @@ size_t ScreenshotClient::getSize() const {}
     void SurfaceComposerClient::setDisplayProjection(const sp<IBinder>& token, uint32_t orientation, const Rect& layerStackRect, const Rect& displayRect) {}
 
     sp<ISurfaceComposer> ComposerService::getComposerService() {}
-    
+
     const String16& ISurfaceComposer::getInterfaceDescriptor() const {}
     ISurfaceComposer::ISurfaceComposer() {}
     ISurfaceComposer::~ISurfaceComposer() {}
-
+    sp<ISurfaceComposer> ISurfaceComposer::asInterface(const sp<IBinder>& obj) {}
 
     #if (ANDROID_VER>=430)
         const String16& IGraphicBufferProducer::getInterfaceDescriptor() const {}
@@ -52,6 +52,4 @@ size_t ScreenshotClient::getSize() const {}
         status_t BnSurfaceTexture::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
     #endif
 
-#elif (ANDROID_VER>=400)
-    status_t SurfaceComposerClient::getDisplayInfo(int32_t id, DisplayInfo* info) {}
 #endif
