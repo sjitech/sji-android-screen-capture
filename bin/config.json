@@ -15,6 +15,7 @@
   "maxRecordTime": 7200, //max recorded time
   "enableGetOutputFile": true, //false means you can not view recorded file and saved image without correct adminKey querystring
   "alsoRecordAsWebM": true,
+  "resizeRoughly": false,
 
   //log settings
   "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
