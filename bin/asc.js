@@ -424,7 +424,7 @@ function _startNewCaptureProcess(dev, q) {
       '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
       cfg.androidWorkDir + '/busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '&&',
       cfg.androidWorkDir + '/ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'androidgrab', (cfg.resizeRoughly && q._size ? ['-width', q._size.w, '-height', q._size.h] : []), '-i', dev.so_file,
+      '-f', 'androidgrab', ((cfg.resizeRoughly || q.resizeRoughly) && q._size ? ['-width', q._size.w, '-height', q._size.h] : []), '-i', dev.so_file,
       (q._filter ? ['-vf', '\'' + q._filter + '\''] : []),
       '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
       ')', '2>', cfg.androidLogPath
@@ -497,7 +497,7 @@ function doRecord(dev, q/*same as capture*/) {
   var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-framerate', q.fps, '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/,
+      '-f', 'mjpeg', '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/,
       outPathNoExt + '.mp4', (cfg.alsoRecordAsWebM ? outPathNoExt + '.webm' : [])
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
