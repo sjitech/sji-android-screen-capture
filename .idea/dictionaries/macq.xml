@@ -30,6 +30,7 @@
       <w>ffmpeg</w>
       <w>fileindex</w>
       <w>fname</w>
+      <w>framerate</w>
       <w>fstat</w>
       <w>getevent</w>
       <w>getprop</w>
