@@ -17,6 +17,10 @@ New: We will enhance performance to 30 frames/second full screen in about 2 mont
 <br>
 New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers<br>
 New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
+<br>
+Performance:
+<a href="https://www.youtube.com/watch?v=Db8nWJ1tVso&index=3&list=PLlyaJQbzuC5qUpsdetOwZtFuXEdDY4417">Youtube Video</a><br>
+
 
 [Screenshot]
 
