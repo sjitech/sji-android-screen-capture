@@ -396,25 +396,26 @@ function chkCaptureParameter(dev, q, force_ajpg) {
   if (dev && dev.status !== 'OK' && (chk.err = 'error: device not ready')
       || !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
       || !chk('fps', (q.fps = Number(q.fps)), cfg.minFps, cfg.maxFps)
-      || q.scale && !(q.scale = q.scale.match(/^([1-9]\d{1,3})x([1-9]\d{1,3})$|^([1-9]\d{1,3})xAuto$|^Autox([1-9]\d{1,3})$/)) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999"')
+      || q.scale && !(q._size = q.scale.match(/^([1-9]\d{1,3})x([1-9]\d{1,3})$|^([1-9]\d{1,3})xAuto$|^Autox([1-9]\d{1,3})$/)) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999"')
       || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])) {
     return false;
   }
-  var w = Number(q.scale[1] || q.scale[3]), h = Math.max(q.scale[2] || q.scale[4], w + 2/*let h always bigger than w*/);
-  q._FpsScaleRotate = 'f' + q.fps;
-  (q.scale = q.scale ? q.scale[0]/*orig str*/ : '') && (q._FpsScaleRotate += (w ? 'w' + w : '') + (h ? 'h' + h : ''));
-  (q.rotate = q.rotate || '') && (q._FpsScaleRotate += 'r' + q.rotate);
+  q.scale = q.scale || '';
+  q.rotate = q.rotate || '';
   if (dev) {
     q.timestamp = getTimestamp();
     q._FpsScaleRotateDisp = q.fps + 'FPS ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
-    q._size = null;
     if (q.scale) {
+      var w = Number(q._size[1] || q._size[3]), h = Math.max(q._size[2] || q._size[4], w + 1/*let h always bigger than w*/);
       q._size = {w: Math.ceil((w || dev.disp.w / dev.disp.h * h) / 2) * 2, h: Math.ceil((h || dev.disp.h / dev.disp.w * w) / 2) * 2};
       q._FpsScaleRotateDisp = q._size.w + 'x' + q._size.h + ' ' + q._FpsScaleRotateDisp;
       q._filter = 'scale=' + q._size.w + ':' + q._size.h;
+    } else {
+      q._size = {w: dev.disp.w, h: dev.disp.h};
     }
     q.rotate && (q._FpsScaleRotateDisp = 'Land ' + q._FpsScaleRotateDisp);
     q.rotate && (q._filter = (q._filter ? q._filter + ',' : '') + 'transpose=2');
+    q._FpsScaleRotate = 'f' + q.fps + 'w' + q._size.w + 'h' + q._size.h + (q.rotate ? ('r' + q.rotate) : '');
   }
   return true;
 }
@@ -424,9 +425,8 @@ function _startNewCaptureProcess(dev, q) {
       '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
       cfg.androidWorkDir + '/busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '&&',
       cfg.androidWorkDir + '/ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'androidgrab', ((cfg.resizeRoughly || q.resizeRoughly) && q._size ? ['-width', q._size.w, '-height', q._size.h] : []), '-i', dev.so_file,
-      (q._filter ? ['-vf', '\'' + q._filter + '\''] : []),
-      '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
+      '-f', 'androidgrab', ((cfg.resizeRoughly || q.resizeRoughly === 'true') && q.scale ? ['-width', q._size.w, '-height', q._size.h] : []), '-i', dev.so_file,
+      (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
       ')', '2>', cfg.androidLogPath
   ), function/*on_close*/() {
     capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer);
@@ -497,8 +497,9 @@ function doRecord(dev, q/*same as capture*/) {
   var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/,
-      outPathNoExt + '.mp4', (cfg.alsoRecordAsWebM ? outPathNoExt + '.webm' : [])
+      '-f', 'mjpeg', '-i', '-'/*stdin*/,
+      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
+      (cfg.alsoRecordAsWebM ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
     dev.subOutputDir && cfg.alsoRecordAsWebM && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
@@ -618,7 +619,7 @@ function streamWeb_handler(req, res) {
           .replace(/@minFps\b/g, cfg.minFps).replace(/@maxFps\b/g, cfg.maxFps)
           .replace(/@fps\b/g, dev.capture ? dev.capture.q.fps : q.fps).replace(/@scale\b/g, dev.capture ? dev.capture.q.scale : q.scale).replace(/@rotate\b/g, dev.capture ? dev.capture.q.rotate : q.rotate)
           .replace(new RegExp('_selectedIf_rotate_' + (q.rotate || '0'), 'g'), 'selected')
-          .replace(/_capture_param_changed\b/g, dev.capture && q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate ? 'capture_param_changed' : '')
+          .replace(/@resizeRoughly\b/g, q.resizeRoughly === 'true' ? 'true' : 'false')
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
     case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------
