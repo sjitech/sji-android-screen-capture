@@ -412,9 +412,8 @@ function chkCaptureParameter(dev, q, force_ajpg) {
         q._roughlyResizedSize = q._size = Number((dev.disp.w / 4).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 4).toFixed()), h: Number((dev.disp.h / 4).toFixed())} : Number((dev.disp.w / 2).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 2).toFixed()), h: Number((dev.disp.h / 2).toFixed())} : q._size;
       } else if (cfg.resizeRoughly) {
         q._roughlyResizedSize = q._size;
-      } else {
-        q._filter = 'scale=' + q._size.w + ':' + q._size.h;
       }
+      q._filter = 'scale=' + q._size.w + ':' + q._size.h; //just for some android 2.x they do not support GPU resize image
     } else {
       q._size = {w: dev.disp.w, h: dev.disp.h};
     }
