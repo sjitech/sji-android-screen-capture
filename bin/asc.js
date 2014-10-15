@@ -404,18 +404,24 @@ function chkCaptureParameter(dev, q, force_ajpg) {
   q.rotate = q.rotate || '';
   if (dev) {
     q.timestamp = getTimestamp();
-    q._FpsScaleRotateDisp = q.fps + 'FPS ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
-    if (q.scale) {
+    q._roughlyResizedSize = q._filter = null;
+    if (q.scale && q.scale !== dev.disp.w + 'x' + dev.disp.h) {
       var w = Number(q._size[1] || q._size[3]), h = Math.max(q._size[2] || q._size[4], w + 1/*let h always bigger than w*/);
       q._size = {w: Math.ceil((w || dev.disp.w / dev.disp.h * h) / 2) * 2, h: Math.ceil((h || dev.disp.h / dev.disp.w * w) / 2) * 2};
-      q._FpsScaleRotateDisp = q._size.w + 'x' + q._size.h + ' ' + q._FpsScaleRotateDisp;
-      q._filter = 'scale=' + q._size.w + ':' + q._size.h;
+      if (q.resizeRoughly === 'true') {
+        q._roughlyResizedSize = q._size = Number((dev.disp.w / 4).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 4).toFixed()), h: Number((dev.disp.h / 4).toFixed())} : Number((dev.disp.w / 2).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 2).toFixed()), h: Number((dev.disp.h / 2).toFixed())} : q._size;
+      } else if (cfg.resizeRoughly) {
+        q._roughlyResizedSize = q._size;
+      } else {
+        q._filter = 'scale=' + q._size.w + ':' + q._size.h;
+      }
     } else {
       q._size = {w: dev.disp.w, h: dev.disp.h};
     }
-    q.rotate && (q._FpsScaleRotateDisp = 'Land ' + q._FpsScaleRotateDisp);
+    q.scale = q._size.w + 'x' + q._size.h;
     q.rotate && (q._filter = (q._filter ? q._filter + ',' : '') + 'transpose=2');
     q._FpsScaleRotate = 'f' + q.fps + 'w' + q._size.w + 'h' + q._size.h + (q.rotate ? ('r' + q.rotate) : '');
+    q._FpsScaleRotateDisp = (q.rotate ? 'Land ' : '') + q._size.w + 'x' + q._size.h + ' ' + q.fps + 'FPS ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
   }
   return true;
 }
@@ -425,7 +431,7 @@ function _startNewCaptureProcess(dev, q) {
       '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
       cfg.androidWorkDir + '/busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '&&',
       cfg.androidWorkDir + '/ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'androidgrab', ((cfg.resizeRoughly || q.resizeRoughly === 'true') && q.scale ? ['-width', q._size.w, '-height', q._size.h] : []), '-i', dev.so_file,
+      '-f', 'androidgrab', (q._roughlyResizedSize ? ['-width', q._roughlyResizedSize.w, '-height', q._roughlyResizedSize.h] : []), '-i', dev.so_file,
       (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
       ')', '2>', cfg.androidLogPath
   ), function/*on_close*/() {
