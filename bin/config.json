@@ -63,6 +63,7 @@
   "adbTurnScreenOnTimeout": 10,
   "adbSetOrientationTimeout": 30,
   "adbCmdTimeout": 30,
+  "videoFileFrameRate": 30,
 
   "__end": 0
 }
