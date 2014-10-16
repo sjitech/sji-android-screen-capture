@@ -446,11 +446,8 @@ function _startNewCaptureProcess(dev, q) {
           bufAry = [];
           unsavedStart = pos + 1;
           forEachValueIn(dev.consumerMap, function (res) {
-            res.setHeader /*http response*/
-                ? (res.q.type === 'ajpg') //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
-                ? writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.image.buf, MULTIPART_CRLF_INNER_HEAD]))
-                : endCaptureConsumer(res, capture.image.buf)
-                : writeImage(res, capture.image.buf);
+            (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.image.buf, MULTIPART_CRLF_INNER_HEAD])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
+            (res.setHeader && res.q.type === 'jpg') && endCaptureConsumer(res, capture.image.buf); //write single picture and end
           });//end of consumer enum
         }
         foundMark = (buf[pos] === 0xff);
@@ -489,6 +486,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/)
     end(res);
     clearTimeout(res.__recordTimer);
     clearInterval(res.__statTimer);
+    clearInterval(res.__feedConvertTimer);
     !Object.keys(dev.consumerMap).length && (dev.capture.delayKillTimer = global.setTimeout(endCaptureProcess, cfg.adbCaptureExitDelayTime * 1000, dev));
   }
 }
@@ -502,13 +500,16 @@ function doRecord(dev, q/*same as capture*/) {
   var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-r', q.fps, '-i', '-'/*stdin*/,
-      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
-      (cfg.alsoRecordAsWebM ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
+      '-f', 'mjpeg', '-i', '-'/*stdin*/,
+      '-r', q.fps, '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
+      (cfg.alsoRecordAsWebM ? ['-r', q.fps, '-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
     dev.subOutputDir && cfg.alsoRecordAsWebM && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
+  childProc.stdin.__feedConvertTimer = setInterval(function () {
+    dev.capture.image && writeImage(childProc.stdin, dev.capture.image.buf);
+  }, 1000 / q.fps);
   childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
   childProc.stdin.__tag = REC_TAG;
   doCapture(dev, childProc.stdin, q);
