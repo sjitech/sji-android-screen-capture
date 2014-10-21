@@ -37,15 +37,11 @@ static void _LOG(const char* format, ...) {
     char buf[4096];
     int cnt;
     va_list va;
-    struct timeval tv;
-    long long mms;
-    time_t t;
+    struct timespec ct;
     struct tm * st;
 
-    gettimeofday(&tv, NULL);
-    mms = ((long long) tv.tv_sec) * (1000 * 1000) + tv.tv_usec;
-    t = time(NULL);
-    st = localtime(&t);
+    clock_gettime(CLOCK_REALTIME, &ct);
+    st = localtime(&ct.tv_sec);
 
     memset(buf, 0, sizeof(buf));
     sprintf(buf, "%02d/%02d %02d:%02d:%02d.%06d [ASC %d:%d]",
@@ -54,7 +50,7 @@ static void _LOG(const char* format, ...) {
         st->tm_hour,
         st->tm_min,
         st->tm_sec,
-        (int)(mms%1000000)
+        (int)(ct.tv_nsec/1000000)
         ,getpid(), gettid()
         );
     cnt = strlen(buf);
@@ -91,18 +87,34 @@ using namespace android;
 
 static pthread_mutex_t mMutex;
 static pthread_cond_t mCond;
-sp<ISurfaceComposer> __cs;
-sp<IBinder> mainDisp, virtDisp;
-sp<IGraphicBufferProducer> bufProducer;
-int mainDispSizeS, mainDispSizeL, virtDispSizeS, virtDispSizeL;
-Rect mainDispRect, virtDispRect;
-Vector<ComposerState> _emptyComposerStates; //dummy
-Vector<DisplayState > _displayStates;
-DisplayState* virtDispState = NULL;
+static sp<IBinder> __csBinder;
+// static sp<ISurfaceComposer> __cs;
+static sp<IBinder> mainDisp, virtDisp;
+static sp<IGraphicBufferProducer> bufProducer;
+static int mainDispSizeS, mainDispSizeL, virtDispSizeS, virtDispSizeL;
+static Rect mainDispRect, virtDispRect;
+// static Vector<ComposerState> _emptyComposerStates; //dummy
+// static Vector<DisplayState > _displayStates;
+// static DisplayState* virtDispState = NULL;
+static DisplayState* virtDispState = new DisplayState();
+#if (ANDROID_VER>=440)
+    static int TRANS_ID_GET_DISPLAY_INFO = 12;
+    static int TRANS_ID_SET_DISPLAY_STATE = 8;
+#elif (ANDROID_VER>=420)
+    static int TRANS_ID_GET_DISPLAY_INFO = 12;
+    static int TRANS_ID_SET_DISPLAY_STATE = 7;
+#endif
 
 static int getOrient() {
     DisplayInfo mainDispInfo;
-    status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
+    // status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
+
+    Parcel data, reply;
+    data.writeInterfaceToken(ISurfaceComposer::descriptor);
+    data.writeStrongBinder(mainDisp);
+    __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
+    status_t err = reply.read(&mainDispInfo, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
+
     if (err) ABORT("getDisplayInfo err:%d", err);
     return mainDispInfo.orientation;
 }
@@ -111,8 +123,18 @@ static void setVirtDispOrient(int orient) {
     LOG("begin setVirtDispOrient(orient:%d) ****************************", orient);
     virtDispState->what = DisplayState::eDisplayProjectionChanged;
     virtDispState->orientation = orient;
-    LOG("setTransactionState", orient);
-    __cs->setTransactionState(_emptyComposerStates, _displayStates, 0); //No wait. But SurfaceComposerClient::setDisplayProjection cause wait max 5 seconds, so do not use SurfaceComposerClient
+    //Although specified No wait, but android 4.2 still cause wait max 5 seconds, so do not use ISurfaceComposer nor SurfaceComposerClient
+    // status_t err = __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
+
+    Parcel data;
+    data.writeInterfaceToken(ISurfaceComposer::descriptor);
+    data.writeInt32(0);
+    data.writeInt32(1);
+    virtDispState->write(data);
+    data.writeInt32(0/*flags*/);
+    status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
+
+    if (err) ABORT("setTransactionState err:%d", err);
     LOG("end setVirtDispOrient(orient:%d)", orient);
 }
 
@@ -216,7 +238,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
-        LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode);
+        LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d transform:%d", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
         // if (input.crop.left || input.crop.top || input.crop.right || input.crop.bottom)
         //     return -EINVAL;
         if (slot != 0) ABORT("queueBuffer slot:%d!=0", slot);
@@ -246,6 +268,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             LOG("wait fence************************************");
             mFence->wait(-1);
         }
+        // LOG("fake write");
         write(1, mGBufData, mInternalWidth*mHeight*mBytesPerPixel);
         //exit(0);
         return;
@@ -339,6 +362,14 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         android_atomic_cmpxchg(/*old:*/1, /*new:*/0, /*target:*/&mInUsing);
     }
 
+
+    /*virtual*/status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
+        LOG("begin onTransact %d dataSize:%d", code, data.dataSize());
+        //todo: follow time sequence, determin each action id
+        status_t err = BnGraphicBufferProducer::onTransact(code, data, reply, flags);
+        // LOG("end onTransact %d result:%d", code, err);
+        return err;
+    }
 };
 
 int main(int argc, char** argv) {
@@ -402,17 +433,48 @@ int main(int argc, char** argv) {
 #endif
     LOG("getComposerService");
     String16 svcName("SurfaceFlinger");
-    __cs = ISurfaceComposer::asInterface(defaultServiceManager()->getService(svcName));
+    __csBinder = defaultServiceManager()->getService(svcName);
+    // __cs = ISurfaceComposer::asInterface(__csBinder);
 
     LOG("getBuiltInDisplay");
-    mainDisp = __cs->getBuiltInDisplay(0 /*1 is hdmi*/);
+    mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
     if (mainDisp.get()==NULL) ABORT("getBuiltInDisplay err:unknown");
+    LOG("mainDisp: %p", mainDisp.get());
+    LOG("new any: %p", malloc(32));
 
     DisplayInfo mainDispInfo;
     LOG("getDisplayInfo");
-    err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
+    err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getDisplayInfo err:%d", err);
-    LOG("mainDispInfo: w:%d h:%d orient:%d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation); //sample: w:720 h:1280
+    //some device use strange head file which put ISurfaceComposer::getDisplayInfo after getBuiltInDisplay so vptr index changed, so test here
+    // err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
+    {
+        DisplayInfo info;
+        Parcel data, reply;
+        data.writeInterfaceToken(ISurfaceComposer::descriptor);
+        data.writeStrongBinder(mainDisp);
+        err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
+        err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
+        if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h) {
+            LOG("interface is abnormal, retry with special interface");
+            TRANS_ID_GET_DISPLAY_INFO++;
+        }
+    }
+    {
+        DisplayInfo info;
+        Parcel data, reply;
+        data.writeInterfaceToken(ISurfaceComposer::descriptor);
+        data.writeStrongBinder(mainDisp);
+        err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
+        err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
+        if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h)
+            ABORT("interface is abnormal");
+        mainDispInfo.orientation = info.orientation;
+    }
+    if (err) ABORT("getDisplayInfo err:%d", err);
+    LOG("mainDispInfo: w:%d h:%d orient:%d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation);
+
+    //sample: w:720 h:1280
 
     mainDispSizeS = mainDispInfo.w;
     mainDispSizeL = mainDispInfo.h;
@@ -425,14 +487,14 @@ int main(int argc, char** argv) {
     LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
 
     LOG("createDisplay");
-    virtDisp = __cs->createDisplay(String8("ScreenRecorder"), false /*secure*/);
+    virtDisp = SurfaceComposerClient::createDisplay(String8("ScreenRecorder"), false /*secure*/);
     if (virtDisp.get()==NULL) ABORT("createDisplay err:unknown");
 
     bufProducer = new MyGraphicBufferProducer(virtDispSizeS, virtDispSizeL);
 
     LOG("prepare displayStates");
-    _displayStates.add();
-    virtDispState = _displayStates.editArray();
+    // _displayStates.add();
+    // virtDispState = _displayStates.editArray();
     virtDispState->what = DisplayState::eSurfaceChanged|DisplayState::eLayerStackChanged|DisplayState::eDisplayProjectionChanged;
     virtDispState->token = virtDisp;
     virtDispState->surface = bufProducer;
@@ -440,8 +502,31 @@ int main(int argc, char** argv) {
     virtDispState->viewport = mainDispRect;
     virtDispState->frame = virtDispRect;
     virtDispState->layerStack = 0;
-    LOG("setTransactionState");
-    __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
+    #if 1
+        LOG("setTransactionState");
+        // __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
+        {
+            Parcel data;
+            data.writeInterfaceToken(ISurfaceComposer::descriptor);
+            data.writeInt32(0);
+            data.writeInt32(1);
+            virtDispState->write(data);
+            data.writeInt32(0/*flags*/);
+            status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL);
+            if (err) ABORT("setTransactionState err:%d", err);
+        }
+    #else
+        LOG("openGlobalTransaction");
+        SurfaceComposerClient::openGlobalTransaction();
+        LOG("setDisplaySurface");
+        SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
+        LOG("setDisplayProjection");
+        SurfaceComposerClient::setDisplayProjection(virtDisp, mainDispInfo.orientation, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
+        LOG("setDisplayLayerStack");
+        SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
+        LOG("closeGlobalTransaction");
+        SurfaceComposerClient::closeGlobalTransaction();
+    #endif
 
 #if 0
     Vector<sp<ABuffer> > buffers;

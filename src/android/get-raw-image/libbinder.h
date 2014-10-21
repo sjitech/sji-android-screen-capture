@@ -106,6 +106,21 @@ public:
 
 sp<IServiceManager> defaultServiceManager();
 
+
+class Parcel {
+public:
+                        Parcel();
+                        ~Parcel();
+    size_t              dataSize() const;
+    status_t            writeInterfaceToken(const String16& interface);
+    status_t            writeInt32(int32_t val);
+    status_t            writeStrongBinder(const sp<IBinder>& val);
+    status_t            read(void* outData, size_t len) const;
+    int32_t             readInt32() const;
+private:
+    char data[sizeof(void*)*32];
+};
+
 } //end of namespace android
 
 #endif //end of lib

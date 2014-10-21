@@ -33,6 +33,7 @@ size_t ScreenshotClient::getSize() const {}
 
     sp<ISurfaceComposer> ComposerService::getComposerService() {}
 
+    const android::String16 ISurfaceComposer::descriptor;
     const String16& ISurfaceComposer::getInterfaceDescriptor() const {}
     ISurfaceComposer::ISurfaceComposer() {}
     ISurfaceComposer::~ISurfaceComposer() {}
@@ -50,4 +51,5 @@ size_t ScreenshotClient::getSize() const {}
         status_t BnSurfaceTexture::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
     #endif
 
+    status_t DisplayState::write(Parcel& output) const {}
 #endif

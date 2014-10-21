@@ -138,11 +138,7 @@ private:
 
     class ISurfaceComposer: public IInterface {
     public:
-        enum {
-            eSynchronous = 0x01,
-            eAnimation   = 0x02,
-        };
-
+        static const android::String16 descriptor;
         virtual const String16& getInterfaceDescriptor() const;
         ISurfaceComposer();
         virtual ~ISurfaceComposer();
@@ -188,6 +184,7 @@ private:
         uint32_t orientation;
         Rect viewport;
         Rect frame;
+        status_t write(Parcel& output) const;
     };
 
     struct DisplayInfo {

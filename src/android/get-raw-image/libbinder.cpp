@@ -33,3 +33,12 @@ BBinder*        BBinder::localBinder() {}
 status_t        BBinder::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {}
 
 sp<IServiceManager> android::defaultServiceManager() {}
+
+                    Parcel::Parcel() {}
+                    Parcel::~Parcel() {}
+size_t              Parcel::dataSize() const {}
+status_t            Parcel::writeInterfaceToken(const String16& interface) {}
+status_t            Parcel::writeInt32(int32_t val) {}
+status_t            Parcel::writeStrongBinder(const sp<IBinder>& val) {}
+status_t            Parcel::read(void* outData, size_t len) const {}
+int32_t             Parcel::readInt32() const {}
