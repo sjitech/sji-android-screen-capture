@@ -19,14 +19,21 @@ export CPPFLAGS="-fno-rtti -fno-exceptions -fmax-errors=5"
 mkdir bin 2>/dev/null
 rm -f *.so
 
+TARGET_DIR=../../../bin/android
+
 for v in 420 430 440; do
 	for f in lib*.cpp; do
 		f="${f%.*}" #remove extension
 		echo ---------------make fake $f.so $v --------------------
 		g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
-	echo ---------------make fast-screen-capture-$v --------------------
-	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v fast-screen-capture.cpp *.so -o bin/fast-screen-capture-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make get-raw-image-$v --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fast-screen-capture-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make fast-screen-capture-$v test launcher --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -DMAKE_TEST=1 fast-screen-capture.cpp *.so -o bin/fast-screen-capture-$v -Xlinker -rpath=/system/lib || exit 1
+
 	rm -f *.so
 done
 
