@@ -19,10 +19,10 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define LOG(fmt, arg...)      _LOG(fmt "\n", ##arg)
-#define LOGERR(fmt, arg...)   _LOG("[errno %d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
+#define LOG(fmt, arg...)           _LOG(fmt, ##arg)
+#define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
+#define LOGERR(fmt, arg...)        _LOG("[errno %d(%s)]" fmt, errno, strerror(errno), ##arg)
 #define ABORT_ERRNO(fmt, arg...) ({_LOG("[errno %d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(0);})
-#define ABORT(fmt, arg...)  ({_LOG(fmt ". Now exit\n", ##arg); exit(0);})
 
 static void _LOG(const char* format, ...) {
     char buf[4096];
@@ -30,30 +30,15 @@ static void _LOG(const char* format, ...) {
     va_list va;
     struct timespec ct;
     struct tm * st;
-
     clock_gettime(CLOCK_REALTIME, &ct);
     st = localtime(&ct.tv_sec);
-
-    memset(buf, 0, sizeof(buf));
-    sprintf(buf, "%02d/%02d %02d:%02d:%02d.%06d [ASC %d:%d]",
-        st->tm_mon+1,
-        st->tm_mday,
-        st->tm_hour,
-        st->tm_min,
-        st->tm_sec,
-        (int)(ct.tv_nsec/1000000)
-        ,getpid(), gettid()
-        );
-    cnt = strlen(buf);
-
+    cnt = sprintf(buf, "%02d/%02d %02d:%02d:%02d.%03d [ASC %d] ", st->tm_mon+1, st->tm_mday, st->tm_hour, st->tm_min, st->tm_sec, (int)(ct.tv_nsec/1000000), gettid());
     va_start(va, format);
-    vsnprintf(buf+cnt, sizeof(buf)-cnt-1, format, va);
+    cnt += vsnprintf(buf+cnt, sizeof(buf)-cnt, format, va);
     va_end(va);
-
-    cnt = strlen(buf); //gcc 3.3 snprintf can not correctly return copied length, so i have to count by myself
-    if (cnt==0 || buf[cnt-1]!='\n') {
-        buf[cnt++] = '\n';
-    }
+    if (cnt > sizeof(buf)) cnt = sizeof(buf); else if (cnt <= 0) {cnt = 7; strcpy(buf, "LogErr");};
+    if (buf[cnt-1]==0) cnt--; //always true
+    if (buf[cnt-1]!='\n') buf[cnt++] = '\n';
     write(STDERR_FILENO, buf, cnt);
 }
 
@@ -94,6 +79,7 @@ struct ASC {
 using namespace android;
 
 static bool isFirstTime = true;
+static bool needLog = true;
 static Mutex mutex;
 static Condition cond;
 static sp<IBinder> __csBinder;
@@ -101,9 +87,7 @@ static sp<IBinder> __csBinder;
 static sp<IBinder> mainDisp, virtDisp;
 class MyGraphicBufferProducer;
 static MyGraphicBufferProducer* bufProducer;
-static int virtDispInfo_w, virtDispInfo_h;
 static bool alwaysRotate = false;
-static Rect mainDispRect, virtDispRect;
 // static Vector<ComposerState> _emptyComposerStates; //dummy
 // static Vector<DisplayState > _displayStates;
 // static DisplayState* virtDispState = NULL;
@@ -126,7 +110,7 @@ static int convertOrient(int orient) {
 
 static int getOrient() {
     DisplayInfo mainDispInfo;
-    if (isFirstTime) LOG("getOrient");
+    if (needLog) LOG("getOrient");
     // status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
 
     Parcel data, reply;
@@ -136,14 +120,14 @@ static int getOrient() {
     status_t err = reply.read(&mainDispInfo, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
 
     if (err) ABORT("getOrient err:%d", err);
-    if (isFirstTime) LOG("getOrient result:%d", mainDispInfo.orientation);
+    if (needLog) LOG("getOrient result:%d", mainDispInfo.orientation);
     return mainDispInfo.orientation;
 }
 
 static void setVirtDispOrient(int orient) {
-    LOG("setVirtDispOrient virtDisp.orient:%d mainDisp.orient:%d)", convertOrient(orient), orient);
     virtDispState->what = DisplayState::eDisplayProjectionChanged;
     virtDispState->orientation = convertOrient(orient);
+    if (isFirstTime) LOG("setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, orient);
     //Although specified No wait, but android 4.2 still cause wait max 5 seconds, so do not use ISurfaceComposer nor SurfaceComposerClient
     // status_t err = __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
 
@@ -155,8 +139,8 @@ static void setVirtDispOrient(int orient) {
     data.writeInt32(0/*flags*/);
     status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
 
-    if (err) ABORT("setVirtDispOrient err:%d", err);
-    LOG("setVirtDispOrient OK");
+    if (err) ABORT("setXxxxState err:%d", err);
+    if (isFirstTime) LOG("setXxxxState OK");
 }
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
@@ -175,7 +159,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mConsumerUsage;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
-        LOG("MyGraphicBufferProducer::ctor w:%d h:%d ++++++++++++++++++++++++++++++++", w, h);
+        LOG("MyBufferQueue::ctor w:%d h:%d ++++++++++++++++++++++++++++++++", w, h);
         mWidth = w;
         mHeight = h;
         mInUsing = 0;
@@ -189,7 +173,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
-        LOG("MyGraphicBufferProducer::dtor --------------------------------");
+        LOG("MyBufferQueue::dtor --------------------------------");
         delete mGBuf;
     }
 
@@ -216,9 +200,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     #endif
     {
         #if (ANDROID_VER>=440)
-            if (isFirstTime) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x async %d", w, h, format, usage, async);
+            if (needLog) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x async %d", w, h, format, usage, async);
         #elif (ANDROID_VER>=420)
-            if (isFirstTime) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
+            if (needLog) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
         #endif
 
         if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
@@ -255,7 +239,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
-        if (isFirstTime) LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d transform:%d", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
+        if (needLog) LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d transform:%d", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
         if (slot != 0) ABORT("queueBuffer slot:%d!=0", slot);
         mFence = input.fence;
         output->width = mWidth;
@@ -312,23 +296,23 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         int err = 0;
         switch(what) {
         case NATIVE_WINDOW_WIDTH:
-            if (isFirstTime) LOG("query NATIVE_WINDOW_WIDTH");
+            if (needLog) LOG("query NATIVE_WINDOW_WIDTH");
             *value = mWidth;
             break;
         case NATIVE_WINDOW_HEIGHT:
-            if (isFirstTime) LOG("query NATIVE_WINDOW_HEIGHT");
+            if (needLog) LOG("query NATIVE_WINDOW_HEIGHT");
             *value = mHeight;
             break;
         case NATIVE_WINDOW_FORMAT:
-            if (isFirstTime) LOG("query NATIVE_WINDOW_FORMAT");
+            if (needLog) LOG("query NATIVE_WINDOW_FORMAT");
             *value = mFormat;
             break;
         case NATIVE_WINDOW_CONSUMER_USAGE_BITS:
-            if (isFirstTime) LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
+            if (needLog) LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
             *value = mConsumerUsage;
             break;
         default:
-            if (isFirstTime) LOG("query %d", what);
+            if (needLog) LOG("query %d", what);
             err = -EINVAL;
         }
         return err;
@@ -360,14 +344,14 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ status_t disconnect(int api) {
-        LOG("disconnected by gui system");
+        LOG("disconnected");
     }
 
     /*virtual*/status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
-        if (isFirstTime) LOG("begin onTransact %d dataSize:%d", code, data.dataSize());
+        if (needLog) LOG("onTransact %d dataSize:%d", code, data.dataSize());
         //todo: follow time sequence, determin each action id
         status_t err = BnGraphicBufferProducer::onTransact(code, data, reply, flags);
-        // LOG("end onTransact %d result:%d", code, err);
+        // LOG("onTransact %d result:%d", code, err);
         return err;
     }
 };
@@ -395,22 +379,21 @@ extern "C" void asc_capture(ASC* asc) {
         LOG("startThreadPool");
         ProcessState::self()->startThreadPool();
 
-        LOG("getComposerService");
-        String16 svcName("SurfaceFlinger");
-        __csBinder = defaultServiceManager()->getService(svcName);
+        LOG("getService");
+        __csBinder = defaultServiceManager()->getService(String16("SurfaceFlinger"));
         // __cs = ISurfaceComposer::asInterface(__csBinder);
 
-        LOG("getBuiltInDisplay");
+        LOG("getMainDisplay");
         mainDisp = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
         if (mainDisp.get()==NULL) ABORT("getBuiltInDisplay err:unknown");
         LOG("mainDisp: %p", mainDisp.get());
 
         DisplayInfo mainDispInfo;
-        LOG("getDisplayInfo");
+        LOG("getMainDisplayInfo");
         err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
-        if (err) ABORT("getDisplayInfo err:%d", err);
-        LOG("try raw getDisplayInfo interface");
-        //some device use strange head file which put ISurfaceComposer::getDisplayInfo after getBuiltInDisplay so vptr index changed, so test here
+        if (err) ABORT("getMainDisplayInfo err:%d", err);
+        LOG("try raw getMainDisplayInfo interface");
+        //some device use strange head file which put ISurfaceComposer::getMainDisplayInfo after getBuiltInDisplay so vptr index changed, so test here
         // err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
         {
             DisplayInfo info; //todo: save stack
@@ -420,7 +403,7 @@ extern "C" void asc_capture(ASC* asc) {
             err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
             err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
             if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h) {
-                LOG("raw getDisplayInfo interface is abnormal, retry with special interface");
+                LOG("raw getMainDisplayInfo interface is abnormal, retry with special interface");
                 TRANS_ID_GET_DISPLAY_INFO++;
             }
         }
@@ -432,52 +415,54 @@ extern "C" void asc_capture(ASC* asc) {
             err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
             err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
             if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h)
-                ABORT("raw getDisplayInfo interface is abnormal");
+                ABORT("raw getMainDisplayInfo interface is abnormal");
             mainDispInfo.orientation = info.orientation;
         }
-        if (err) ABORT("getDisplayInfo err:%d", err);
+        if (err) ABORT("getMainDisplayInfo err:%d", err);
         LOG("mainDispInfo: w:%d h:%d orient:%d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation);
 
         //sample mainDispInfo: {w:720, h:1280}
 
+        LOG("original  capture request: w:%d h:%d", asc->w, asc->h);
+        int capture_w, capture_h;
         if (!asc->w && !asc->h) {  //normal case
-            virtDispInfo_w = mainDispInfo.w;
-            virtDispInfo_h = mainDispInfo.h;
+            capture_w = mainDispInfo.w;
+            capture_h = mainDispInfo.h;
         } else if (asc->w && !asc->h) {
-            virtDispInfo_w = toEvenInt(asc->w);
-            virtDispInfo_h = toEvenInt(asc->w*mainDispInfo.h/mainDispInfo.w);
+            capture_w = toEvenInt(asc->w);
+            capture_h = toEvenInt(asc->w*mainDispInfo.h/mainDispInfo.w);
         } else if (asc->h && !asc->w) {
-            virtDispInfo_h = toEvenInt(asc->h);
-            virtDispInfo_w = toEvenInt(asc->h*mainDispInfo.w/mainDispInfo.h);
+            capture_h = toEvenInt(asc->h);
+            capture_w = toEvenInt(asc->h*mainDispInfo.w/mainDispInfo.h);
         } else { //asc->w && asc->h
-            virtDispInfo_w = toEvenInt(asc->w);
-            virtDispInfo_h = toEvenInt(asc->h);
+            capture_w = toEvenInt(asc->w);
+            capture_h = toEvenInt(asc->h);
         }
-        alwaysRotate = (mainDispInfo.w < mainDispInfo.h) != (virtDispInfo_w < virtDispInfo_h);
+        alwaysRotate = (mainDispInfo.w < mainDispInfo.h) != (capture_w < capture_h);
+        LOG("converted capture request: w:%d h:%d alwaysRotate:%d", capture_w, capture_h, alwaysRotate);
 
-        mainDispRect.right = mainDispRect.bottom = max(mainDispInfo.w, mainDispInfo.h);
-        virtDispRect.right = virtDispRect.bottom = max(virtDispInfo_w, virtDispInfo_h);
-        LOG("mainDispRect: w:%d h:%d x:%d y:%d", mainDispRect.right-mainDispRect.left, mainDispRect.bottom-mainDispRect.top, mainDispRect.left, mainDispRect.top);
-        LOG("virtDispRect: w:%d h:%d x:%d y:%d", virtDispRect.right-virtDispRect.left, virtDispRect.bottom-virtDispRect.top, virtDispRect.left, virtDispRect.top);
+        Rect mainViewPort, virtViewPort;
+        mainViewPort.right = mainViewPort.bottom = max(mainDispInfo.w, mainDispInfo.h);
+        virtViewPort.right = virtViewPort.bottom = max(capture_w, capture_h);
 
-        LOG("createDisplay");
-        virtDisp = SurfaceComposerClient::createDisplay(String8("QJASC"), false /*secure*/);
-        if (virtDisp.get()==NULL) ABORT("createDisplay err:unknown");
+        LOG("createXxxx");
+        virtDisp = SurfaceComposerClient::createDisplay(String8("QJASC"), true /*secure*/);
+        if (virtDisp.get()==NULL) ABORT("createXxxx err:unknown");
 
-        bufProducer = new MyGraphicBufferProducer(virtDispInfo_w, virtDispInfo_h);
+        bufProducer = new MyGraphicBufferProducer(capture_w, capture_h);
 
-        LOG("prepare displayStates");
+        LOG("prepare XxxxStates");
         // _displayStates.add();
         // virtDispState = _displayStates.editArray();
         virtDispState->what = DisplayState::eSurfaceChanged|DisplayState::eLayerStackChanged|DisplayState::eDisplayProjectionChanged;
         virtDispState->token = virtDisp;
         virtDispState->surface = bufProducer;
         virtDispState->orientation = convertOrient(mainDispInfo.orientation);
-        virtDispState->viewport = mainDispRect;
-        virtDispState->frame = virtDispRect;
+        virtDispState->viewport = mainViewPort;
+        virtDispState->frame = virtViewPort;
         virtDispState->layerStack = 0;
+        LOG("setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, mainDispInfo.orientation);
         #if 1
-            LOG("setVirtDispState virtDisp.orient:%d mainDisp.orient:%d)", virtDispState->orientation, mainDispInfo.orientation);
             // __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
             {
                 Parcel data;
@@ -487,48 +472,47 @@ extern "C" void asc_capture(ASC* asc) {
                 virtDispState->write(data);
                 data.writeInt32(0/*flags*/);
                 status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
-                if (err) ABORT("setVirtDispState err:%d", err);
+                if (err) ABORT("setXxxxState err:%d", err);
             }
         #else
-            LOG("openGlobalTransaction");
             SurfaceComposerClient::openGlobalTransaction();
-            LOG("setDisplaySurface");
             SurfaceComposerClient::setDisplaySurface(virtDisp, bufProducer);
-            LOG("setDisplayProjection virtDisp.orient:%d mainDisp.orient:%d)", virtDispState->orientation, mainDispInfo.orientation);
-            SurfaceComposerClient::setDisplayProjection(virtDisp, virtDispState.orientation, /*layerStackRect:*/mainDispRect, /*displayRect:*/virtDispRect);
-            LOG("setDisplayLayerStack");
+            SurfaceComposerClient::setDisplayProjection(virtDisp, virtDispState.orientation, /*layerStackRect:*/mainViewPort, /*displayRect:*/virtViewPort);
             SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
-            LOG("closeGlobalTransaction");
             SurfaceComposerClient::closeGlobalTransaction();
         #endif
     }
 
     while ( !bufProducer->mHaveData ) {
-        if (isFirstTime) LOG("wait for data");
+        if (needLog) LOG("wait for data");
         cond.wait(mutex);
     }
     if (isFirstTime) {
-        if (isFirstTime) LOG("got data");
+        if (needLog) LOG("new data is available");
         asc->w = bufProducer->mInternalWidth;
         asc->h = bufProducer->mHeight;
         asc->size = bufProducer->mInternalWidth*bufProducer->mHeight*bufProducer->mBytesPerPixel;
         if (bufProducer->mBytesPerPixel!=4) {
-            ABORT("bufProducer->mBytesPerPixel:%d unexcepted", bufProducer->mBytesPerPixel);
+            ABORT("bytesPerPixel:%d unexcepted", bufProducer->mBytesPerPixel);
         }
         if (bufProducer->mFormat!=1 && bufProducer->mFormat!=5) {
-            ABORT("asc->mFormat:%d unexcepted", bufProducer->mFormat);
+            ABORT("format:%d unexcepted", bufProducer->mFormat);
         }
         strcpy(asc->pixfmtName, bufProducer->mFormat==1?"rgb0":"bgr0");
         asc->data = bufProducer->mGBufData;
     }
     if (bufProducer->mFence && bufProducer->mFence->isValid()) {
-        if (isFirstTime) LOG("wait fence************************************");
+        if (needLog) LOG("wait fence");
         bufProducer->mFence->wait(-1);
     }
+    if (needLog) LOG("got data. Continue capturing...\n");
     bufProducer->mHaveData = false;
 
-    if (isFirstTime) LOG("got data. Continue capturing...");
-    isFirstTime = false;
+    if (isFirstTime) {
+        if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
+            needLog = false;
+        isFirstTime = false;
+    }
 }
 
 #if MAKE_TEST
@@ -545,8 +529,8 @@ int main(int argc, char** argv){
 
 #if 0
     sp<AMessage> format = new AMessage;
-    format->setInt32("width", virtDispRect.right);
-    format->setInt32("height", virtDispRect.bottom);
+    format->setInt32("width", capture_w);
+    format->setInt32("height", capture_h);
     format->setString("mime", "video/avc");
     format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
     format->setInt32("bitrate", 4000000);
