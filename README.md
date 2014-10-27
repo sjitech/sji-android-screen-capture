@@ -60,7 +60,7 @@ node dir_of_this_project/bin/asc.js dir_of_your_config/myConfig.json
 3.<b>Show video/animated image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br>
 Support <a href="http://www.webmproject.org/">WebM</a> video and <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
 Chrome,Firefox,Safari are well supported.
-<br><br>
+<br> <br>
 
 ===================
 [Note]
