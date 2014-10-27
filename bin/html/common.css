@@ -25,6 +25,19 @@ div.expandable > *:first-child {background-color: #ececec; height: 24px}
     border-left: 1px solid #CCCCCC;
     margin-top: 1px;
 }
+.true {
+    border-top: 2px solid #333333;
+    border-right: 2px solid #CCCCCC;
+    border-bottom: 2px solid #CCCCCC;
+    border-left: 2px solid #333333;
+    background-color: #ECECEC;
+}
+.false {
+    border-top: 2px solid #CCCCCC;
+    border-right: 2px solid #333333;
+    border-bottom: 2px solid #333333;
+    border-left: 2px solid #CCCCCC;
+}
 
 td ul {margin: 0; padding: 0}
 td ul li {list-style-position: inside}

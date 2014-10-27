@@ -22,17 +22,19 @@ rm -f *.so
 TARGET_DIR=../../../bin/android
 
 for v in 420 430 440; do
+    echo ""
+    echo ---------------android $v --------------------
 	for f in lib*.cpp; do
 		f="${f%.*}" #remove extension
-		echo ---------------make fake $f.so $v --------------------
+		echo ---------------make $f.so --------------------
 		g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
 
-	echo ---------------make get-raw-image-$v --------------------
-	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fast-screen-capture-$v -Xlinker -rpath=/system/lib || exit 1
+	echo ---------------make fsc-$v --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
 
-	echo ---------------make fast-screen-capture-$v test launcher --------------------
-	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -DMAKE_TEST=1 fast-screen-capture.cpp *.so -o bin/fast-screen-capture-$v -Xlinker -rpath=/system/lib || exit 1
+	echo ---------------make fsc-$v test launcher --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -DMAKE_TEST=1 fast-screen-capture.cpp *.so -o bin/fsc-$v -Xlinker -rpath=/system/lib || exit 1
 
 	rm -f *.so
 done

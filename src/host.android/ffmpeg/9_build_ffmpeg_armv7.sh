@@ -41,7 +41,7 @@ export CPPFLAGS="--sysroot=$SYS_ROOT"   #ubuntu NDK need this flag when check as
 	\
 	--enable-protocol=pipe --enable-protocol=file --enable-protocol=tcp \
 	\
-	--enable-filter=scale --enable-filter=transpose \
+	--enable-filter=scale --enable-filter=crop --enable-filter=transpose \
 	\
 	--enable-demuxer=rawvideo --enable-decoder=rawvideo \
 	\

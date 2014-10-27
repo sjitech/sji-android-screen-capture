@@ -25,45 +25,26 @@ struct ASC {
     char pixfmtName[32];
 };
 
-#define LOG(fmt, arg...)      _LOG(fmt "\n", ##arg)
-#define LOGERR(fmt, arg...)   _LOG("[errno %d(%s)]" fmt "\n", errno, strerror(errno), ##arg)
+#define LOG(fmt, arg...)           _LOG(fmt, ##arg)
+#define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
+#define LOGERR(fmt, arg...)        _LOG("[errno %d(%s)]" fmt, errno, strerror(errno), ##arg)
 #define ABORT_ERRNO(fmt, arg...) ({_LOG("[errno %d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(0);})
-#define ABORT(fmt, arg...)  ({_LOG(fmt ". Now exit\n", ##arg); exit(0);})
 
 static void _LOG(const char* format, ...) {
     char buf[4096];
     int cnt;
     va_list va;
-    struct timeval tv;
-    long long mms;
-    time_t t;
+    struct timespec ct;
     struct tm * st;
-
-    gettimeofday(&tv, NULL);
-    mms = ((long long) tv.tv_sec) * (1000 * 1000) + tv.tv_usec;
-    t = time(NULL);
-    st = localtime(&t);
-
-    memset(buf, 0, sizeof(buf));
-    sprintf(buf, "%02d/%02d %02d:%02d:%02d.%06d [ASC %d:%d]",
-        st->tm_mon+1,
-        st->tm_mday,
-        st->tm_hour,
-        st->tm_min,
-        st->tm_sec,
-        (int)(mms%1000000)
-        ,getpid(), gettid()
-        );
-    cnt = strlen(buf);
-
+    clock_gettime(CLOCK_REALTIME, &ct);
+    st = localtime(&ct.tv_sec);
+    cnt = sprintf(buf, "%02d/%02d %02d:%02d:%02d.%03d [ASC %d] ", st->tm_mon+1, st->tm_mday, st->tm_hour, st->tm_min, st->tm_sec, (int)(ct.tv_nsec/1000000), gettid());
     va_start(va, format);
-    vsnprintf(buf+cnt, sizeof(buf)-cnt-1, format, va);
+    cnt += vsnprintf(buf+cnt, sizeof(buf)-cnt, format, va);
     va_end(va);
-
-    cnt = strlen(buf); //gcc 3.3 snprintf can not correctly return copied length, so i have to count by myself
-    if (cnt==0 || buf[cnt-1]!='\n') {
-        buf[cnt++] = '\n';
-    }
+    if (cnt > sizeof(buf)) cnt = sizeof(buf); else if (cnt <= 0) {cnt = 7; strcpy(buf, "LogErr");};
+    if (buf[cnt-1]==0) cnt--; //always true
+    if (buf[cnt-1]!='\n') buf[cnt++] = '\n';
     write(STDERR_FILENO, buf, cnt);
 }
 
@@ -96,14 +77,14 @@ struct ASC_PRIV_DATA {
 void asc_capture(ASC* asc) {
     int width, height, internal_width, bytesPerPixel;
     size_t rawImageSize;
-    static bool showLogEveryCapture = false;
+    static bool needLogAll = false;
 
     ASC_PRIV_DATA * _this = asc->priv_data;
     bool isFirstTime = (_this==NULL);
 
     if (isFirstTime) {
         _this = asc->priv_data = new ASC_PRIV_DATA();
-        showLogEveryCapture = (getenv("ASC_LOG_EACH_CAPTURE") && atoi(getenv("ASC_LOG_EACH_CAPTURE")) > 0);
+        needLogAll = (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0);
 
         #if (ANDROID_VER>=400)
             #if (ANDROID_VER>=420)
@@ -120,17 +101,21 @@ void asc_capture(ASC* asc) {
         #endif
     }
 
-    if (showLogEveryCapture)
-        LOG("capture");
-
     #if (ANDROID_VER>=400)
-        if (isFirstTime) LOG("capture(w:%d h:%d)", asc->width, asc->height);
-        #if (ANDROID_VER>=420)
-            status_t err = _this->screenshot.update(_this->display, asc->width, asc->height);
-        #else
-            status_t err = _this->screenshot.update(asc->width, asc->height);
-        #endif
-        if(err) ABORT("capture err:%d", err);
+        if (isFirstTime||needLogAll) LOG("capture(w:%d h:%d)", asc->width, asc->height);
+        for(;;) {
+            #if (ANDROID_VER>=420)
+                status_t err = _this->screenshot.update(_this->display, asc->width, asc->height);
+            #else
+                status_t err = _this->screenshot.update(asc->width, asc->height);
+            #endif
+            if(err) {
+                LOG("capture err:%d", err);
+                usleep(100*1000);
+            } else {
+                break;
+            }
+        }
 
         rawImageSize = _this->screenshot.getSize();
         width = _this->screenshot.getWidth();
@@ -163,6 +148,7 @@ void asc_capture(ASC* asc) {
                 memmove(p1, p2, size1);
         }
     #else
+        if (isFirstTime||needLogAll) LOG("ioctl FBIOGET_VSCREENINFO");
         struct fb_var_screeninfo vinfo;
         if (ioctl(_this->fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ioctl fb0");
 

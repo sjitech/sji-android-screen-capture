@@ -57,6 +57,7 @@
       <w>oncr</w>
       <w>pkcs</w>
       <w>preload</w>
+      <w>probesize</w>
       <w>proc</w>
       <w>qmax</w>
       <w>qmin</w>

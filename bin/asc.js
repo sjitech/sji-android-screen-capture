@@ -14,10 +14,10 @@ var devMgr = {/*deviceSN:*/}, status = { consumerMap: {/*consumerId:*/}}, htmlCa
     adminWeb, streamWeb, ffmpegOK, httpSeq = 0;
 var MULTIPART_INNER_HEAD = new Buffer('--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n'), MULTIPART_CRLF_INNER_HEAD = new Buffer('\r\n' + MULTIPART_INNER_HEAD);
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
-var re_filename = /^(([^\/\\]+)~(?:live|rec)_f\d+(?:\.\d+)?[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
+var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'resizeRoughly'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, defaultFps: 0, minFps: 0, maxFps: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, resizeRoughly: 0, videoFileFrameRate: 0});
+var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'resizeRoughly', 'useFastCapture'];
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -200,7 +200,7 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: ''});
+  return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: '', recordingFileTimestampSet: {}});
 }
 function newAutoAccessKeyIfStreamWebPublic(firstTime) {
   return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '-----------' : '') + '_auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
@@ -242,12 +242,15 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
   }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
-var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = ['echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
-  'echo', '====;', 'getevent' , '-pS', ';'];
-var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = ['echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit', ';', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth="', ';',
-  'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo', ';', 'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo', ';',
-  'echo', '====;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', ';', './dlopen', './get-raw-image-420', './get-raw-image-400', './get-raw-image-220', '2>/dev/null;'];
-
+var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = [  'echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
+  'echo', '====;', 'getevent' , '-pS;'];
+var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', '||', 'exit;',
+  'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth=";',
+  'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo;',
+  'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
+  'echo', '====;', './dlopen', './sc-420', './sc-400', './sc-220;',
+  'echo', '====;', './dlopen', './fsc-440', './fsc-430', './fsc-420;'
+];
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
     log('[PrepareDeviceFile for ' + dev.device + '] begin');
@@ -261,7 +264,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
       var parts = stdout.trim().split(/\s*====\s*/);
-      if (parts.length !== 4 && parts.length !== 7) {
+      if (parts.length !== 4 && parts.length !== 9) {
         return on_complete('unknown error: failed to check device');
       }
       dev.CrCount = Math.max(0, stdout.match(/\r?\r?\n$/)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/); //in unix/linux this will be 0
@@ -270,7 +273,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.armv = dev.info[3].slice(0, 9) === 'armeabi-v' && parseInt(dev.info[3].slice(9)) >= 7 ? 7 : 5; //armeabi-v7a -> 7
       dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[2]);
-      if (parts.length === 7 && getMoreInfo(dev, parts.slice(3)) && parts[0] === prepareDeviceFile.ver && !force) {
+      if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[0] === prepareDeviceFile.ver && !force) {
         return on_complete('OK');
       }
       return spawn('[PushFileToDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'push', './android', cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
@@ -282,12 +285,12 @@ function prepareDeviceFile(dev, force/*optional*/) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
           var parts = stdout.trim().split(/\s*====\s*/);
-          if (parts.length !== 5) {
+          if (parts.length !== 7) {
             return on_complete('unknown error: failed to finish preparing device file');
           } else if (parts[0]) {
             return on_complete(stringifyError(parts[0]));
           } else if (!getMoreInfo(dev, parts.slice(1))) {
-            return on_complete('unknown error: failed to ' + (!dev.so_file ? 'check internal lib files' : !dev.disp ? 'check display size' : '?'));
+            return on_complete('unknown error: failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
           }
           setDeviceOrientation(dev, 'free');
           return on_complete('OK');
@@ -296,11 +299,14 @@ function prepareDeviceFile(dev, force/*optional*/) {
     }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckDevice
   }
 }
-function getMoreInfo(dev, ary) {
-  (ary[0] = ary[0].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[0][1], ary[0][2]), h: Math.max(ary[0][1], ary[0][2])});
-  dev.cpuCount = Number(ary[1]) || 1;
-  (ary[2] = ary[2].match(/\d+/)) && (dev.memSize = Number(ary[2][0]));
-  return (dev.so_file = ary[3].trim()) && dev.disp;
+function getMoreInfo(dev, ary/*result of ADB_GET_DEV_EXTRA_INFO_CMD_ARGS*/) {
+  (ary[1] = ary[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[1][1], ary[1][2]), h: Math.max(ary[1][1], ary[1][2])})
+      && (dev.disp2 = {w: Math.floor(dev.disp.w / 2), h: Math.floor(dev.disp.h / 2)}) && (dev.disp4 = {w: Math.floor(dev.disp.w / 4), h: Math.floor(dev.disp.h / 4)}) && (dev.disp8 = {w: Math.floor(dev.disp.w / 8), h: Math.floor(dev.disp.h / 8)});
+  dev.cpuCount = Number(ary[2]) || 1;
+  (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
+  dev.libPath = (ary[4].match(/(^|\r?\n)(\.\/sc-\d+)($|\r?\n)/) || {})[2];
+  dev.fastLibPath = (ary[5].match(/(^|\r?\n)(\.\/fsc-\d+)($|\r?\n)/) || {})[2];
+  return dev.libPath && dev.disp;
 }
 function getTouchDeviceInfo(dev, stdout) {
   dev.touchStatus = 'error: touch device not found' /*do not change this string*/;  //almost impossible
@@ -395,32 +401,51 @@ function turnOnScreen(dev) {
 function chkCaptureParameter(dev, q, force_ajpg) {
   if (dev && dev.status !== 'OK' && (chk.err = 'error: device not ready')
       || !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
-      || !chk('fps', (q.fps = Number(q.fps)), cfg.minFps, cfg.maxFps)
-      || q.scale && !(q._size = q.scale.match(/^([1-9]\d{1,3})x([1-9]\d{1,3})$|^([1-9]\d{1,3})xAuto$|^Autox([1-9]\d{1,3})$/)) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999"')
-      || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])) {
+      || q.scale && !(q._sz = q.scale.match(/^([1-9]\d{1,3})[xX:]([1-9]\d{1,3})$|^([1-9]\d{1,3})[xX:]Auto$|^Auto[xX:]([1-9]\d{1,3})$/i)) && !((q._scaleFactor = Number(q.scale)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999" or resize factor from 0.1 to 1')
+      || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])
+      || dev && !chk('resizeRoughly', (q.resizeRoughly = q.resizeRoughly || cfg.resizeRoughly.toString()), ['true', 'false'])
+      || dev && !chk('useFastCapture', (q.useFastCapture = q.useFastCapture || cfg.useFastCapture.toString()), ['true', 'false'])
+      ) {
     return false;
   }
   q.scale = q.scale || '';
   q.rotate = q.rotate || '';
+  var w = q._sz ? Number(q._sz[1] || q._sz[3]) : 0, h = q._sz ? Number(q._sz[2] || q._sz[4]) : 0;
+  (w && h && w > h) ? (q.rotate = 270) : (w && h && w === h) ? (h = w + 2) && (q.scale = w + 'x' + h) : ''; //if w > h then treat as rotate
+  q.rotate && w && h && w < h && (q.scale = h + 'x' + w);
   if (dev) {
-    q.timestamp = getTimestamp();
-    q._roughlyResizedSize = q._filter = null;
-    if (q.scale && q.scale !== dev.disp.w + 'x' + dev.disp.h) {
-      var w = Number(q._size[1] || q._size[3]), h = Math.max(q._size[2] || q._size[4], w + 1/*let h always bigger than w*/);
-      q._size = {w: Math.ceil((w || dev.disp.w / dev.disp.h * h) / 2) * 2, h: Math.ceil((h || dev.disp.h / dev.disp.w * w) / 2) * 2};
-      if (q.resizeRoughly === 'true') {
-        q._roughlyResizedSize = q._size = Number((dev.disp.w / 4).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 4).toFixed()), h: Number((dev.disp.h / 4).toFixed())} : Number((dev.disp.w / 2).toFixed()) >= q._size.w ? {w: Number((dev.disp.w / 2).toFixed()), h: Number((dev.disp.h / 2).toFixed())} : q._size;
-      } else if (cfg.resizeRoughly) {
-        q._roughlyResizedSize = q._size;
-      }
-      q._filter = 'scale=' + q._size.w + ':' + q._size.h; //just for some android 2.x they do not support GPU resize image
-    } else {
-      q._size = {w: dev.disp.w, h: dev.disp.h};
+    q._sz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : !q.scale ? {w: dev.disp.w, h: dev.disp.h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
+    q._sz = {w: Math.min(dev.disp.w, Math.ceil((q._sz.w || q._sz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._sz.h || q._sz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
+
+    q.useFastCapture = (q.useFastCapture === 'true') && !!dev.fastLibPath;
+    q.resizeRoughly = (q.resizeRoughly === 'true') && (q.useFastCapture || dev.libPath >= './sc-400');
+    if (q.resizeRoughly) { //resize image by hardware
+      var r = Math.max(dev.disp.w / q._sz.w, dev.disp.h / q._sz.h);
+      q._sz = r >= 8 ? dev.disp8 : r >= 4 ? dev.disp4 : r >= 2 ? dev.disp2 : q._sz;
+      q.resizeRoughly = !(q._sz.w === dev.disp.w && q._sz.h === dev.disp.h);
     }
-    q.scale = q._size.w + 'x' + q._size.h;
-    q.rotate && (q._filter = (q._filter ? q._filter + ',' : '') + 'transpose=2');
-    q._FpsScaleRotate = 'f' + q.fps + 'w' + q._size.w + 'h' + q._size.h + (q.rotate ? ('r' + q.rotate) : '');
-    q._FpsScaleRotateDisp = (q.rotate ? 'Land ' : '') + q._size.w + 'x' + q._size.h + ' ' + q.fps + 'FPS ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
+    q.scale = (w = !q.rotate ? q._sz.w : q._sz.h) + 'x' + (h = !q.rotate ? q._sz.h : q._sz.w);
+    q._filter = 'scale=' + q._sz.w + ':' + q._sz.h + (q.rotate ? ',transpose=2' : '');
+
+    q._reqSz = null;
+    if (q.resizeRoughly) { //resize image by hardware
+      if (q.useFastCapture) { //can fast capture && fast resize && fast rotate, but width maybe bigger than requested so need crop
+        q._reqSz = {w: w, h: h}; //resize by hardware. Note: w > h means rotate by hardware
+        q._filter = 'crop=' + q._reqSz.w + ':' + q._reqSz.h + ':0:0';
+      } else {
+        q._reqSz = q._sz; //resize by hardware
+        q._filter = q.rotate ? 'transpose=2' : ''; //rotate by software
+      }
+    } else { //get full size image first, then resize by software
+      if (q.useFastCapture) {
+        q.rotate && (q._reqSz = {w: dev.disp.h, h: dev.disp.w}); //rotate by hardware
+        q._filter = 'crop=' + (!q.rotate ? dev.disp.w : dev.disp.h) + ':' + (!q.rotate ? dev.disp.h : dev.disp.w) + ':0:0,scale=' + w + ':' + h; //resize by software
+        // q._filter = 'scale=ceil(iw/ih*' + h + '/2)*2' + w + ':' + h; //resize by software
+      }
+    }
+    q._FpsScaleRotate = (q.useFastCapture ? 'F30' : q.resizeRoughly ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
+    q.timestamp = getTimestamp();
+    q._FpsScaleRotateDisp = (q.useFastCapture ? 'F30' : q.resizeRoughly ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
   }
   return true;
 }
@@ -428,9 +453,10 @@ function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
   var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell',
       '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
+      cfg.logFfmpegDebugInfo ? ['export', 'ASC_LOG_ALL=1;'] : [],
       cfg.androidWorkDir + '/busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '&&',
       cfg.androidWorkDir + '/ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'androidgrab', (q._roughlyResizedSize ? ['-width', q._roughlyResizedSize.w, '-height', q._roughlyResizedSize.h] : []), '-i', dev.so_file,
+      '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.useFastCapture && dev.fastLibPath || dev.libPath,
       (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
       ')', '2>', cfg.androidLogPath
   ), function/*on_close*/() {
@@ -474,6 +500,7 @@ function doCapture(dev, outputStream, q) {
     res.__framesWritten = 0;
   }, cfg.fpsStatisticInterval * 1000));
   res.setHeader && res.setHeader('Content-Type', res.q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
+  q.useFastCapture && capture.image && (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.image.buf, MULTIPART_CRLF_INNER_HEAD])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && !q.__needNewCapture && clearTimeout(status.updateLiveUITimer); //remove unnecessary update
 }
@@ -498,14 +525,16 @@ function endCaptureProcess(dev) {
 }
 function doRecord(dev, q/*same as capture*/) {
   var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
+  dev.recordingFileTimestampSet[q.timestamp] = true;
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-i', '-'/*stdin*/,
-      '-r', cfg.videoFileFrameRate, '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
-      (cfg.alsoRecordAsWebM ? ['-r', cfg.videoFileFrameRate, '-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
+      '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
+      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
+      (cfg.alsoRecordAsWebM ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
     dev.subOutputDir && cfg.alsoRecordAsWebM && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
+    delete dev.recordingFileTimestampSet[q.timestamp];
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
   childProc.stdin.__feedConvertTimer = setInterval(function () {
     dev.capture.image && writeImage(childProc.stdin, dev.capture.image.buf);
@@ -589,7 +618,7 @@ function streamWeb_handler(req, res) {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
-  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
+  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
   res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
@@ -622,10 +651,8 @@ function streamWeb_handler(req, res) {
         return end(res, chk.err);
       }
       return end(res, replaceComVar(htmlCache[urlPath], dev)
-          .replace(/@minFps\b/g, cfg.minFps).replace(/@maxFps\b/g, cfg.maxFps)
-          .replace(/@fps\b/g, dev.capture ? dev.capture.q.fps : q.fps).replace(/@scale\b/g, dev.capture ? dev.capture.q.scale : q.scale).replace(/@rotate\b/g, dev.capture ? dev.capture.q.rotate : q.rotate)
-          .replace(new RegExp('_selectedIf_rotate_' + (q.rotate || '0'), 'g'), 'selected')
-          .replace(/@resizeRoughly\b/g, q.resizeRoughly === 'true' ? 'true' : 'false')
+          .replace(/@scale\b/g, (dev.capture && dev.capture.q || q).scale).replace(/@rotate\b/g, (dev.capture && dev.capture.q || q).rotate).replace(new RegExp('_selectedIf_rotate_' + ((dev.capture && dev.capture.q || q).rotate || '0'), 'g'), 'selected')
+          .replace(/@resizeRoughly\b/g, (dev.capture && dev.capture.q || q).resizeRoughly).replace(/@useFastCapture\b/g, (dev.capture && dev.capture.q || q).useFastCapture)
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
     case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------
@@ -636,9 +663,9 @@ function streamWeb_handler(req, res) {
         if (err) {
           return end(res, stringifyError(err));
         }
-        var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html'), recordingTimestamp = dev.consumerMap[REC_TAG] && dev.consumerMap[REC_TAG].q.timestamp;
+        var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html');
         filenameAry.forEach(function (f) {
-          (f = new FilenameInfo(f, q.device)).isValid && isImage === (f.type === 'jpg') && (isImage || f.timestamp !== recordingTimestamp)
+          (f = new FilenameInfo(f, q.device)).isValid && isImage === (f.type === 'jpg') && (isImage || !dev.recordingFileTimestampSet[f.timestamp])
           && (filenameMap[f.timestamp + (f.i || '')] = f);
         });
         var sortedKeys = Object.keys(filenameMap).sort().reverse();
@@ -770,7 +797,6 @@ function adminWeb_handler(req, res) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
-      q.fps = q.fps === undefined ? String(cfg.defaultFps) : q.fps;
       q.scale = q.scale === undefined ? String(cfg.defaultScale) : q.scale;
       if (!chkCaptureParameter(null, q, /*force_ajpg:*/true)) {
         return end(res, chk.err);
@@ -779,10 +805,8 @@ function adminWeb_handler(req, res) {
         var result_streamWebBaseURL = cfg.streamWebBaseURL || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html']
                 .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey))
-                .replace(/@fps\b/g, q.fps).replace(/@scale\b/g, q.scale).replace(/@rotate\b/g, q.rotate)
-                .replace(new RegExp('_selectedIf_rotate_' + (q.rotate || '0'), 'g'), 'selected')
-                .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, ''))
-                .replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
+                .replace(/@scale\b/g, q.scale).replace(/@rotate\b/g, q.rotate).replace(new RegExp('_selectedIf_rotate_' + (q.rotate || '0'), 'g'), 'selected')
+                .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, '')).replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
                 .replace(/#localStreamWebBaseURL\b/g, (cfg.streamWeb_protocol + '://localhost:' + cfg.streamWeb_port + '/'))
                 .replace(/_checkedIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'checked')
                 .replace(/@hideIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'display:none')
@@ -791,11 +815,11 @@ function adminWeb_handler(req, res) {
                 .replace(/@discover_from_ip\b/g, '*.*.*.' + cfg.discover_from_ip_part4)
                 .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
             ;
-        ['minFps', 'maxFps', 'streamWebBaseURL', 'discover_to_ip_part4', 'discover_to_ip_part4', 'discover_port', 'discover_maxFound', 'discover_totalTimeout', 'discover_timeout'].forEach(function (k) {
+        ['streamWebBaseURL', 'discover_to_ip_part4', 'discover_to_ip_part4', 'discover_port', 'discover_maxFound', 'discover_totalTimeout', 'discover_timeout', 'videoFileFrameRate'].forEach(function (k) {
           html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
         });
         dynamicConfKeyList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
-          html = html.replace(new RegExp('@' + k + '_negVal', 'g'), (cfg[k] ? 'false' : 'true')).replace(new RegExp('#' + k + '_negBtn', 'g'), (cfg[k] ? 'Disable' : 'Enable'));
+          html = html.replace(new RegExp('@' + k + '_negVal', 'g'), !cfg[k]).replace(new RegExp('_' + k + '_checked', 'g'), cfg[k] ? 'checked' : '').replace(new RegExp('@' + k, 'g'), cfg[k]);
         });
         cfg.adminKey && res.setHeader('Set-Cookie', 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
@@ -803,7 +827,7 @@ function adminWeb_handler(req, res) {
             return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
                 : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
                 .replace(/#devInfo\b/g, htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)))
-                .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus) : dev.status))
+                .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
                 .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
           }, ''/*initial joinedStr*/);
         }), 'text/html');
@@ -825,6 +849,10 @@ function adminWeb_handler(req, res) {
           return end(res, '`streamWebBaseURL`: must be an valid http or https URL, and must not contains querystring or #anchor');
         }
         q.streamWebBaseURL && (q.streamWebBaseURL = parsedUrl.format()); //always contains tail slash
+      } else if (q[q._confKey = 'videoFileFrameRate'] !== undefined) {
+        if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
+          return end(res, chk.err);
+        }
       } else { //-------------------------------------------------Set some internal bool var--------------------------
         q._confKey = forEachValueIn(dynamicConfKeyList, function (k) {
           q[k] !== undefined && (q._confKey = k) && (q[k] = (q[k] === 'true'));

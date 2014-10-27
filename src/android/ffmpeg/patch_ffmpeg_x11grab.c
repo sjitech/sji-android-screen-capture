@@ -14,6 +14,7 @@
 #include "avdevice.h"
 #include <dlfcn.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 struct ASC {
     void* priv_data;
@@ -35,6 +36,8 @@ struct androidgrab {
     void* dlhandle;
     void (*asc_capture)(struct ASC*);
     struct ASC asc;
+    bool haveRestDataInLastCall;
+    bool forProbe;
 
     // int interval; //unit: us
     // int64_t time_frame;      /**< Current time */
@@ -55,12 +58,11 @@ androidgrab_read_header(AVFormatContext *s1)
 {
     struct androidgrab *agrab = s1->priv_data;
     AVStream *st = NULL;
-    int ret = 0;
 
     st = avformat_new_stream(s1, NULL);
     if (!st) return AVERROR(ENOMEM);
 
-    // avpriv_set_pts_info(st, 64, 1, 1000000); /* 64 bits pts in us */
+    //avpriv_set_pts_info(st, 64, 1, 1000000); /* 64 bits pts in us */
 
     // agrab->time_frame = av_gettime();
     // agrab->interval = ((double)1000000)/agrab->framerate;
@@ -79,6 +81,9 @@ androidgrab_read_header(AVFormatContext *s1)
     agrab->asc.priv_data = NULL;
     agrab->asc_capture(&agrab->asc);
 
+    agrab->haveRestDataInLastCall = true;
+    agrab->forProbe = true;
+
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
     st->codec->width  = agrab->asc.width;
@@ -94,7 +99,7 @@ androidgrab_read_header(AVFormatContext *s1)
  * Grab a frame from Android (public device demuxer API).
  *
  * @param s1 Context from avformat core
- * @param pkt Packet holding the brabbed frame
+ * @param pkt Packet holding the grabbed frame
  * @return frame size in bytes
  */
 static int
@@ -122,7 +127,15 @@ androidgrab_read_packet(AVFormatContext *s1, AVPacket *pkt)
     av_init_packet(pkt);
     // pkt->pts = curtime;
 
-    agrab->asc_capture(&agrab->asc);
+    if (agrab->haveRestDataInLastCall) {
+        if (agrab->forProbe) {
+            agrab->forProbe = false;
+        } else {
+            agrab->haveRestDataInLastCall = false;
+        }
+    } else {
+        agrab->asc_capture(&agrab->asc);
+    }
     pkt->data = agrab->asc.data;
     pkt->size = agrab->asc.size;
 

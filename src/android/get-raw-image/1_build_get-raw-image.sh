@@ -16,20 +16,34 @@ export CC=gcc
 
 export CPPFLAGS="-fno-rtti -fno-exceptions -fmax-errors=5"
 
+mkdir bin 2>/dev/null
 rm -f *.so
 
 TARGET_DIR=../../../bin/android
 
-echo ---------------make get-raw-image-220 --------------------
-g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=220 -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/get-raw-image-220 || exit 1
+v=220
+echo ""
+echo ---------------android $v --------------------
+echo ---------------make sc-$v --------------------
+g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
+
+echo ---------------make sc-$v test launcher --------------------
+g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -DMAKE_TEST=1 get-raw-image.cpp -o bin/sc-$v -Xlinker -rpath=/system/lib || exit 1
 
 for v in 400 420; do
+    echo ""
+    echo ---------------android $v --------------------
 	for f in libgui libbinder libutils; do
-		echo ---------------make fake $f.so $v --------------------
+		echo ---------------make $f.so --------------------
 		g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
-	echo ---------------make get-raw-image-$v --------------------
-	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/get-raw-image-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make sc-$v --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make sc-$v test launcher --------------------
+	g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -DMAKE_TEST=1 get-raw-image.cpp *.so -o bin/sc-$v -Xlinker -rpath=/system/lib || exit 1
+
 	rm -f *.so
 done
 

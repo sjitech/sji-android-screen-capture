@@ -186,6 +186,6 @@ var AscUtil = {showEventsOnly: false, debug: false};
     clearInterval(liveImage.__liveImageTimer);
     liveImage.__liveImageTimer = setInterval(function () {
       $liveImage.prop('src', src + '&timestamp=' + Date.now());
-    }, 1000 / src.match(/fps=([^&]+)/)[1]);
+    }, 1000 / 4);
   }
 })();

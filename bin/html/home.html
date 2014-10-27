@@ -19,9 +19,6 @@
   <form style="white-space: nowrap; height: 27px; margin-right: 50px">
     <input type="hidden" name="adminKey" value="#adminKey"/>
     <button type="submit" title="Set default value">Set</button>
-    <label class="infoWithTip" title="Frames per Second. @minFps >= value <= @maxFps">
-      Fps<input type="text" name="fps" value="@fps" maxlength="3" size="3"/>
-    </label>
     <label class="infoWithTip" title="Set default scale. Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
       Scale<input type="text" name="scale" value="@scale" size="10"/>
     </label>
@@ -59,7 +56,7 @@
     <tr id="row2_$device" class="@devStatusClass" style="border-bottom: 1px solid #000000">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap">
-          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&fps=@fps&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
+          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
@@ -69,7 +66,7 @@
         </span>
         <span style="@hideIf_no_local_ffmpeg; white-space: nowrap">
           <span style="background-color: darkgray">&nbsp;</span>
-          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&fps=@fps&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')" title="Record">
+          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')" title="Record">
             Rec
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
@@ -179,34 +176,53 @@
       Internal Files
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">#logFpsStatistic_negBtn</a>
-      Log FPS Statistic
+      <a class="button @logFpsStatistic" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
+        <input type="checkbox" _logFpsStatistic_checked/>Log FPS Statistic
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">#logAllAdbCommands_negBtn</a>
-      Log All ADB Commands
+      <a class="button @logAllAdbCommands" href="set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
+        <input type="checkbox" _logAllAdbCommands_checked/>Log All ADB Commands
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">#logHttpReqDetail_negBtn</a>
-      Log HTTP Request Detail
+      <a class="button @logHttpReqDetail" href="set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
+        <input type="checkbox" _logHttpReqDetail_checked/>Log HTTP Request Detail
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">#logFfmpegDebugInfo_negBtn</a>
-      Log FFMPEG Debug Info
+      <a class="button @logFfmpegDebugInfo" href="set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
+        <input type="checkbox" _logFfmpegDebugInfo_checked/>Log FFMPEG Debug Info
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">#logAllHttpReqRes_negBtn</a>
-      Log All Http Req/Res
+      <a class="button @logAllHttpReqRes" href="set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
+        <input type="checkbox" _logAllHttpReqRes_checked/>Log All Http Req/Res
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">#showDisconnectedDevices_negBtn</a>
-      Show Disconnected Devices
+      <a class="button @showDisconnectedDevices" href="set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
+        <input type="checkbox" _showDisconnectedDevices_checked/>Show Disconnected Devices
+      </a>
     </div>
     <div>
-      <a class="button" href="set?adminKey=@adminKey&resizeRoughly=@resizeRoughly_negVal" target="resultIFrame">#resizeRoughly_negBtn</a>
-      High-Speed Resize Image
+      <a class="button @resizeRoughly" href="set?adminKey=@adminKey&resizeRoughly=@resizeRoughly_negVal" target="resultIFrame">
+        <input type="checkbox" _resizeRoughly_checked/>High-Speed Resize Image
+      </a>
     </div>
-    <div style="border-top: 1px solid lightgray">
+    <div>
+      <a class="button @useFastCapture" href="set?adminKey=@adminKey&useFastCapture=@useFastCapture_negVal" target="resultIFrame">
+        <input type="checkbox" _useFastCapture_checked/>Fast Capture
+      </a>
+    </div>
+    <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit">Set</button>
+      <label>Record Rate:
+        <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />
+      </label>
+    </form>
+    <div style="border-top: 1px solid lightgray; margin-top: 4px">
       <a class="button" href="stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
         Stop Server
       </a>
@@ -274,6 +290,11 @@
       .replace(/&mode=[^&]*/, '&mode=' + $frmSLog.find('[name="mode"] option:selected').val())
       .replace(/&size=[^&]*/, '&size=' + Math.max(Number($frmSLog.find('[name="size"]').val()) || 64000, 512000))
     );
+  });
+
+  $(document).on('click', '.button input:checkbox', function (e) {
+    e.preventDefault();
+    this.parentNode.click();
   });
 </script>
 </body>
