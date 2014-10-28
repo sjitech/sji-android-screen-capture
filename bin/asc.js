@@ -12,11 +12,11 @@ process.on('uncaughtException', function (err) {
 });
 var devMgr = {/*deviceSN:*/}, status = { consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/},
     adminWeb, streamWeb, ffmpegOK, httpSeq = 0;
-var MULTIPART_INNER_HEAD = new Buffer('--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n'), MULTIPART_CRLF_INNER_HEAD = new Buffer('\r\n' + MULTIPART_INNER_HEAD);
+var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'resizeRoughly', 'useFastCapture'];
+var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture'];
 true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
@@ -244,12 +244,12 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
 
 var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = [  'echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
   'echo', '====;', 'getevent' , '-pS;'];
-var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', '||', 'exit;',
+var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
   'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth=";',
   'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo;',
   'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
-  'echo', '====;', './dlopen', './sc-420', './sc-400', './sc-220;',
-  'echo', '====;', './dlopen', './fsc-440', './fsc-430', './fsc-420;'
+  '{', 'echo', '====;', './dlopen', './sc-420', './sc-400', './sc-220;',
+  'echo', '====;', './dlopen', './fsc-440', './fsc-430', './fsc-420;', '}', '2>', cfg.androidLogPath, ';'
 ];
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
@@ -300,8 +300,9 @@ function prepareDeviceFile(dev, force/*optional*/) {
   }
 }
 function getMoreInfo(dev, ary/*result of ADB_GET_DEV_EXTRA_INFO_CMD_ARGS*/) {
-  (ary[1] = ary[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[1][1], ary[1][2]), h: Math.max(ary[1][1], ary[1][2])})
-      && (dev.disp2 = {w: Math.floor(dev.disp.w / 2), h: Math.floor(dev.disp.h / 2)}) && (dev.disp4 = {w: Math.floor(dev.disp.w / 4), h: Math.floor(dev.disp.h / 4)}) && (dev.disp8 = {w: Math.floor(dev.disp.w / 8), h: Math.floor(dev.disp.h / 8)});
+  (ary[1] = ary[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[1][1], ary[1][2]), h: Math.max(ary[1][1], ary[1][2])}) && [1, 2, 4, 5, 6, 7].forEach(function (i) {
+    dev.disp[i] = {w: Math.ceil(dev.disp.w * i / 8 / 2) * 2, h: Math.ceil(dev.disp.h * i / 8 / 2) * 2};
+  });
   dev.cpuCount = Number(ary[2]) || 1;
   (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
   dev.libPath = (ary[4].match(/(^|\r?\n)(\.\/sc-\d+)($|\r?\n)/) || {})[2];
@@ -403,7 +404,7 @@ function chkCaptureParameter(dev, q, force_ajpg) {
       || !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
       || q.scale && !(q._sz = q.scale.match(/^([1-9]\d{1,3})[xX:]([1-9]\d{1,3})$|^([1-9]\d{1,3})[xX:]Auto$|^Auto[xX:]([1-9]\d{1,3})$/i)) && !((q._scaleFactor = Number(q.scale)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999" or resize factor from 0.1 to 1')
       || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])
-      || dev && !chk('resizeRoughly', (q.resizeRoughly = q.resizeRoughly || cfg.resizeRoughly.toString()), ['true', 'false'])
+      || dev && !chk('fastResize', (q.fastResize = q.fastResize || cfg.fastResize.toString()), ['true', 'false'])
       || dev && !chk('useFastCapture', (q.useFastCapture = q.useFastCapture || cfg.useFastCapture.toString()), ['true', 'false'])
       ) {
     return false;
@@ -418,17 +419,17 @@ function chkCaptureParameter(dev, q, force_ajpg) {
     q._sz = {w: Math.min(dev.disp.w, Math.ceil((q._sz.w || q._sz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._sz.h || q._sz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
 
     q.useFastCapture = (q.useFastCapture === 'true') && !!dev.fastLibPath;
-    q.resizeRoughly = (q.resizeRoughly === 'true') && (q.useFastCapture || dev.libPath >= './sc-400');
-    if (q.resizeRoughly) { //resize image by hardware
-      var r = Math.max(dev.disp.w / q._sz.w, dev.disp.h / q._sz.h);
-      q._sz = r >= 8 ? dev.disp8 : r >= 4 ? dev.disp4 : r >= 2 ? dev.disp2 : q._sz;
-      q.resizeRoughly = !(q._sz.w === dev.disp.w && q._sz.h === dev.disp.h);
+    q.fastResize = (q.fastResize === 'true') && (q.useFastCapture || dev.libPath >= './sc-400');
+    if (q.fastResize) { //resize image by hardware
+      var r = Math.max(q._sz.w * 8 / dev.disp.w, q._sz.h * 8 / dev.disp.h);
+      q._sz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
+      q.fastResize = !(q._sz.w === dev.disp.w && q._sz.h === dev.disp.h);
     }
     q.scale = (w = !q.rotate ? q._sz.w : q._sz.h) + 'x' + (h = !q.rotate ? q._sz.h : q._sz.w);
     q._filter = 'scale=' + q._sz.w + ':' + q._sz.h + (q.rotate ? ',transpose=2' : '');
 
     q._reqSz = null;
-    if (q.resizeRoughly) { //resize image by hardware
+    if (q.fastResize) { //resize image by hardware
       if (q.useFastCapture) { //can fast capture && fast resize && fast rotate, but width maybe bigger than requested so need crop
         q._reqSz = {w: w, h: h}; //resize by hardware. Note: w > h means rotate by hardware
         q._filter = 'crop=' + q._reqSz.w + ':' + q._reqSz.h + ':0:0';
@@ -443,22 +444,20 @@ function chkCaptureParameter(dev, q, force_ajpg) {
         // q._filter = 'scale=ceil(iw/ih*' + h + '/2)*2' + w + ':' + h; //resize by software
       }
     }
-    q._FpsScaleRotate = (q.useFastCapture ? 'F30' : q.resizeRoughly ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
+    q._FpsScaleRotate = (q.useFastCapture ? 'F30' : q.fastResize ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
     q.timestamp = getTimestamp();
-    q._FpsScaleRotateDisp = (q.useFastCapture ? 'F30' : q.resizeRoughly ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
+    q._FpsScaleRotateDisp = (q.useFastCapture ? 'F30' : q.fastResize ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
   }
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
   var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell',
-      '(', 'date', '>&2;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' + cfg.androidWorkDir, ';', //just for android 2.3- bug which can not open shared library with relative path
-      cfg.logFfmpegDebugInfo ? ['export', 'ASC_LOG_ALL=1;'] : [],
-      cfg.androidWorkDir + '/busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '&&',
-      cfg.androidWorkDir + '/ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+      '{', 'date', '>&2;', 'cd', cfg.androidWorkDir, '&&', './busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;', (cfg.logFfmpegDebugInfo ? ['export', 'ASC_LOG_ALL=1;'] : []),
+      './ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.useFastCapture && dev.fastLibPath || dev.libPath,
-      (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/,
-      ')', '2>', cfg.androidLogPath
+      (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/, ';',
+      '}', '2>', cfg.androidLogPath
   ), function/*on_close*/() {
     capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer);
     capture === dev.capture && endCaptureProcess(dev);
@@ -472,7 +471,7 @@ function _startNewCaptureProcess(dev, q) {
           bufAry = [];
           unsavedStart = pos + 1;
           forEachValueIn(dev.consumerMap, function (res) {
-            (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.image.buf, MULTIPART_CRLF_INNER_HEAD])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
+            (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, capture.image.buf, CrLfBoundTypeCrLf2])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
             (res.setHeader && res.q.type === 'jpg') && endCaptureConsumer(res, capture.image.buf); //write single picture and end
           });//end of consumer enum
         }
@@ -500,7 +499,7 @@ function doCapture(dev, outputStream, q) {
     res.__framesWritten = 0;
   }, cfg.fpsStatisticInterval * 1000));
   res.setHeader && res.setHeader('Content-Type', res.q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
-  q.useFastCapture && capture.image && (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : MULTIPART_INNER_HEAD, capture.image.buf, MULTIPART_CRLF_INNER_HEAD])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
+  q.useFastCapture && capture.image && (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, capture.image.buf, CrLfBoundTypeCrLf2])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && !q.__needNewCapture && clearTimeout(status.updateLiveUITimer); //remove unnecessary update
 }
@@ -652,7 +651,7 @@ function streamWeb_handler(req, res) {
       }
       return end(res, replaceComVar(htmlCache[urlPath], dev)
           .replace(/@scale\b/g, (dev.capture && dev.capture.q || q).scale).replace(/@rotate\b/g, (dev.capture && dev.capture.q || q).rotate).replace(new RegExp('_selectedIf_rotate_' + ((dev.capture && dev.capture.q || q).rotate || '0'), 'g'), 'selected')
-          .replace(/@resizeRoughly\b/g, (dev.capture && dev.capture.q || q).resizeRoughly).replace(/@useFastCapture\b/g, (dev.capture && dev.capture.q || q).useFastCapture)
+          .replace(/@fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize).replace(/@useFastCapture\b/g, (dev.capture && dev.capture.q || q).useFastCapture)
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
     case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------

@@ -15,7 +15,7 @@
   "maxRecordTime": 7200, //max recorded time
   "enableGetOutputFile": true, //false means you can not view recorded file and saved image without correct adminKey querystring
   "alsoRecordAsWebM": true,
-  "resizeRoughly": true,
+  "fastResize": true,
   "useFastCapture": true,
 
   //log settings
