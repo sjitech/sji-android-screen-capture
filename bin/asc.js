@@ -507,7 +507,7 @@ function doCapture(dev, outputStream, q) {
   });
   res.setHeader && res.setHeader('Content-Type', res.q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
-    res.output.length >= 4 && (res.__framesDropped = (res.__framesDropped || 0) + 1) && (res.output.length = res.outputEncodings.length = res.output.length - 1);
+    res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
     (cfg.logFpsStatistic || res.__framesDropped) && log(capture.__childProc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
