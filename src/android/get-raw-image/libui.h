@@ -87,12 +87,12 @@ struct GraphicBuffer {
     status_t unlock();
     void incStrong(const void* id) const {
         #ifdef LOG
-            LOG("GraphicBuffer::incStrong id=%p *********************************", id);
+            LOG("unhandled GraphicBuffer::incStrong id=%p *********************************", id);
         #endif
     }
     void decStrong(const void* id) const {
         #ifdef LOG
-            LOG("GraphicBuffer::decStrong id=%p ********-****-***-***-***********", id);
+            LOG("unhandled GraphicBuffer::decStrong id=%p ********-****-***-***-***********", id);
         #endif
     }
 private:

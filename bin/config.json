@@ -31,6 +31,8 @@
   "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
   "fpsStatisticInterval": 10, //output Fps statistic at this interval
   "videoFileFrameRate": 10,
+  "resentImageForSafariAfter": 0.25,
+  "resentUnchangedImageInterval": 10,
 
   //UI settings
   "showDisconnectedDevices": false,

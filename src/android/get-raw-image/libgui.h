@@ -119,6 +119,8 @@ private:
         static void setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer);
         static void setDisplayLayerStack(const sp<IBinder>& token, uint32_t layerStack);
         static void setDisplayProjection(const sp<IBinder>& token, uint32_t orientation, const Rect& layerStackRect, const Rect& displayRect);
+        static void blankDisplay(const sp<IBinder>& display);
+        static void unblankDisplay(const sp<IBinder>& display);
     };
 
     class GraphicBuffer;

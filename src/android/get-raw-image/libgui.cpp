@@ -30,6 +30,8 @@ size_t ScreenshotClient::getSize() const {}
     void SurfaceComposerClient::setDisplaySurface(const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer) {}
     void SurfaceComposerClient::setDisplayLayerStack(const sp<IBinder>& token, uint32_t layerStack) {}
     void SurfaceComposerClient::setDisplayProjection(const sp<IBinder>& token, uint32_t orientation, const Rect& layerStackRect, const Rect& displayRect) {}
+    void SurfaceComposerClient::blankDisplay(const sp<IBinder>& display) {}
+    void SurfaceComposerClient::unblankDisplay(const sp<IBinder>& display) {}
 
     sp<ISurfaceComposer> ComposerService::getComposerService() {}
 

@@ -17,7 +17,7 @@ var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, 
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0});
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -38,7 +38,7 @@ function spawn(tag, _path, args, _on_close, _opt) {
   });
   opt.timeout && (childProc.__timeoutTimer = setTimeout(function () {
     childProc.__err = 'error: timeout';
-    opt.log && log(tag + ' kill due to timeout(' + opt.timeout + 's)');
+    opt.log && log(tag + ' kill due to timeout(' + opt.timeout + 'ms)');
     childProc.kill('SIGKILL');
   }, opt.timeout));
 
@@ -117,8 +117,11 @@ function chk(name, value /*, next parameters: candidateArray | candidateValue | 
   return true;
 }
 
-function writeImage(res, buf) {
-  return !res.__isEnded && !res.__isClosed && (res.__framesWritten = (res.__framesWritten || 0) + 1) && res.write(buf);
+function write(res, buf) {
+  return !res.__isEnded && !res.__isClosed && res.write(buf);
+}
+function writeMultipartImage(res, buf, doNotCount) { //Note: this will write next content-type earlier to force Chrome draw image immediately
+  return !res.__isEnded && !res.__isClosed && (doNotCount || (res.__framesWritten = (res.__framesWritten || 0) + 1)) && res.write(Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, buf, CrLfBoundTypeCrLf2]));
 }
 function end(res, textContent/*optional*/, type) {
   if (!res.__isEnded && !res.__isClosed) {
@@ -471,8 +474,7 @@ function _startNewCaptureProcess(dev, q) {
           bufAry = [];
           unsavedStart = pos + 1;
           forEachValueIn(dev.consumerMap, function (res) {
-            (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, capture.image.buf, CrLfBoundTypeCrLf2])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
-            (res.setHeader && res.q.type === 'jpg') && endCaptureConsumer(res, capture.image.buf); //write single picture and end
+            res.setHeader/*isHttp*/ && (res.q.type === 'ajpg' ? writeMultipartImage : endCaptureConsumer)(res, capture.image.buf);
           });//end of consumer enum
         }
         foundMark = (buf[pos] === 0xff);
@@ -482,6 +484,16 @@ function _startNewCaptureProcess(dev, q) {
   });
   turnOnScreen(dev);
   scheduleUpdateLiveUI();
+  q.useFastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
+    capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(dev.consumerMap, function (res) {
+      res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
+    }) : (capture.oldImageIndex = capture.image.i));
+  }, cfg.resentImageForSafariAfter * 1000));
+  capture.timer_resentUnchangedImage = setInterval(function () {
+    capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(dev.consumerMap, function (res) { //resend image to keep image tag alive
+      writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
+    }) : (capture.veryOldImageIndex = capture.image.i));
+  }, cfg.resentUnchangedImageInterval * 1000);
 }
 function doCapture(dev, outputStream, q) {
   (q.__needNewCapture = !dev.capture) && _startNewCaptureProcess(dev, q);
@@ -493,13 +505,13 @@ function doCapture(dev, outputStream, q) {
   res.on('close', function () { //closed by http peer
     endCaptureConsumer(res);
   });
-  q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
-    res.setHeader/*http*/ && res.output/*unsent data array*/ && res.output.length && (res.__framesDropped = res.output.length - (res.outputEncodings[0] ? 1 : 0)) && (res.output.length = res.outputEncodings.length = (res.outputEncodings[0] ? 1 : 0)); //remove unsent data
-    (cfg.logFpsStatistic || res.__framesDropped) && log(capture.__childProc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : 0));
-    res.__framesWritten = 0;
-  }, cfg.fpsStatisticInterval * 1000));
   res.setHeader && res.setHeader('Content-Type', res.q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
-  q.useFastCapture && capture.image && (res.setHeader && res.q.type === 'ajpg') && writeImage(res, Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, capture.image.buf, CrLfBoundTypeCrLf2])); //output continuous jpg. Note: write next content-type earlier to force Chrome draw image immediately
+  res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
+    res.output.length >= 4 && (res.__framesDropped = (res.__framesDropped || 0) + 1) && (res.output.length = res.outputEncodings.length = res.output.length - 1);
+    (cfg.logFpsStatistic || res.__framesDropped) && log(capture.__childProc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
+    res.__framesWritten = res.__framesDropped = 0;
+  }, cfg.fpsStatisticInterval * 1000));
+  q.useFastCapture && capture.image && (res.setHeader && res.q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && !q.__needNewCapture && clearTimeout(status.updateLiveUITimer); //remove unnecessary update
 }
@@ -508,7 +520,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/)
   if (dev.consumerMap[res.__tag] === res) {
     delete dev.consumerMap[res.__tag];
     scheduleUpdateLiveUI();
-    imageBuf && writeImage(res, imageBuf);
+    imageBuf && write(res, imageBuf);
     end(res);
     clearTimeout(res.__recordTimer);
     clearInterval(res.__statTimer);
@@ -518,6 +530,8 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/)
 }
 function endCaptureProcess(dev) {
   clearTimeout(dev.capture.delayKillTimer);
+  clearInterval(dev.capture.timer_resentImageForSafari);
+  clearInterval(dev.capture.timer_resentUnchangedImage);
   childProcMap[dev.capture.__childProc.pid] && dev.capture.__childProc.kill('SIGKILL');
   dev.capture = null;
   scheduleUpdateLiveUI();
@@ -536,7 +550,7 @@ function doRecord(dev, q/*same as capture*/) {
     delete dev.recordingFileTimestampSet[q.timestamp];
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
   childProc.stdin.__feedConvertTimer = setInterval(function () {
-    dev.capture.image && writeImage(childProc.stdin, dev.capture.image.buf);
+    dev.capture.image && write(childProc.stdin, dev.capture.image.buf);
   }, 1000 / cfg.videoFileFrameRate);
   childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
   childProc.stdin.__tag = REC_TAG;
@@ -634,6 +648,7 @@ function streamWeb_handler(req, res) {
       if (!chkCaptureParameter(dev, q, /*force_ajpg:*/false)) {
         return end(res, chk.err);
       }
+      q._isSafari = /Safari/i.test(req.headers['user-agent']) && !/Chrome/i.test(req.headers['user-agent']);
       return doCapture(dev, res, q);
     case '/saveImage': //------------------------------Save Current Image From Live View------------------------------
       if ((!dev.capture || !dev.capture.image) && (chk.err = 'error: no live image') ||

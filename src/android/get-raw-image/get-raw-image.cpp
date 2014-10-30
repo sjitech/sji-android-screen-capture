@@ -27,8 +27,7 @@ struct ASC {
 
 #define LOG(fmt, arg...)           _LOG(fmt, ##arg)
 #define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
-#define LOGERR(fmt, arg...)        _LOG("[errno %d(%s)]" fmt, errno, strerror(errno), ##arg)
-#define ABORT_ERRNO(fmt, arg...) ({_LOG("[errno %d(%s)]" fmt ". Now exit\n", errno, strerror(errno), ##arg); exit(0);})
+#define ABORT_ERRNO(fmt, arg...) ({_LOG(fmt " [errno %d(%s)] Now exit", errno, strerror(errno), ##arg); exit(0);})
 
 static void _LOG(const char* format, ...) {
     char buf[4096];
@@ -56,71 +55,70 @@ static void _LOG(const char* format, ...) {
     using namespace android;
 #endif
 
-struct ASC_PRIV_DATA {
-    #if (ANDROID_VER>=400)
-        ScreenshotClient screenshot;
-        #if (ANDROID_VER>=420)
-            sp<IBinder> display;
-        #endif
-    #else
-        int fb;
-        char* mapbase;
-        size_t lastMapSize;
+static bool isFirstTime = true;
+static bool needLog = true;
+#if (ANDROID_VER>=400)
+    static ScreenshotClient screenshot;
+    #if (ANDROID_VER>=420)
+        static sp<IBinder> display;
     #endif
-};
-
-#if MAKE_TEST
-    static
 #else
-    extern "C"
+    static int fb;
+    static char* mapbase;
+    static size_t lastMapSize;
 #endif
-void asc_capture(ASC* asc) {
-    int width, height, internal_width, bytesPerPixel;
-    size_t rawImageSize;
-    static bool needLogAll = false;
+static char* blackscreen = NULL;
 
-    ASC_PRIV_DATA * _this = asc->priv_data;
-    bool isFirstTime = (_this==NULL);
+extern "C" void asc_capture(ASC* asc) {
+    int width, height, internal_width, bytesPerPixel, rawImageSize;
 
     if (isFirstTime) {
-        _this = asc->priv_data = new ASC_PRIV_DATA();
-        needLogAll = (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0);
-
         #if (ANDROID_VER>=400)
             #if (ANDROID_VER>=420)
                 ProcessState::self()->startThreadPool();
-                _this->display = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
-                if (_this->display==NULL) ABORT("getBuiltInDisplay error");
+                display = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
+                if (display==NULL) ABORT("getBuiltInDisplay error");
             #endif
         #else
             LOG("open fb");
-            _this->fb = open("/dev/graphics/fb0", O_RDONLY);
-            if (_this->fb < 0) ABORT_ERRNO("open fb0");
-            _this->mapbase = NULL;
-            _this->lastMapSize = 0;
+            fb = open("/dev/graphics/fb0", O_RDONLY);
+            if (fb < 0) ABORT_ERRNO("open fb0");
+            mapbase = NULL;
+            lastMapSize = 0;
         #endif
     }
 
     #if (ANDROID_VER>=400)
-        if (isFirstTime||needLogAll) LOG("capture(w:%d h:%d)", asc->width, asc->height);
+        if (needLog) LOG("capture(w:%d h:%d)", asc->width, asc->height);
         for(;;) {
             #if (ANDROID_VER>=420)
-                status_t err = _this->screenshot.update(_this->display, asc->width, asc->height);
+                status_t err = screenshot.update(display, asc->width, asc->height);
             #else
-                status_t err = _this->screenshot.update(asc->width, asc->height);
+                status_t err = screenshot.update(asc->width, asc->height);
             #endif
             if(err) {
-                LOG("capture err:%d", err);
-                usleep(100*1000);
+                if (needLog) LOG("capture err:%d", err);
+                usleep(250*1000);
+                if (!isFirstTime) {
+                    if (!blackscreen) {
+                        blackscreen = (char*)calloc(asc->size, 1);
+                        asc->data = blackscreen;
+                    }
+                    return;
+                }
             } else {
+                if (blackscreen) {
+                    free(blackscreen);
+                    blackscreen = NULL;
+                }
                 break;
             }
         }
 
-        rawImageSize = _this->screenshot.getSize();
-        width = _this->screenshot.getWidth();
-        height = _this->screenshot.getHeight();
-        internal_width = _this->screenshot.getStride();
+        rawImageSize = screenshot.getSize();
+        width = screenshot.getWidth();
+        height = screenshot.getHeight();
+        internal_width = screenshot.getStride();
         bytesPerPixel = rawImageSize/internal_width/height;
 
         if (isFirstTime) {
@@ -134,10 +132,10 @@ void asc_capture(ASC* asc) {
                 sizeof(asc->pixfmtName)-1);
 
             LOG("capture result: %s imageSize:%d(w:%d h:%d bytesPerPixel:%d) internalW:%d fmt:%d",
-                asc->pixfmtName, width*height*bytesPerPixel, width, height, bytesPerPixel, internal_width, _this->screenshot.getFormat());
+                asc->pixfmtName, width*height*bytesPerPixel, width, height, bytesPerPixel, internal_width, screenshot.getFormat());
         }
 
-        asc->data = (char*)_this->screenshot.getPixels();
+        asc->data = (char*)screenshot.getPixels();
 
         if (internal_width > width) {
             char* p1 = asc->data;
@@ -148,9 +146,9 @@ void asc_capture(ASC* asc) {
                 memmove(p1, p2, size1);
         }
     #else
-        if (isFirstTime||needLogAll) LOG("ioctl FBIOGET_VSCREENINFO");
+        if (needLog) LOG("ioctl FBIOGET_VSCREENINFO");
         struct fb_var_screeninfo vinfo;
-        if (ioctl(_this->fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ioctl fb0");
+        if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ioctl fb0");
 
         width = vinfo.xres;
         height = vinfo.yres;
@@ -196,27 +194,31 @@ void asc_capture(ASC* asc) {
             virtualSize = offset+rawImageSize;
         }
 
-        if (virtualSize > _this->lastMapSize) {
-            if (_this->mapbase) {
-                LOG("remap due to virtualSize %d is bigger than previous %d", virtualSize, _this->lastMapSize);
-                munmap(_this->mapbase, _this->lastMapSize);
-                _this->mapbase = NULL;
+        if (virtualSize > lastMapSize) {
+            if (mapbase) {
+                LOG("remap due to virtualSize %d is bigger than previous %d", virtualSize, lastMapSize);
+                munmap(mapbase, lastMapSize);
+                mapbase = NULL;
             }
-            _this->lastMapSize = virtualSize;
+            lastMapSize = virtualSize;
         }
 
-        if (_this->mapbase==NULL) {
-            _this->mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, _this->fb, 0);
-            if (_this->mapbase==NULL) ABORT_ERRNO("mmap %d", virtualSize);
+        if (mapbase==NULL) {
+            mapbase = (char*)mmap(0, virtualSize, PROT_READ, MAP_PRIVATE, fb, 0);
+            if (mapbase==NULL) ABORT_ERRNO("mmap %d", virtualSize);
         }
 
-        asc->data = _this->mapbase + offset;
+        asc->data = mapbase + offset;
     #endif
 
     if (isFirstTime) {
         asc->width = width;
         asc->height = height;
         asc->size = width*height*bytesPerPixel;
+
+        if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
+            needLog = false;
+        isFirstTime = false;
     }
 }
 

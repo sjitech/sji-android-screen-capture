@@ -24,8 +24,7 @@ TARGET_DIR=../../../bin/android
 for v in 420 430 440; do
     echo ""
     echo ---------------android $v --------------------
-	for f in lib*.cpp; do
-		f="${f%.*}" #remove extension
+	for f in libbinder libcutils libgui libui libutils; do
 		echo ---------------make $f.so --------------------
 		g++ $CFLAGS $CPPFLAGS $LDFLAGS -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done

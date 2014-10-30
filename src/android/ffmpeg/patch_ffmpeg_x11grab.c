@@ -36,8 +36,7 @@ struct androidgrab {
     void* dlhandle;
     void (*asc_capture)(struct ASC*);
     struct ASC asc;
-    bool haveRestDataInLastCall;
-    bool forProbe;
+    int reuseFirstFrame;
 
     // int interval; //unit: us
     // int64_t time_frame;      /**< Current time */
@@ -80,9 +79,6 @@ androidgrab_read_header(AVFormatContext *s1)
 
     agrab->asc.priv_data = NULL;
     agrab->asc_capture(&agrab->asc);
-
-    agrab->haveRestDataInLastCall = true;
-    agrab->forProbe = true;
 
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
@@ -127,12 +123,8 @@ androidgrab_read_packet(AVFormatContext *s1, AVPacket *pkt)
     av_init_packet(pkt);
     // pkt->pts = curtime;
 
-    if (agrab->haveRestDataInLastCall) {
-        if (agrab->forProbe) {
-            agrab->forProbe = false;
-        } else {
-            agrab->haveRestDataInLastCall = false;
-        }
+    if (agrab->reuseFirstFrame) {
+        agrab->reuseFirstFrame--;
     } else {
         agrab->asc_capture(&agrab->asc);
     }
@@ -160,6 +152,7 @@ static const AVOption options[] = {
     // { "framerate", "set video frame rate",  OFFSET(framerate),  AV_OPT_TYPE_DOUBLE, {.dbl = 4}, 0.1, 40,   DEC },
     { "width",     "horizontal size",   OFFSET(asc.width),  AV_OPT_TYPE_INT,    {.i64 = 0}, 0,   4096, DEC },
     { "height",    "vertical size",     OFFSET(asc.height), AV_OPT_TYPE_INT,    {.i64 = 0}, 0,   4096, DEC },
+    { "reuseFirstFrame",    "reuse N times with first frame",     OFFSET(reuseFirstFrame), AV_OPT_TYPE_INT,    {.i64 = 3}, 0,   1024, DEC },
     { NULL },
 };
 

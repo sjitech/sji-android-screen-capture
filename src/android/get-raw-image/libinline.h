@@ -90,12 +90,7 @@ public:
     inline Condition() {pthread_cond_init(&mCond, NULL);}
     inline ~Condition() {pthread_cond_destroy(&mCond);}
     inline status_t wait(Mutex& mutex) {return -pthread_cond_wait(&mCond, &mutex.mMutex);}
-    inline status_t waitRelative(Mutex& mutex, int64_t nanosec) {
-        struct timespec ts;
-        ts.tv_sec  = nanosec/1000000000;
-        ts.tv_nsec = nanosec%1000000000;
-        return -pthread_cond_timedwait_relative_np(&mCond, &mutex.mMutex, &ts);
-    }
+    inline status_t waitAbsMono(Mutex& mutex, const struct timespec *abstime) { return -pthread_cond_timedwait_monotonic_np(&mCond, &mutex.mMutex, abstime);}
     inline void signal() {pthread_cond_signal(&mCond);}
     inline void broadcast() {pthread_cond_broadcast(&mCond);}
 private:
