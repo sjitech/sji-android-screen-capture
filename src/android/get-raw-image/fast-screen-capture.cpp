@@ -18,8 +18,26 @@
 #include <time.h>
 #include <signal.h>
 #include <pthread.h>
+#include "libcutils.h"
+#include "libgui.h"
+#include "libui.h"
+#include "libskia.h"
+#include "libstagefright.h"
 
-#define LOG(fmt, arg...)           _LOG(fmt, ##arg)
+using namespace android;
+
+struct ASC_PRIV_DATA;
+struct ASC {
+    ASC_PRIV_DATA* priv_data;
+    char* data;
+    int size;
+    int w; //short size
+    int h; //long size
+    char pixfmtName[32];
+};
+
+#define LOG(fmt, arg...)         ({static bool __logged=false; if (needLog||!__logged){_LOG("%s" fmt "%s", needLog?"":"--------rare case--------", ##arg, needLog?"":"\n\n");__logged=true;}})
+#define LOGI(fmt, arg...)        LOG("--------" fmt "\n\n", ##arg)
 #define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
 #define ABORT_ERRNO(fmt, arg...) ({_LOG(fmt " [errno %d(%s)] Now exit", errno, strerror(errno), ##arg); exit(0);})
 
@@ -41,46 +59,6 @@ static void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
-#include "libcutils.h"
-#include "libgui.h"
-#include "libui.h"
-#include "libskia.h"
-#include "libstagefright.h"
-
-struct ASC_PRIV_DATA;
-struct ASC {
-    ASC_PRIV_DATA* priv_data;
-    char* data;
-    int size;
-    int w; //short size
-    int h; //long size
-    char pixfmtName[32];
-};
-
-using namespace android;
-
-static bool isFirstTime = true;
-static bool needLog = true;
-static Mutex mutex;
-static Condition cond;
-static sp<IBinder> __csBinder;
-// static sp<ISurfaceComposer> __cs;
-static sp<IBinder> mainDisp, virtDisp;
-class MyGraphicBufferProducer;
-static MyGraphicBufferProducer* bp;
-static bool alwaysRotate = false;
-// static Vector<ComposerState> _emptyComposerStates; //dummy
-// static Vector<DisplayState > _displayStates;
-// static DisplayState* virtDispState = NULL;
-static DisplayState* virtDispState = new DisplayState();
-#if (ANDROID_VER>=440)
-    static int TRANS_ID_GET_DISPLAY_INFO = 12;
-    static int TRANS_ID_SET_DISPLAY_STATE = 8;
-#elif (ANDROID_VER>=420)
-    static int TRANS_ID_GET_DISPLAY_INFO = 12;
-    static int TRANS_ID_SET_DISPLAY_STATE = 7;
-#endif
-
 #undef ENABLE_RESEND
 #if (ANDROID_VER<440)
     #define ENABLE_RESEND 1
@@ -97,30 +75,95 @@ static DisplayState* virtDispState = new DisplayState();
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
+static bool isFirstTime = true;
+static bool needLog = true;
+static Mutex mutex;
+static Condition cond;
+static sp<IBinder> __csBinder;
+// static sp<ISurfaceComposer> __cs;
+static sp<IBinder> mainDisp, virtDisp;
+class MyGraphicBufferProducer;
+static MyGraphicBufferProducer* bp;
+static bool alwaysRotate = false;
+// static Vector<ComposerState> _emptyComposerStates; //dummy
+// static Vector<DisplayState > _displayStates;
+// static DisplayState* virtDispState = NULL;
+static DisplayState* virtDispState = new DisplayState();
+static int TRANS_ID_GET_DISPLAY_INFO = 0;
+static int TRANS_ID_SET_DISPLAY_STATE = 0;
+
+struct CallbackStep {
+    int ind;
+    const char* name;
+};
+static CallbackStep bpSteps[1/*invalid step 0*/+32] = {0};
+static int bpStepMax = 0;
+
+
+
+typedef void* VADDR;
+typedef VADDR* PVTBL;
+#define PVTBL_OF(inst) (*((PVTBL*)(inst)))
+#define getVirtFuncIndex(f) _getVirtFuncIndex(0, f)
+static int _getVirtFuncIndex(int dummy, ...) {
+    int i;
+    va_list va;
+    va_start(va, dummy);
+    i = va_arg(va, int);
+    va_end(va);
+    return i/sizeof(VADDR);
+}
+
+#define INIT_NEXT_CALLBACK_STEP(virtFuncName) ({ \
+    if (++bpStepMax >= sizeof(bpSteps)/sizeof(bpSteps[0])-1) ABORT("too many bpSteps"); \
+    bpSteps[bpStepMax].ind = getVirtFuncIndex(&IGraphicBufferProducer::virtFuncName); \
+    bpSteps[bpStepMax].name = #virtFuncName; \
+})
+
+static void bpInitCallbackSteps() {
+    LOG("bpInitCallbackSteps");
+    INIT_NEXT_CALLBACK_STEP(query);
+    INIT_NEXT_CALLBACK_STEP(connect);
+    #if (ANDROID_VER<440)
+        INIT_NEXT_CALLBACK_STEP(setSynchronousMode);
+    #endif
+    INIT_NEXT_CALLBACK_STEP(dequeueBuffer);
+    INIT_NEXT_CALLBACK_STEP(requestBuffer);
+    INIT_NEXT_CALLBACK_STEP(queueBuffer);
+}
+
+static int bpCodeToVirtIndex(uint32_t code) {
+    static int diff = -1;
+    if (diff == -1)
+        diff = getVirtFuncIndex(&IGraphicBufferProducer::requestBuffer)-1/*code*/;
+    if (diff <= 0) ABORT("bad requestBuffer vindex");
+    return code + diff;
+}
+
 static int convertOrient(int orient) {
     return !alwaysRotate ? orient : orient==0 ? 1 : orient==1 ? 0 : orient==2 ? 3 : orient==3 ? 2 : 4;
 }
 
 static int getOrient() {
     DisplayInfo mainDispInfo;
-    if (needLog) LOG("getOrient");
+    LOG("raw getOrient");
     // status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
 
     Parcel data, reply;
     data.writeInterfaceToken(ISurfaceComposer::descriptor);
     data.writeStrongBinder(mainDisp);
-    __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
-    status_t err = reply.read(&mainDispInfo, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
+    status_t err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
+    err = err ? err : reply.read(&mainDispInfo, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
 
-    if (err) ABORT("getOrient err:%d", err);
-    if (needLog) LOG("getOrient result:%d", mainDispInfo.orientation);
+    if (err) ABORT("raw getOrient err:%d", err);
+    LOG("raw getOrient result:%d", mainDispInfo.orientation);
     return mainDispInfo.orientation;
 }
 
 static void setVirtDispOrient(int orient) {
     virtDispState->what = DisplayState::eDisplayProjectionChanged;
     virtDispState->orientation = convertOrient(orient);
-    if (isFirstTime) LOG("setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, orient);
+    LOGI("raw setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, orient);
     //Although specified No wait, but android 4.2 still cause wait max 5 seconds, so do not use ISurfaceComposer nor SurfaceComposerClient
     // status_t err = __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
 
@@ -132,8 +175,8 @@ static void setVirtDispOrient(int orient) {
     data.writeInt32(0/*flags*/);
     status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
 
-    if (err) ABORT("setXxxxState err:%d", err);
-    if (isFirstTime) LOG("setXxxxState OK");
+    if (err) ABORT("raw setXxxxState err:%d", err);
+    LOG("raw setXxxxState OK");
 }
 
 struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
@@ -153,7 +196,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int64_t mSeq;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
-        LOG("MyBufferQueue::ctor w:%d h:%d ++++++++++++++++++++++++++++++++", w, h);
+        LOG("MyBufferQueue::ctor w:%d h:%d", w, h);
         mWidth = w;
         mHeight = h;
         mInUsing = 0;
@@ -168,7 +211,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ ~MyGraphicBufferProducer() {
-        LOG("MyBufferQueue::dtor --------------------------------");
+        LOG("MyBufferQueue::dtor");
         delete mGBuf;
     }
 
@@ -196,9 +239,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     #endif
     {
         #if (ANDROID_VER>=440)
-            if (needLog) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x async %d", w, h, format, usage, async);
+            LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x async %d", w, h, format, usage, async);
         #elif (ANDROID_VER>=420)
-            if (needLog) LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
+            LOG("dequeueBuffer w:%d h:%d fmt:%d usg:0x%x", w, h, format, usage);
         #endif
         if (w != mWidth || h != mHeight) ABORT("dequeueBuffer w:%d!=%d h:%d!=%d", w, mWidth, h, mHeight);
 
@@ -214,7 +257,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
             LOG("getNativeBuffer");
             ANativeWindowBuffer* nb = mGBuf->getNativeBuffer();
-            LOG("getNativeBuffer result:%p w:%d h:%d f:%d stride:%d handle:%p", nb, nb->width, nb->height, nb->format, nb->stride, nb->handle);
+            LOGI("getNativeBuffer result:%p w:%d h:%d f:%d stride:%d handle:%p", nb, nb->width, nb->height, nb->format, nb->stride, nb->handle);
             mInternalWidth = nb->stride;
 
             LOG("lock gbuf");
@@ -234,7 +277,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/ status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
-        if (needLog) LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d transform:%d __seq:%lld", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform, ++mSeq);
+        LOG("queueBuffer %d fenceId:%d crop:%d %d %d %d scalingMode:%d transform:%d __seq:%lld", slot, input.fence==NULL?-1:input.fence->getFd(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform, ++mSeq);
         if (slot != 0) ABORT("queueBuffer slot:%d!=0", slot);
         output->width = mWidth;
         output->height = mHeight;
@@ -242,16 +285,17 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         output->numPendingBuffers = 0;
 
         int orient = getOrient();
+
+        AutoMutex autoLock(mutex);
+        mFence = input.fence;
+
         if (convertOrient(orient) != virtDispState->orientation) {
             setVirtDispOrient(orient);
-            mFence = input.fence;
             #if ENABLE_RESEND
                 if(lastTime.tv_sec) cond.signal(); //wake up resend thread
             #endif
         } else {
-            AutoMutex autoLock(mutex);
             mHaveData = true;
-            mFence = input.fence;
             #if ENABLE_RESEND
                 clock_gettime(CLOCK_MONOTONIC, &lastTime);
             #endif
@@ -273,19 +317,19 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         int err = 0;
         switch(what) {
         case NATIVE_WINDOW_WIDTH:
-            if (needLog) LOG("query NATIVE_WINDOW_WIDTH");
+            LOG("query NATIVE_WINDOW_WIDTH");
             *value = mWidth;
             break;
         case NATIVE_WINDOW_HEIGHT:
-            if (needLog) LOG("query NATIVE_WINDOW_HEIGHT");
+            LOG("query NATIVE_WINDOW_HEIGHT");
             *value = mHeight;
             break;
         case NATIVE_WINDOW_FORMAT:
-            if (needLog) LOG("query NATIVE_WINDOW_FORMAT");
+            LOG("query NATIVE_WINDOW_FORMAT");
             *value = mFormat;
             break;
         case NATIVE_WINDOW_CONSUMER_USAGE_BITS:
-            if (needLog) LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
+            LOG("query NATIVE_WINDOW_CONSUMER_USAGE_BITS");
             *value = mConsumerUsage;
             break;
         default:
@@ -325,17 +369,99 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     /*virtual*/status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
-        if (needLog) LOG("onTransact %d dataSize:%d", code, data.dataSize());
-        //todo: follow time sequence, determin each action id
+        LOG("onTransact %d dataSize:%d", code, data.dataSize());
+        #if 1 //(ANDROID_VER==420)
+            // analyse time sequence, determin each code
+            static int bpStepOfCode[32] = {0/*invalid step*/};
+            if (code > 0 && code < sizeof(bpStepOfCode)/sizeof(bpStepOfCode[0])) {
+                if (!bpStepOfCode[code]) { //every code will be handled once
+                    static int step = 0;
+                    if(++step <= bpStepMax) {
+                        LOGI("register code %d as step%d(%s)", code, step, bpSteps[step].name);
+                        bpStepOfCode[code] = step;
+
+                        int ind = bpCodeToVirtIndex(code);
+                        if (ind != bpSteps[step].ind) {
+                            LOG("need redirect");
+                            AutoMutex autoLock(mutex);
+                            static PVTBL old_vtbl = NULL;
+                            if (!old_vtbl) {
+                                LOG("prepare patch");
+                                old_vtbl = PVTBL_OF(this);
+                                // for(int i=-ghostCnt; i<normalCnt; i++) LOG("vtbl[%d]:%p", i, old_vtbl[i]);
+                                enum{ ghostCnt = 16, normalCnt=64};
+                                static VADDR new_vtbl[ghostCnt+normalCnt] = {0};
+                                memcpy(new_vtbl, old_vtbl-ghostCnt, sizeof(new_vtbl));
+                                LOG("patch vtbl:%p -> %p", old_vtbl, new_vtbl + ghostCnt);
+                                PVTBL_OF(this) = new_vtbl + ghostCnt;
+                            }
+
+                            LOG("redirect %p -> %p", PVTBL_OF(this)[ind], old_vtbl[bpSteps[step].ind]);
+                            PVTBL_OF(this)[ind] = old_vtbl[bpSteps[step].ind];
+                        }
+                    } else {
+                        ABORT("too many bpSteps");
+                    }
+                }
+            } else {
+                LOG("ignore code");
+                code = -1;
+            }
+        #endif
         status_t err = BnGraphicBufferProducer::onTransact(code, data, reply, flags);
         // LOG("onTransact %d result:%d", code, err);
         return err;
     }
 };
 
+static uint32_t sniffered_transact_code = 0;
+
+void sniffTransact(IBinder* binder) {
+    static VADDR old_addr = NULL;
+    static VADDR sniffer_addr = NULL;
+    static VADDR* p_cur_addr = NULL;
+
+    struct TransactSniffer {
+        virtual status_t transact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
+            LOGI("sniffered transact code: %d", code);
+            sniffered_transact_code = code;
+            LOG("stop sniff");
+            *p_cur_addr = old_addr;
+            return ((IBinder*)this)->transact(code, data, reply, flags);
+        }
+    };
+
+    if (!p_cur_addr) {
+        LOG("prepare patch");
+        PVTBL old_vtbl = PVTBL_OF(binder);
+        // for(int i=-ghostCnt; i<normalCnt; i++) LOG("vtbl[%d]:%p", i, old_vtbl[i]);
+        enum{ ghostCnt = 4, normalCnt=32};
+        static VADDR new_vtbl[ghostCnt+normalCnt] = {0};
+        memcpy(new_vtbl, old_vtbl-ghostCnt, sizeof(new_vtbl));
+        LOG("patch vtbl:%p -> %p", old_vtbl, new_vtbl + ghostCnt);
+        PVTBL_OF(binder) = new_vtbl + ghostCnt;
+
+        int ind = getVirtFuncIndex(&IBinder::transact);
+        if (ind >= normalCnt || ind <= 0) ABORT("bad transact vindex");
+        old_addr = old_vtbl[ind];
+        if (!old_addr) ABORT("bad transact addr");
+
+        TransactSniffer sniffer;
+        sniffer_addr = PVTBL_OF(&sniffer)[0];
+        if (!sniffer_addr) ABORT("bad sniffer addr");
+
+        p_cur_addr = &PVTBL_OF(binder)[ind];
+    }
+
+    LOG("start sniff");
+    *p_cur_addr = sniffer_addr;
+}
+
 void asc_init(ASC* asc) {
     status_t err;
     LOG("start. pid %d", getpid());
+
+    bpInitCallbackSteps();
 
     #if (ANDROID_VER>=430)
         //force loader fails in android 4.3, otherwise can not differ it with 4.4
@@ -357,11 +483,16 @@ void asc_init(ASC* asc) {
     if (mainDisp.get()==NULL) ABORT("getBuiltInDisplay err:unknown");
     LOG("mainDisp: %p", mainDisp.get());
 
+    sniffTransact(__csBinder);
+
     DisplayInfo mainDispInfo;
     LOG("getMainDisplayInfo");
     err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("getMainDisplayInfo err:%d", err);
-    LOG("try raw getMainDisplayInfo interface");
+
+    TRANS_ID_GET_DISPLAY_INFO = sniffered_transact_code;
+
+    LOG("raw getMainDisplayInfo");
     //some device use strange head file which put ISurfaceComposer::getMainDisplayInfo after getBuiltInDisplay so vptr index changed, so test here
     // err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
     {
@@ -370,24 +501,12 @@ void asc_init(ASC* asc) {
         data.writeInterfaceToken(ISurfaceComposer::descriptor);
         data.writeStrongBinder(mainDisp);
         err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
-        err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
-        if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h) {
-            LOG("raw getMainDisplayInfo interface is abnormal, retry with special interface ********");
-            TRANS_ID_GET_DISPLAY_INFO++;
-        }
-    }
-    {
-        DisplayInfo info; //todo: save stack
-        Parcel data, reply; //todo: save stack
-        data.writeInterfaceToken(ISurfaceComposer::descriptor);
-        data.writeStrongBinder(mainDisp);
-        err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
-        err = reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
+        err = err ? err : reply.read(&info, (size_t)(&((DisplayInfo*)NULL)->orientation+1));
         if (err || info.w != mainDispInfo.w || info.h != mainDispInfo.h)
             ABORT("raw getMainDisplayInfo interface is abnormal");
         mainDispInfo.orientation = info.orientation;
     }
-    if (err) ABORT("getMainDisplayInfo err:%d", err);
+    if (err) ABORT("raw getMainDisplayInfo err:%d", err);
     LOG("mainDispInfo: w:%d h:%d orient:%d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation);
 
     //sample mainDispInfo: {w:720, h:1280}
@@ -421,6 +540,19 @@ void asc_init(ASC* asc) {
     bp = new MyGraphicBufferProducer(capture_w, capture_h);
 
     LOG("prepare XxxxStates");
+    SurfaceComposerClient::openGlobalTransaction();
+    SurfaceComposerClient::setDisplaySurface(virtDisp, NULL);
+    SurfaceComposerClient::setDisplayProjection(virtDisp, 0, /*layerStackRect:*/mainViewPort, /*displayRect:*/virtViewPort);
+    SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
+
+    sniffTransact(__csBinder);
+
+    LOG("test setXxxxState");
+    SurfaceComposerClient::closeGlobalTransaction();
+
+    TRANS_ID_SET_DISPLAY_STATE = sniffered_transact_code;
+
+    LOG("prepare raw XxxxStates");
     // _displayStates.add();
     // virtDispState = _displayStates.editArray();
     virtDispState->what = DisplayState::eSurfaceChanged|DisplayState::eLayerStackChanged|DisplayState::eDisplayProjectionChanged;
@@ -430,26 +562,18 @@ void asc_init(ASC* asc) {
     virtDispState->viewport = mainViewPort;
     virtDispState->frame = virtViewPort;
     virtDispState->layerStack = 0;
-    LOG("setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, mainDispInfo.orientation);
-    #if 1
-        // __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
-        {
-            Parcel data;
-            data.writeInterfaceToken(ISurfaceComposer::descriptor);
-            data.writeInt32(0);
-            data.writeInt32(1);
-            virtDispState->write(data);
-            data.writeInt32(0/*flags*/);
-            status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
-            if (err) ABORT("setXxxxState err:%d", err);
-        }
-    #else
-        SurfaceComposerClient::openGlobalTransaction();
-        SurfaceComposerClient::setDisplaySurface(virtDisp, bp);
-        SurfaceComposerClient::setDisplayProjection(virtDisp, virtDispState.orientation, /*layerStackRect:*/mainViewPort, /*displayRect:*/virtViewPort);
-        SurfaceComposerClient::setDisplayLayerStack(virtDisp, 0);
-        SurfaceComposerClient::closeGlobalTransaction();
-    #endif
+    LOG("raw setXxxxState orient:%d (mainDisp.orient:%d)", virtDispState->orientation, mainDispInfo.orientation);
+    // __cs->setTransactionState(_emptyComposerStates, _displayStates, 0);
+    {
+        Parcel data;
+        data.writeInterfaceToken(ISurfaceComposer::descriptor);
+        data.writeInt32(0);
+        data.writeInt32(1);
+        virtDispState->write(data);
+        data.writeInt32(0/*flags*/);
+        status_t err = __csBinder->transact(TRANS_ID_SET_DISPLAY_STATE, data, NULL, 1/*TF_ONE_WAY*/);
+        if (err) ABORT("raw setXxxxState err:%d", err);
+    }
 }
 
 extern "C" void asc_capture(ASC* asc) {
@@ -466,12 +590,12 @@ extern "C" void asc_capture(ASC* asc) {
                 lastTime.tv_nsec -= 1000000000;
                 lastTime.tv_sec++;
             }
-            if (needLog) LOG("delay max %d ms for reuse data", RESEND_AFTER_NS/1000000);
+            LOG("delay max %d ms for reuse data", RESEND_AFTER_NS/1000000);
             if ((err=cond.waitAbsMono(mutex, &lastTime)) && err != -ETIMEDOUT) {
-                if (needLog) LOG("waitAbsMono err:%d", err);
+                LOG("waitAbsMono err:%d", err);
             }
             if (!bp->mHaveData) {
-                if (needLog) LOG("return previous data (seq:%lld) then continue capturing... ******** \n\n", seq);
+                LOGI("return previous data (seq:%lld) then continue capturing...", seq);
                 lastTime.tv_sec = 0;
                 return;
             }
@@ -479,14 +603,14 @@ extern "C" void asc_capture(ASC* asc) {
     #endif
 
     while ( !bp->mHaveData ) {
-        if (needLog) LOG("wait for data");
+        LOG("wait for data");
         cond.wait(mutex);
     }
-    if (needLog) LOG("got new data event");
+    LOG("got new data event");
     bp->mHaveData = false;
 
     if (bp->mFence && bp->mFence->isValid()) {
-         if (needLog) LOG("wait for fence");
+         LOG("wait for fence");
          bp->mFence->wait(-1);
     }
 
@@ -496,9 +620,9 @@ extern "C" void asc_capture(ASC* asc) {
                 lastTime.tv_nsec -= 1000000000;
                 lastTime.tv_sec++;
             }
-            if (needLog) LOG("delay max %d ms for read data", SEND_AFTER_NS/1000000);
+            LOG("delay max %d ms for read data", SEND_AFTER_NS/1000000);
             if ((err=cond.waitAbsMono(mutex, &lastTime)) && err != -ETIMEDOUT) {
-                if (needLog) LOG("waitAbsMono err:%d", err);
+                LOG("waitAbsMono err:%d", err);
             }
         #endif
     #endif
@@ -518,7 +642,7 @@ extern "C" void asc_capture(ASC* asc) {
     }
     
     seq++;
-    if (needLog) LOG("return data (seq:%lld) then continue capturing...\n\n", seq);
+    LOG("return data (seq:%lld) then continue capturing...", seq);
 
     if (isFirstTime) {
         if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
@@ -546,7 +670,7 @@ extern "C" void asc_capture(ASC* asc) {
         }
     #endif
 
-int main(int argc, char** argv){
+int main(int argc, char** argv) {
     #if 0
         mainThreadId = gettid();
         LOG("set sig handler for SIGINT, SIGHUP, SIGPIPE");
@@ -562,7 +686,7 @@ int main(int argc, char** argv){
     for(;;) {
         asc_capture(&asc);
         static int64_t seq = 0;
-        if (needLog) LOG("output image %lld ********", ++seq);
+        LOGI("output image %lld", ++seq);
         write(1, asc.data, asc.size);
         #if 0
             LOG("encode to jpeg");
