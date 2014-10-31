@@ -30,7 +30,7 @@
   "adbDeviceListUpdateInterval": 5, //get device list repeatedly at this interval
   "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
   "fpsStatisticInterval": 10, //output Fps statistic at this interval
-  "videoFileFrameRate": 10,
+  "videoFileFrameRate": 15,
   "resentImageForSafariAfter": 0.25,
   "resentUnchangedImageInterval": 10,
 
