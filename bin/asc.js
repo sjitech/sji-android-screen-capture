@@ -248,8 +248,8 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
 var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = [  'echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
   'echo', '====;', 'getevent' , '-pS;'];
 var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
-  'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '"mUnrestrictedScreen=|DisplayWidth=";',
-  'echo', '====;', './busybox', 'grep', '-Ec', '"^processor"', '/proc/cpuinfo;',
+  'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
+  'echo', '====;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
   'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
   '{', 'echo', '====;', './dlopen', './sc-420', './sc-400', './sc-220;',
   'echo', '====;', './dlopen', './fsc-440', './fsc-430', './fsc-420;', '}', '2>', cfg.androidLogPath, ';'
@@ -262,7 +262,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       log('[PrepareFileToDevice ' + dev.device + '] ' + status);
       dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
-    spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cat', cfg.androidWorkDir + '/version;', ADB_GET_DEV_BASIC_INFO_CMD_ARGS, ADB_GET_DEV_EXTRA_INFO_CMD_ARGS), function/*on_close*/(ret, stdout, stderr) {
+    spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cat', cfg.androidWorkDir + '/version;', ADB_GET_DEV_BASIC_INFO_CMD_ARGS, ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
@@ -283,7 +283,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'chmod', '755', cfg.androidWorkDir + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', cfg.androidWorkDir + '/version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('chmod', '755', cfg.androidWorkDir + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', cfg.androidWorkDir + '/version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
@@ -399,7 +399,7 @@ function setDeviceOrientation(dev, orientation) {
   spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')'), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(dev, q, force_ajpg) {
@@ -455,12 +455,12 @@ function chkCaptureParameter(dev, q, force_ajpg) {
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell',
+  var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
       '{', 'date', '>&2;', 'cd', cfg.androidWorkDir, '&&', './busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;', (cfg.logFfmpegDebugInfo ? ['export', 'ASC_LOG_ALL=1;'] : []),
       './ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.useFastCapture && dev.fastLibPath || dev.libPath,
       (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/, ';',
-      '}', '2>', cfg.androidLogPath
+      '}', '2>', cfg.androidLogPath).join(' ')
   ), function/*on_close*/() {
     capture === dev.capture && forEachValueIn(dev.consumerMap, endCaptureConsumer);
     capture === dev.capture && endCaptureProcess(dev);
@@ -692,8 +692,8 @@ function streamWeb_handler(req, res) {
               .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
               .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, sortedKeys.length - 1)
               .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, Math.max(q.fileindex - 1, 0))
-              .replace(/@fileSize_mp4\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.mp4').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
-              .replace(/@fileSize_webm\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.webm').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
+              .replace(/@fileSize_mp4\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.mp4').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
+              .replace(/@fileSize_webm\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.webm').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
               .replace(/_unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               , 'text/html');
         } else {
