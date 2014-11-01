@@ -3,7 +3,6 @@
 
 #include "libinline.h"
 #include "libcutils.h"
-#include <new>
 
 typedef uint16_t char16_t;
 extern "C" int strzcmp16(const char16_t *s1, size_t n1, const char16_t *s2, size_t n2);
