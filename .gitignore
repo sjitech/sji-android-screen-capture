@@ -9,4 +9,4 @@ out/*
 log/*
 desktop.ini
 coverage
-src/ndk_toolchain
+src/**/std_toolchain
