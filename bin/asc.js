@@ -983,7 +983,7 @@ function reloadResource() {
 reloadResource();
 spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], function/*on_close*/(ret) {
   if (ret !== 0) {
-    log('Failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add adb\'s dir into PATH env var or set full path of ffmpeg to "adb" in config.json or your own config file', {stderr: true});
+    log('Failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file', {stderr: true});
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(ret) {
