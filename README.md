@@ -24,7 +24,7 @@ New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.
 <b>New 2014/10/27: *****Found possibility to capture 30 screen per second in android 4.0-4.1*****</b><br>
 <br>
 Performance:
-<a href="https://www.youtube.com/watch?v=Db8nWJ1tVso&index=3&list=PLlyaJQbzuC5qUpsdetOwZtFuXEdDY4417">Youtube Video</a><br>
+<a href="https://www.youtube.com/watch?v=vSFaFC_asqo&list=PLlyaJQbzuC5qUpsdetOwZtFuXEdDY4417&index=2">Youtube Video</a><br>
 
 
 [Screenshot]
