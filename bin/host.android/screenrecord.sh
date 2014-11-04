@@ -16,7 +16,7 @@ log() {
 log "------------------- start recording `date` ----------------------"
 
 SIDE_DIR=../android
-chmod 755 ffmpeg* $SIDE_DIR/* || exit 1
+chmod 700 ffmpeg || exit 1
 
 OUTPUT_FILE="$1"; shift || { log "require arg2: output file path. Example: /sdcard/test.mp4"; exit 1; }
 FEED_FPS="$1"; shift || { log "require arg3: frames_per_second of raw image. Example: 4"; exit 1; }

@@ -283,7 +283,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('chmod', '755', cfg.androidWorkDir + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', cfg.androidWorkDir + '/version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('chmod', '700', cfg.androidWorkDir + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', cfg.androidWorkDir + '/version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
