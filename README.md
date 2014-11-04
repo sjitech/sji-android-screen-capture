@@ -1,6 +1,10 @@
 sji-android-screen-capture
 ==========================
 
+Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far all kinds of device, even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  If you really really want to buy this now, please concat osexp2003@gmail.com<br>
+
+==========================
+
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
 This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
 No Root Required: You need NOT root your android device)
