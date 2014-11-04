@@ -1,7 +1,8 @@
 sji-android-screen-capture
 ==========================
 
-Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far all kinds of device, even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  If you really really want to buy this now, please concat osexp2003@gmail.com<br>
+Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far all kinds of device, even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  <br>
+Only if you <b>really really</b> want to buy this now, please concat osexp2003@gmail.com  (Feel free to feedback with English/日本語/中国語!)<br>
 
 ==========================
 
@@ -15,8 +16,6 @@ New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on
 
 <b>
 New: We will enhance performance to 30 frames/second full screen in about 2 months, for android 4.2~4.4.  No root needed, just use adb.</b>
-
-<b>For private reason, we'v closed this project, if you are interested with this project or asking for bussiness support please contact osexp2003@gmail.com, Feel free to feedback with English/日本語/中国語!</b>
 
 <br>
 New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers<br>
