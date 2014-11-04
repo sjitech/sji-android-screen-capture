@@ -247,7 +247,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
 
 var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = [  'echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
   'echo', '====;', 'getevent' , '-pS;'];
-var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'cd', cfg.androidWorkDir, '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
+var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'umask', '077', ';', 'cd', cfg.androidWorkDir, '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
   'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
   'echo', '====;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
   'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
@@ -283,7 +283,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('chmod', '700', cfg.androidWorkDir + '/*', '&&', 'echo', prepareDeviceFile.ver, '>', cfg.androidWorkDir + '/version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }

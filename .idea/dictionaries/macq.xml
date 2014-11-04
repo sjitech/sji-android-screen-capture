@@ -82,6 +82,7 @@
       <w>touchmove</w>
       <w>touchstart</w>
       <w>typemark</w>
+      <w>umask</w>
       <w>vcodec</w>
       <w>vframes</w>
       <w>webm</w>
