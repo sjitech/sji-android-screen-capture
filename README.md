@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 <b>No kidding!</b> 
-Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 50 kinds of device, thereotically works on any device because i use a special way to detect system difference and atop it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  <br>
+Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 50 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  <br>
 <b>Only if you really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br>
 
 ==========================
