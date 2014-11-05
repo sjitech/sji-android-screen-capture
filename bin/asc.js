@@ -245,15 +245,15 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
   }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
-var ADB_GET_DEV_BASIC_INFO_CMD_ARGS = [  'echo', '====;', 'getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
-  'echo', '====;', 'getevent' , '-pS;'];
-var ADB_GET_DEV_EXTRA_INFO_CMD_ARGS = [ 'echo', '====;', 'umask', '077', ';', 'cd', cfg.androidWorkDir, '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
-  'echo', '====;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
-  'echo', '====;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
-  'echo', '====;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
-  '{', 'echo', '====;', './dlopen', './sc-420', './sc-400', './sc-220;',
-  'echo', '====;', './dlopen', './fsc-440', './fsc-430', './fsc-420;', '}', '2>', cfg.androidLogPath, ';'
-];
+var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
+  'echo', '===;', 'getevent' , '-pS;', //get touch device info
+  'echo', '===;', 'cd', cfg.androidWorkDir, '&&', 'cat', 'version', '||', 'exit;'];
+var cmd_getExtraInfo = [ 'echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
+  'echo', '===;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
+  'echo', '===;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
+  'echo', '===;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
+  '{', 'echo', '===;', './dlopen', './sc-420', './sc-400', './sc-220;',
+  'echo', '===;', './dlopen', './fsc-440', './fsc-430', './fsc-420;', '}', '2>', cfg.androidLogPath, ';'];
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
     log('[PrepareDeviceFile for ' + dev.device + '] begin');
@@ -262,32 +262,32 @@ function prepareDeviceFile(dev, force/*optional*/) {
       log('[PrepareFileToDevice ' + dev.device + '] ' + status);
       dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
-    spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cat', cfg.androidWorkDir + '/version;', ADB_GET_DEV_BASIC_INFO_CMD_ARGS, ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+    spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
-      var parts = stdout.trim().split(/\s*====\s*/);
-      if (parts.length !== 4 && parts.length !== 9) {
+      var parts = stdout.trim().split(/\s*===\s*/);
+      if (parts.length !== 3 && parts.length !== 9) {
         return on_complete('unknown error: failed to check device');
       }
       dev.CrCount = Math.max(0, stdout.match(/\r?\r?\n$/)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/); //in unix/linux this will be 0
-      dev.info = parts[1].split(/\r*\n/);
+      dev.info = parts[0].split(/\r*\n/);
       dev.sysVer = (dev.info[2] + '.0.0').split('.').slice(0, 3).join('.'); // 4.2 -> 4.2.0
       dev.armv = dev.info[3].slice(0, 9) === 'armeabi-v' && parseInt(dev.info[3].slice(9)) >= 7 ? 7 : 5; //armeabi-v7a -> 7
       dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
-      getTouchDeviceInfo(dev, parts[2]);
-      if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[0] === prepareDeviceFile.ver && !force) {
+      getTouchDeviceInfo(dev, parts[1]);
+      if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
         return on_complete('OK');
       }
       return spawn('[PushFileToDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'push', './android', cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', ADB_GET_DEV_EXTRA_INFO_CMD_ARGS).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
-          var parts = stdout.trim().split(/\s*====\s*/);
+          var parts = stdout.trim().split(/\s*===\s*/);
           if (parts.length !== 7) {
             return on_complete('unknown error: failed to finish preparing device file');
           } else if (parts[0]) {
@@ -302,7 +302,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
     }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckDevice
   }
 }
-function getMoreInfo(dev, ary/*result of ADB_GET_DEV_EXTRA_INFO_CMD_ARGS*/) {
+function getMoreInfo(dev, ary/*result of cmd_getExtraInfo*/) {
   (ary[1] = ary[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[1][1], ary[1][2]), h: Math.max(ary[1][1], ary[1][2])}) && [1, 2, 4, 5, 6, 7].forEach(function (i) {
     dev.disp[i] = {w: Math.ceil(dev.disp.w * i / 8 / 2) * 2, h: Math.ceil(dev.disp.h * i / 8 / 2) * 2};
   });
