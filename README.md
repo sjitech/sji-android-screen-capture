@@ -13,7 +13,7 @@ No Root Required: You need NOT root your android device)
 It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari, IE. Windows/Mac/Linux/Unix
 
 <br><br><br>
-<b>Note:We only capture screen when screen changed.</b>
+<b>Note:We only capture screen when screen changed.</b><br>
 <b>Note:Although we can capture screen in 30-60fps, we currently can not yet transimit fullscreen at same speed.  We will working on it. I think this is possible if use native MediaEncoder API</b>
 <br><br><br>
 
