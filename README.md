@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 <b>No kidding!</b> 
-New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player. But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  <br><br><br>
+New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player.  <br>We have not yet used hardware assisted video encoder so still can not transmit fullscreen size in 30fps, but smaller is faster(Acording to size, you can check youtube link below).  <br>But unfortunetely this project have been kept private. We will open the source later, i am not sure when.  <br><br><br>
 <b>Only if your company really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br><br>
 
 ==========================
@@ -25,7 +25,6 @@ New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers
 New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
 <b>New 2014/10/27: Successfully capture 30 screen per second in android 4.2-4.4, any size, clearly and almost 0% CPU usage!, but ffmpeg in android is too slow. I will try to optimize it or use native Media Encoder which is hardware assisted.</b><br>
 <b>New 2014/10/27: *****Found possibility to capture 30 screen per second in android 4.0-4.1*****</b><br>
-<b>New 2014/11/07: We will soon study on how to encode video into MPEG TS by native MediaEncoder and transmit it to browser</b><br>
 <b>New 2014/11/07: We have a plan to capture audio</b><br>
 <br>
 ==========================
