@@ -69,35 +69,73 @@ static bool needLog = true;
 #endif
 static char* blackscreen = NULL;
 
+#if MAKE_TRIAL==1
+static void chkDev() {
+    #if (ANDROID_VER>=400)
+        char key1[128] =  {0};
+        char key2[128] =  {0};
+        char m[256] = {0};
+        char v[256] = {0};
+        char m1[32] = {0};
+        char m2[32] = {0};
+        char v1[32] = {0};
+        char v2[32] = {0};
+        int i=0;
+        key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = '.'; key1[i++] = 'p'; key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'u'; key1[i++] = 'c'; key1[i++] = 't'; key1[i++] = '.'; key1[i++] = 'm'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'e'; key1[i++] = 'l'; 
+        i=0;
+        key2[i++] = 'r'; key2[i++] = 'o'; key2[i++] = '.'; key2[i++] = 'b'; key2[i++] = 'u'; key2[i++] = 'i'; key2[i++] = 'l'; key2[i++] = 'd'; key2[i++] = '.'; key2[i++] = 'v'; key2[i++] = 'e'; key2[i++] = 'r'; key2[i++] = 's'; key2[i++] = 'i'; key2[i++] = 'o'; key2[i++] = 'n'; key2[i++] = '.'; key2[i++] = 'r'; key2[i++] = 'e'; key2[i++] = 'l'; key2[i++] = 'e'; key2[i++] = 'a'; key2[i++] = 's'; key2[i++] = 'e';
+        i=0;
+        m1[i++] = 'M'; m1[i++] = 'D'; m1[i++] = '-'; m1[i++] = '1'; m1[i++] = '0'; m1[i++] = '0'; m1[i++] = '8'; m1[i++] = 'B';
+        i=0;
+        v1[i++] = '4'; v1[i++] = '.'; v1[i++] = '2'; v1[i++] = '.'; v1[i++] = '2';
+        i=0;
+        m2[i++] = 'M'; m2[i++] = 'I'; m2[i++] = ' '; m2[i++] = 'P'; m2[i++] = 'A'; m2[i++] = 'D';
+        i=0;
+        v2[i++] = '4'; v2[i++] = '.'; v2[i++] = '2'; v2[i++] = '.'; v2[i++] = '4';
+        property_get(key1, m, "");        LOG("[%s]", m);
+        property_get(key2, v, "");        LOG("[%s]", v);
+        if(0==strcmp(m, m1) && 0==strcmp(v, v1)) return;
+        if(0==strcmp(m, m2) && 0==strcmp(v, v2)) return;
+        ABORT("t m");
+    #endif
+}
+#endif
+
 extern "C" void asc_capture(ASC* asc) {
     int width, height, internal_width, bytesPerPixel, rawImageSize;
 
     if (isFirstTime) {
+        #if MAKE_TRIAL==1
+            if (time(NULL) >= 1416466615) ABORT("!");
+            chkDev();
+        #endif
         #if (ANDROID_VER>=400)
             #if (ANDROID_VER>=420)
                 ProcessState::self()->startThreadPool();
                 display = SurfaceComposerClient::getBuiltInDisplay(0 /*1 is hdmi*/);
-                if (display==NULL) ABORT("getBuiltInDisplay error");
+                if (display==NULL) ABORT("gbd e");
             #endif
         #else
-            LOG("open fb");
+            LOG("o f");
             fb = open("/dev/graphics/fb0", O_RDONLY);
-            if (fb < 0) ABORT_ERRNO("open fb0");
+            if (fb < 0) ABORT_ERRNO("o f");
             mapbase = NULL;
             lastMapSize = 0;
         #endif
     }
 
     #if (ANDROID_VER>=400)
-        if (needLog) LOG("capture(w:%d h:%d)", asc->width, asc->height);
+        if (needLog) LOG("c w %d h %d)", asc->width, asc->height);
         for(;;) {
-            #if (ANDROID_VER>=420)
+            #if (ANDROID_VER>=500)
+                status_t err = screenshot.update(display, Rect(), asc->width, asc->height, false);
+            #elif (ANDROID_VER>=420)
                 status_t err = screenshot.update(display, asc->width, asc->height);
             #else
                 status_t err = screenshot.update(asc->width, asc->height);
             #endif
             if(err) {
-                if (needLog) LOG("capture err:%d", err);
+                if (needLog) LOG("c e %d", err);
                 usleep(250*1000);
                 if (!isFirstTime) {
                     if (!blackscreen) {
@@ -128,10 +166,10 @@ extern "C" void asc_capture(ASC* asc) {
                 (bytesPerPixel==2) ? "rgb565le" :
                 (bytesPerPixel==5) ? "rgb48le" :
                 (bytesPerPixel==6) ? "rgba64le" :
-                (LOG("strange bytesPerPixel:%d", bytesPerPixel),"unknown"),
+                (LOG("s bbp %d", bytesPerPixel),"unknown"),
                 sizeof(asc->pixfmtName)-1);
 
-            LOG("capture result: %s imageSize:%d(w:%d h:%d bytesPerPixel:%d) internalW:%d fmt:%d",
+            LOG("c r %s is %d w %d h %d bbp %d iw %d f %d",
                 asc->pixfmtName, width*height*bytesPerPixel, width, height, bytesPerPixel, internal_width, screenshot.getFormat());
         }
 
@@ -146,9 +184,9 @@ extern "C" void asc_capture(ASC* asc) {
                 memmove(p1, p2, size1);
         }
     #else
-        if (needLog) LOG("ioctl FBIOGET_VSCREENINFO");
+        if (needLog) LOG("ic gv");
         struct fb_var_screeninfo vinfo;
-        if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ioctl fb0");
+        if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ic gv");
 
         width = vinfo.xres;
         height = vinfo.yres;
@@ -171,7 +209,7 @@ extern "C" void asc_capture(ASC* asc) {
                 (LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"),
                 sizeof(asc->pixfmtName)-1);
 
-            LOG("FBIOGET_VSCREENINFO result: %s imageSize:%d(w:%d h:%d bytesPerPixel:%d) virtualW:%d virtualH:%d"
+            LOG("gv r %s is %d w %d h %d bpp %d vw %d vh %d"
                 " bits:%d"
                 " R:(offset:%d length:%d msb_right:%d)"
                 " G:(offset:%d length:%d msb_right:%d)"
@@ -222,7 +260,7 @@ extern "C" void asc_capture(ASC* asc) {
     }
 }
 
-#if MAKE_TEST
+#if MAKE_TEST==1
 int main(){
     ASC asc;
     memset(&asc, 0, sizeof(ASC));

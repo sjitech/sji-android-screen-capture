@@ -4,15 +4,16 @@
 #include <dlfcn.h>
 
 int main(int argc, char** argv){
+    int ok = 0;
     int i;
     for (i = 1; i < argc; i++) {
         if (dlopen(argv[i], RTLD_NOW)) {
             printf("%s\n", argv[i]);
-            fprintf(stderr, "dlopen(%s): OK\n", argv[i]);
-            break;
+            fprintf(stderr, "%s: OK\n", argv[i]);
+            ok = 1;
         } else {
-            fprintf(stderr, "dlopen(%s): errno %d(%s) %s\n", argv[i], errno, strerror(errno), dlerror());
+            fprintf(stderr, "%s: %s\n", argv[i], dlerror());
         }
     }
-    return 0;
+    return ok ? 0 : -1;
 }

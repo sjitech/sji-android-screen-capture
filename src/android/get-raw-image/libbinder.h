@@ -111,14 +111,19 @@ class Parcel {
 public:
                         Parcel();
                         ~Parcel();
+    const uint8_t*      data() const;
     size_t              dataSize() const;
+    size_t              dataPosition() const;
+    size_t              dataAvail() const;
+    size_t              dataCapacity() const;
     status_t            writeInterfaceToken(const String16& interface);
     status_t            writeInt32(int32_t val);
     status_t            writeStrongBinder(const sp<IBinder>& val);
     status_t            read(void* outData, size_t len) const;
+    const void*         readInplace(size_t len) const;
     int32_t             readInt32() const;
 private:
-    char data[sizeof(void*)*32];
+    char _data[sizeof(void*)*32];
 };
 
 } //end of namespace android

@@ -36,9 +36,14 @@ sp<IServiceManager> android::defaultServiceManager() {}
 
                     Parcel::Parcel() {}
                     Parcel::~Parcel() {}
+const uint8_t*      Parcel::data() const {}
 size_t              Parcel::dataSize() const {}
+size_t              Parcel::dataAvail() const {}
+size_t              Parcel::dataPosition() const {}
+size_t              Parcel::dataCapacity() const {}
 status_t            Parcel::writeInterfaceToken(const String16& interface) {}
 status_t            Parcel::writeInt32(int32_t val) {}
 status_t            Parcel::writeStrongBinder(const sp<IBinder>& val) {}
 status_t            Parcel::read(void* outData, size_t len) const {}
+const void*         Parcel::readInplace(size_t len) const {}
 int32_t             Parcel::readInt32() const {}

@@ -16,4 +16,7 @@ TARGET_DIR=../../../bin/android
 echo ---------------make dlopen --------------------
 $CC dlopen.c -o $TARGET_DIR/dlopen || exit 1
 
+echo ---------------make dlopen \(PosIndependentExe\)--------------------
+$CC -pie -fPIE dlopen.c -o $TARGET_DIR/dlopen.pie || exit 1
+
 echo ""; echo ok; echo ""

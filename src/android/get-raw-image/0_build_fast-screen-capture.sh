@@ -17,8 +17,10 @@ mkdir bin 2>/dev/null
 rm -f *.so
 
 TARGET_DIR=../../../bin/android
+MAKE_TRIAL=0
 
-for v in 420 430 440; do
+t=0
+for v in 420 430 440 500; do
     echo ""
     echo ---------------android $v --------------------
 	for f in libgui libbinder libutils libcutils libui; do
@@ -27,10 +29,7 @@ for v in 420 430 440; do
 	done
 
 	echo ---------------make fsc-$v --------------------
-	$CC -DANDROID_VER=$v -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
-
-	echo ---------------make fsc-$v test launcher --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TEST=1 fast-screen-capture.cpp *.so -o bin/fsc-$v -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
 
 	rm -f *.so
 done

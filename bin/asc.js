@@ -252,8 +252,8 @@ var cmd_getExtraInfo = [ 'echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_
   'echo', '===;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
   'echo', '===;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
   'echo', '===;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
-  '{', 'echo', '===;', './dlopen', './sc-420', './sc-400', './sc-220;',
-  'echo', '===;', './dlopen', './fsc-440', './fsc-430', './fsc-420;', '}', '2>', cfg.androidLogPath, ';'];
+  '{', 'echo', '===;', './dlopen', './sc-*', '||', './dlopen.pie', './sc-*;',
+  'echo', '===;', './dlopen', './fsc-*', '||', './dlopen.pie', './fsc-*;', '}', '2>', cfg.androidLogPath, ';'];
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
     log('[PrepareDeviceFile for ' + dev.device + '] begin');
@@ -308,8 +308,8 @@ function getMoreInfo(dev, ary/*result of cmd_getExtraInfo*/) {
   });
   dev.cpuCount = Number(ary[2]) || 1;
   (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
-  dev.libPath = (ary[4].match(/(^|\r?\n)(\.\/sc-\d+)($|\r?\n)/) || {})[2];
-  dev.fastLibPath = (ary[5].match(/(^|\r?\n)(\.\/fsc-\d+)($|\r?\n)/) || {})[2];
+  dev.libPath = ary[4].split(/\r*\n/).sort().pop();
+  dev.fastLibPath = ary[5].split(/\r*\n/).sort().pop();
   return dev.libPath && dev.disp;
 }
 function getTouchDeviceInfo(dev, stdout) {
@@ -457,7 +457,7 @@ function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
   var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
       '{', 'date', '>&2;', 'cd', cfg.androidWorkDir, '&&', './busybox', 'stty', '-onlcr'/*disable LF->CRLF*/, '>&2', '||', 'exit;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;', (cfg.logFfmpegDebugInfo ? ['export', 'ASC_LOG_ALL=1;'] : []),
-      './ffmpeg.armv' + dev.armv, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+      './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.useFastCapture && dev.fastLibPath || dev.libPath,
       (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/, ';',
       '}', '2>', cfg.androidLogPath).join(' ')

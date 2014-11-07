@@ -24,11 +24,11 @@ echo ---------------android $v --------------------
 echo ---------------make sc-$v --------------------
 $CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
 
-t=0
+t=1
 for v in 400 420 500; do
     echo ""
     echo ---------------android $v --------------------
-	for f in libgui libbinder libutils; do
+	for f in libgui libbinder libutils libcutils; do
 		echo ---------------make $f.so --------------------
 		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done

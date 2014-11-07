@@ -17,24 +17,21 @@ mkdir bin 2>/dev/null
 rm -f *.so
 
 TARGET_DIR=../../../bin/android
+MAKE_TRIAL=0
 
-v=220
-echo ""
-echo ---------------android $v --------------------
-echo ---------------make sc-$v --------------------
-$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
-
-t=0
-for v in 400 420 500; do
+for v in 420 430 440 500; do
     echo ""
     echo ---------------android $v --------------------
-	for f in libgui libbinder libutils; do
+	for f in libgui libbinder libutils libcutils libui; do
 		echo ---------------make $f.so --------------------
 		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
 
-	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
+	echo ---------------make fsc-$v test launcher --------------------
+	$CC -DANDROID_VER=$v -DMAKE_TEST=1 fast-screen-capture.cpp *.so -o bin/fsc-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make fsc-$v test launcher \(PosIndependentExe\)--------------------
+	$CC -DANDROID_VER=$v -DMAKE_TEST=1 -pie -fPIE fast-screen-capture.cpp *.so -o bin/fsc-$v.pie -Xlinker -rpath=/system/lib || exit 1
 
 	rm -f *.so
 done

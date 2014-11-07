@@ -9,7 +9,9 @@ namespace android {
 class ScreenshotClient {
 public:
     ScreenshotClient();
-    #if (ANDROID_VER>=430)
+    #if (ANDROID_VER>=500)
+        status_t update(const sp<IBinder>& display, Rect sourceCrop, uint32_t reqWidth, uint32_t reqHeight, bool useIdentityTransform);
+    #elif (ANDROID_VER>=430)
         ~ScreenshotClient();
     #endif
     #if (ANDROID_VER>=420)
@@ -234,6 +236,9 @@ private:
                 Rect crop;
                 int scalingMode;
                 uint32_t transform;
+                #if (ANDROID_VER>=500)
+                    uint32_t stickyTransform;
+                #endif
                 int async;
                 sp<Fence> fence;
             #else
@@ -245,7 +250,12 @@ private:
                 sp<Fence> fence;
             #endif
         };
-        struct QueueBufferOutput {
+
+        struct
+        #if (ANDROID_VER>=500)
+            __attribute__ ((__packed__))
+        #endif
+        QueueBufferOutput {
             uint32_t width;
             uint32_t height;
             uint32_t transformHint;

@@ -21,25 +21,22 @@ TARGET_DIR=../../../bin/android
 v=220
 echo ""
 echo ---------------android $v --------------------
-echo ---------------make sc-$v --------------------
-$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
-
 echo ---------------make sc-$v test launcher --------------------
 $CC -DANDROID_VER=$v -DMAKE_TEST=1 get-raw-image.cpp -o bin/sc-$v -Xlinker -rpath=/system/lib || exit 1
 
-for v in 400 420; do
+for v in 400 420 500; do
     echo ""
     echo ---------------android $v --------------------
-	for f in libgui libbinder libutils libcutils; do
+	for f in libgui libbinder libutils; do
 		echo ---------------make $f.so --------------------
 		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
 	done
 
-	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
-
 	echo ---------------make sc-$v test launcher --------------------
 	$CC -DANDROID_VER=$v -DMAKE_TEST=1 get-raw-image.cpp *.so -o bin/sc-$v -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make sc-$v test launcher \(PosIndependentExe\)--------------------
+	$CC -DANDROID_VER=$v -DMAKE_TEST=1 -pie -fPIE get-raw-image.cpp *.so -o bin/sc-$v.pie -Xlinker -rpath=/system/lib || exit 1
 
 	rm -f *.so
 done
