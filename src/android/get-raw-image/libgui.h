@@ -281,6 +281,11 @@ private:
         #elif (ANDROID_VER>=420)
             virtual status_t dequeueBuffer(int *slot, sp<Fence>& fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage) = 0;
         #endif
+        #if (ANDROID_VER>=500)
+            virtual status_t detachBuffer(int slot) = 0;
+            virtual status_t detachNextBuffer(sp<GraphicBuffer>* outBuffer, sp<Fence>* outFence) = 0;
+            virtual status_t attachBuffer(int* outSlot, const sp<GraphicBuffer>& buffer) = 0;
+        #endif
         virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) = 0;
         #if (ANDROID_VER>=440)
             virtual void     cancelBuffer(int slot, const sp<Fence>& fence) = 0;
@@ -297,6 +302,10 @@ private:
             virtual status_t connect(int api, QueueBufferOutput* output) = 0;
         #endif
         virtual status_t disconnect(int api) = 0;
+        #if (ANDROID_VER>=500)
+            virtual status_t setSidebandStream(/*const sp<NativeHandle>&*/void* stream) = 0;
+            virtual void allocateBuffers(bool async, uint32_t width, uint32_t height, uint32_t format, uint32_t usage) = 0;
+        #endif
     };
 
     #if (ANDROID_VER>=430)

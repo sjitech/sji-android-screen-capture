@@ -217,12 +217,12 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mSeq = 0;
     }
 
-    /*virtual*/ ~MyGraphicBufferProducer() {
+    virtual ~MyGraphicBufferProducer() {
         LOG("bp d");
         delete mGBuf;
     }
 
-    /*virtual*/ status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) {
+    virtual status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) {
         LOG("rbf %d", slot);
         if (slot != 0) ABORT("rbf %d n 0", slot);
         if (mGBuf == NULL) ABORT("rbf bg n");
@@ -231,18 +231,18 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         return 0;
     }
 
-    /*virtual*/ status_t setBufferCount(int bufferCount) {
+    virtual status_t setBufferCount(int bufferCount) {
         if (bufferCount==1) LOG("sbc %d", bufferCount);
         else ABORT("sbc %d", bufferCount);
         return 0;
     }
 
     #if (ANDROID_VER>=440)
-        /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>* fence, bool async, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
+        virtual status_t dequeueBuffer(int *slot, sp<Fence>* fence, bool async, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
     #elif (ANDROID_VER>=430)
-        /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>* fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
+        virtual status_t dequeueBuffer(int *slot, sp<Fence>* fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
     #elif (ANDROID_VER>=420)
-        /*virtual*/ status_t dequeueBuffer(int *slot, sp<Fence>& fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
+        virtual status_t dequeueBuffer(int *slot, sp<Fence>& fence, uint32_t w, uint32_t h, uint32_t format, uint32_t usage)
     #endif
     {
         #if (ANDROID_VER>=440)
@@ -283,7 +283,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         return mIsGBufferRequested ? 0 : IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION;
     }
 
-    /*virtual*/ status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
+    virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
         LOG("q %d i %p o %p sq %lld", slot, &input, output, ++mSeq);
         LOG("_q f.p %p cr %d %d %d %d sm %d tr %d", input.fence.get(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
         LOG("_q f.f %d", input.fence==NULL?-1:input.fence->getFd());
@@ -293,8 +293,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
             output->height = mHeight;
             output->transformHint = 0;
             output->numPendingBuffers = 0;
-        } else {
-            LOG("q o 0");
         }
 
         int orient = getOrient();
@@ -318,15 +316,15 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     #if (ANDROID_VER>=440)
-        /*virtual*/ void cancelBuffer(int slot, const sp<Fence>& fence)
+        virtual void cancelBuffer(int slot, const sp<Fence>& fence)
     #elif (ANDROID_VER>=420)
-        /*virtual*/ void cancelBuffer(int slot, sp<Fence> fence)
+        virtual void cancelBuffer(int slot, sp<Fence> fence)
     #endif
     {
-        LOG("cb");
+        LOG("cb %d", slot);
     }
 
-    /*virtual*/ int query(int what, int* value) { //what is defined in window.h
+    virtual int query(int what, int* value) { //what is defined in window.h
         int err = 0;
         switch(what) {
         case NATIVE_WINDOW_WIDTH:
@@ -371,35 +369,41 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     #if (ANDROID_VER<440)
-    /*virtual*/ status_t setSynchronousMode(bool enabled) {
+    virtual status_t setSynchronousMode(bool enabled) {
         LOG("m %d", enabled);
         return 0;
     }
     #endif
 
     #if (ANDROID_VER>=440)
-        /*virtual*/ status_t connect(const sp<IBinder>& token, int api, bool producerControlledByApp, QueueBufferOutput* output)
+        virtual status_t connect(const sp<IBinder>& token, int api, bool producerControlledByApp, QueueBufferOutput* output)
     #elif (ANDROID_VER>=420)
-        /*virtual*/ status_t connect(int api, QueueBufferOutput* output)
+        virtual status_t connect(int api, QueueBufferOutput* output)
     #endif
     {
-        #if (ANDROID_VER>=440)
-            LOG("c %d %p %d", api, &token, producerControlledByApp);
-        #elif (ANDROID_VER>=420)
-            LOG("c %d", api);
-        #endif
-        output->width = mWidth;
-        output->height = mHeight;
-        output->transformHint = 0;
-        output->numPendingBuffers = 0;
+        LOG("c %d %p", api, output);
+        if (output) {
+            output->width = mWidth;
+            output->height = mHeight;
+            output->transformHint = 0;
+            output->numPendingBuffers = 0;
+        }
         return 0;
     }
 
-    /*virtual*/ status_t disconnect(int api) {
+    virtual status_t disconnect(int api) {
         LOG("dc");
     }
 
-    /*virtual*/status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
+    #if (ANDROID_VER>=500)
+        virtual status_t detachBuffer(int slot) {LOG("dtb %d", slot); return -EINVAL;}
+        virtual status_t detachNextBuffer(sp<GraphicBuffer>* outBuffer, sp<Fence>* outFence) {LOG("dtnb"); return -EINVAL;};
+        virtual status_t attachBuffer(int* outSlot, const sp<GraphicBuffer>& buffer) {LOG("atb"); return -EINVAL;};
+        virtual status_t setSidebandStream(/*const sp<NativeHandle>&*/void* stream) {LOG("ssbs"); return -EINVAL;};
+        virtual void allocateBuffers(bool async, uint32_t width, uint32_t height, uint32_t format, uint32_t usage) {LOG("atb");};
+    #endif
+
+    virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
         LOG("t %d ds %d", code, data.dataSize());
         #if 1 //(ANDROID_VER==420)
             // analyse time sequence, determin each code
