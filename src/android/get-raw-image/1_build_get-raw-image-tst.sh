@@ -23,28 +23,17 @@ for f in lib*.h; do
 done
 
 TARGET_DIR=../../../bin/android
-t=1
+t=0
 
 v=220
 echo ""
-echo ---------------make sc-$v --------------------
-$CC -DANDROID_VER=$v               -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
 echo ---------------make sc-$v test--------------------
 $CC -DANDROID_VER=$v -DMAKE_TEST=1 -fPIC -shared get-raw-image.cpp -o bin/sc-$v-test || exit 1
-echo ---------------make sc-$v std--------------------
-$CC -DANDROID_VER=$v -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp -o bin/sc-$v-std || exit 1
 
 for v in 400 420 500; do
     echo ""
-	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
-
 	echo ---------------make sc-$v tester--------------------
 	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_TEST=1 -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o bin/sc-$v-test -Xlinker -rpath=/system/lib || exit 1
-
-	echo ---------------make sc-$v std--------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o bin/sc-$v-std -Xlinker -rpath=/system/lib || exit 1
-
 done
 
 rm -f *.so

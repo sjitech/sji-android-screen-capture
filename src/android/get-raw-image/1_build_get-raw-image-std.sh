@@ -25,10 +25,16 @@ done
 TARGET_DIR=../../../bin/android
 t=0
 
-for v in 420 430 440 500; do
+v=220
+echo ""
+echo ---------------make sc-$v std--------------------
+$CC -DANDROID_VER=$v -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp -o bin/sc-$v-std || exit 1
+
+for v in 400 420 500; do
     echo ""
-	echo ---------------make fsc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared fast-screen-capture.cpp libgui.so libbinder.so libutils.so libcutils.so libui.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
+	echo ---------------make sc-$v std--------------------
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o bin/sc-$v-std -Xlinker -rpath=/system/lib || exit 1
+
 done
 
 rm -f *.so
