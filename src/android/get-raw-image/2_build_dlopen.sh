@@ -19,4 +19,10 @@ $CC dlopen.c -o $TARGET_DIR/dlopen || exit 1
 echo ---------------make dlopen \(PosIndependentExe\)--------------------
 $CC -pie -fPIE dlopen.c -o $TARGET_DIR/dlopen.pie || exit 1
 
+echo ---------------make dlcall --------------------
+$CC dlcall.c -o bin/dlcall || exit 1
+
+echo ---------------make dlcall \(PosIndependentExe\)--------------------
+$CC -pie -fPIE dlcall.c -o bin/dlcall.pie || exit 1
+
 echo ""; echo ok; echo ""

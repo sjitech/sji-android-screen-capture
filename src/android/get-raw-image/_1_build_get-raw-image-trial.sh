@@ -16,27 +16,37 @@ CC="$CC -fno-rtti -fno-exceptions"
 mkdir bin 2>/dev/null
 rm -f *.so
 
+for f in lib*.h; do
+    f="${f%.*}" #remove extension
+    echo ---------------make fake $f.so $v --------------------
+    $CC -fPIC -shared -x c++ /dev/null -o $f.so
+done
+
 TARGET_DIR=../../../bin/android
+t=1
 
 v=220
 echo ""
-echo ---------------android $v --------------------
 echo ---------------make sc-$v --------------------
-$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
+$CC -DANDROID_VER=$v               -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
+echo ---------------make sc-$v test--------------------
+$CC -DANDROID_VER=$v -DMAKE_TEST=1 -fPIC -shared get-raw-image.cpp -o bin/sc-$v-test || exit 1
+echo ---------------make sc-$v std--------------------
+$CC -DANDROID_VER=$v -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp -o bin/sc-$v-std || exit 1
 
-t=1
 for v in 400 420 500; do
     echo ""
-    echo ---------------android $v --------------------
-	for f in libgui libbinder libutils libcutils; do
-		echo ---------------make $f.so --------------------
-		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
-	done
-
 	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
 
-	rm -f *.so
+	echo ---------------make sc-$v tester--------------------
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_TEST=1 -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o bin/sc-$v-test -Xlinker -rpath=/system/lib || exit 1
+
+	echo ---------------make sc-$v std--------------------
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_STD=1  -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o bin/sc-$v-std -Xlinker -rpath=/system/lib || exit 1
+
 done
+
+rm -f *.so
 
 echo ""; echo ok; echo ""

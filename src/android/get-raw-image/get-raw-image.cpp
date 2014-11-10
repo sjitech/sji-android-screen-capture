@@ -264,11 +264,17 @@ extern "C" void asc_capture(ASC* asc) {
 }
 
 #if MAKE_TEST==1
-int main(){
-    ASC asc;
-    memset(&asc, 0, sizeof(ASC));
-    asc_capture(&asc);
-    write(1, asc.data, asc.size);
-    return 0;
-}
+    extern "C" int main(int argc, char** argv) {
+        ASC asc;
+        memset(&asc, 0, sizeof(ASC));
+        asc.width = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
+        asc.height = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
+
+        for(;;) {
+            asc_capture(&asc);
+            static int64_t seq = 0;
+            LOG("o i %lld", ++seq);
+            write(1, asc.data, asc.size);
+        }
+    }
 #endif

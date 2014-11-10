@@ -23,6 +23,9 @@
 #include "libui.h"
 #include "libskia.h"
 #include "libstagefright.h"
+#if MAKE_STD==1
+    #include <new>
+#endif
 
 using namespace android;
 
@@ -82,6 +85,7 @@ static Condition cond;
 static sp<IBinder> __csBinder;
 // static sp<ISurfaceComposer> __cs;
 static sp<IBinder> mainDisp, virtDisp;
+static int capture_w, capture_h;
 class MyGraphicBufferProducer;
 static MyGraphicBufferProducer* bp;
 static bool alwaysRotate = false;
@@ -600,7 +604,6 @@ static void asc_init(ASC* asc) {
     //sample mainDispInfo: {w:720, h:1280}
 
     LOG("o c r w %d h %d", asc->w, asc->h);
-    int capture_w, capture_h;
     if (!asc->w && !asc->h) {  //normal case
         capture_w = mainDispInfo.w;
         capture_h = mainDispInfo.h;
@@ -740,133 +743,140 @@ extern "C" void asc_capture(ASC* asc) {
 }
 
 #if MAKE_TEST==1
-    #if 0
-        static int mainThreadId = 0;
+    extern "C" int main(int argc, char** argv) {
+        ASC asc;
+        memset(&asc, 0, sizeof(ASC));
+        asc.w = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
+        asc.h = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
 
-        static void cleanup(const char* msg) {
-            if (gettid() == mainThreadId) ABORT("%s", msg);
+        for(;;) {
+            asc_capture(&asc);
+            static int64_t seq = 0;
+            LOGI("o i %lld", ++seq);
+            write(1, asc.data, asc.size);
+            #if 0
+                LOG("encode to jpeg");
+                SkData* streamData;
+                {
+                    SkBitmap b;
+                    if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*mBytesPerPixel)) ABORT("failed to setConfig");
+                    b.setPixels(mGBufData);
+                    SkDynamicMemoryWStream stream;
+                    if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 100)) ABORT("failed to encode to jpeg");
+                    LOG("get jpeg");
+                    streamData = stream.copyToData();
+                    write(1/*stdout*/, streamData->p, streamData->size);
+                }
+                delete streamData;
+            #endif
         }
+    }
+#endif
 
-        static void on_SIGPIPE(int signum) {
-            cleanup("pipe peer ended first, no problem");
-        }
-        static void on_SIGINT(int signum) {
-            cleanup("SIGINT(Ctl+C)");
-        }
-        static void on_SIGHUP(int signum) {
-            cleanup("SIGHUP(adb shell terminated)");
-        }
-    #endif
+#if MAKE_STD==1
+    static int mainThreadId = 0;
 
-int main(int argc, char** argv) {
-    #if 0
+    static void cleanup(const char* msg) {
+        if (gettid() == mainThreadId) ABORT("%s", msg);
+    }
+
+    static void on_SIGPIPE(int signum) {
+        cleanup("pipe peer ended first, no problem");
+    }
+    static void on_SIGINT(int signum) {
+        cleanup("SIGINT(Ctl+C)");
+    }
+    static void on_SIGHUP(int signum) {
+        cleanup("SIGHUP(adb shell terminated)");
+    }
+
+    extern "C" int main(int argc, char** argv) {
         mainThreadId = gettid();
         LOG("set sig handler for SIGINT, SIGHUP, SIGPIPE");
         signal(SIGINT, on_SIGINT);
         signal(SIGHUP, on_SIGHUP);
         signal(SIGPIPE, on_SIGPIPE);
-    #endif
 
-    ASC asc;
-    memset(&asc, 0, sizeof(ASC));
-    asc.w = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
-    asc.h = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
-    for(;;) {
+        ASC asc;
+        memset(&asc, 0, sizeof(ASC));
+        asc.w = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
+        asc.h = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
+
         asc_capture(&asc);
-        static int64_t seq = 0;
-        LOGI("o i %lld", ++seq);
-        write(1, asc.data, asc.size);
-        #if 0
-            LOG("encode to jpeg");
-            SkData* streamData;
-            {
-                SkBitmap b;
-                if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*mBytesPerPixel)) ABORT("failed to setConfig");
-                b.setPixels(mGBufData);
-                SkDynamicMemoryWStream stream;
-                if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 100)) ABORT("failed to encode to jpeg");
-                LOG("get jpeg");
-                streamData = stream.copyToData();
-                write(1/*stdout*/, streamData->p, streamData->size);
-            }
-            delete streamData;
+
+        status_t err;
+
+        sp<AMessage> format = new AMessage;
+        format->setInt32("width", capture_w);
+        format->setInt32("height", capture_h);
+        format->setString("mime", "video/x-vnd.on2.vp8");
+        format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
+        format->setInt32("bitrate", 4000000);
+        format->setFloat("frame-rate", 15);
+        format->setInt32("i-frame-interval", 2);
+
+        LOG("Creating ALooper");
+        sp<ALooper> looper = new ALooper;
+        looper->setName("screenrecord_looper");
+        LOG("Starting ALooper");
+        looper->start();
+
+        LOG("Creating codec");
+        sp<MediaCodec> codec = MediaCodec::CreateByType(looper, "video/x-vnd.on2.vp8", true/*encoder*/);
+        if (codec.get() == NULL)
+            ABORT("ERROR: unable to create video/avc codec instance\n");
+        LOG("configure codec");
+        static void* nullPtr = NULL;
+        #if (ANDROID_VER>=440)
+            err = codec->configure(format, *(sp<Surface>*)&nullPtr, *(sp<ICrypto>*)&nullPtr, 1/*CONFIGURE_FLAG_ENCODE*/);
+        #elif (ANDROID_VER>=420)
+            err = codec->configure(format, *(sp<SurfaceTextureClient>*)&nullPtr, *(sp<ICrypto>*)&nullPtr, 1/*CONFIGURE_FLAG_ENCODE*/);
         #endif
-    }
+        if (err)
+            ABORT("ERROR: unable to configure codec (err=%d)\n", err);
 
-#if 0
-    sp<AMessage> format = new AMessage;
-    format->setInt32("width", capture_w);
-    format->setInt32("height", capture_h);
-    format->setString("mime", "video/avc");
-    format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
-    format->setInt32("bitrate", 4000000);
-    format->setFloat("frame-rate", 60);
-    format->setInt32("i-frame-interval", 10);
+        LOG("Starting codec");
+        err = codec->start();
+        if (err)
+            ABORT("ERROR: unable to start codec (err=%d)\n", err);
 
-    LOG("Creating ALooper");
-    sp<ALooper> looper = new ALooper;
-    looper->setName("screenrecord_looper");
-    LOG("Starting ALooper");
-    looper->start();
+        Vector<sp<ABuffer> > buffers;
+        LOG("getOutputBuffers");
+        err = codec->getOutputBuffers(&buffers);
+        if (err)
+            ABORT("prepareEncoder ret:%d", err);
 
-    LOG("Creating codec");
-    sp<MediaCodec> codec = MediaCodec::CreateByType(looper, "video/avc", true);
-    if (codec.get() == NULL)
-        ABORT("ERROR: unable to create video/avc codec instance\n");
-    LOG("configure codec");
-    err = codec->configure(format, NULL, NULL, MediaCodec::CONFIGURE_FLAG_ENCODE);
-    if (err)
-        ABORT("ERROR: unable to configure codec (err=%d)\n", err);
+        while (true) {
+            size_t bufIndex, offset, size;
+            int64_t ptsUsec;
+            uint32_t flags;
 
-    LOG("Creating buffer producer");
-    sp<IGraphicBufferProducer> bufferProducer;
-    err = codec->createInputSurface(&bufferProducer);
-    if (err)
-        ABORT("ERROR: unable to create codec input surface (err=%d)\n", err);
+            LOG("dequeueOutputBuffer");
+            err = codec->dequeueOutputBuffer(&bufIndex, &offset, &size, &ptsUsec, &flags, 250000);
+            switch (err) {
+            case 0:
+                if ((flags & MediaCodec::BUFFER_FLAG_CODECCONFIG) != 0) {
+                    LOG("Got codec config buffer (%u bytes); ignoring", size);
+                    size = 0;
+                }
+                if (size != 0) {
+                    LOG("Got data in buffer %d, size=%d, pts=%lld", bufIndex, size, ptsUsec);
+                }
 
-    LOG("Starting codec");
-    err = codec->start();
-    if (err)
-        ABORT("ERROR: unable to start codec (err=%d)\n", err);
-
-    Vector<sp<ABuffer> > buffers;
-    LOG("getOutputBuffers");
-    err = codec->getOutputBuffers(&buffers);
-    if (err)
-        ABORT("prepareEncoder ret:%d", err);
-
-    while (true) {
-        size_t bufIndex, offset, size;
-        int64_t ptsUsec;
-        uint32_t flags;
-
-        LOG("dequeueOutputBuffer");
-        err = codec->dequeueOutputBuffer(&bufIndex, &offset, &size, &ptsUsec, &flags, 250000);
-        switch (err) {
-        case 0:
-            if ((flags & MediaCodec::BUFFER_FLAG_CODECCONFIG) != 0) {
-                LOG("Got codec config buffer (%u bytes); ignoring", size);
-                size = 0;
+                LOG("releaseOutputBuffer");
+                err = codec->releaseOutputBuffer(bufIndex);
+                LOG("releaseOutputBuffer ret:%d", err);
+                break;
+            default:
+                LOG("dequeueOutputBuffer ret:%d", err);
+                // exit(0);
+                // return err;
             }
-            if (size != 0) {
-                LOG("Got data in buffer %d, size=%d, pts=%lld", bufIndex, size, ptsUsec);
-            }
-
-            LOG("releaseOutputBuffer");
-            err = codec->releaseOutputBuffer(bufIndex);
-            LOG("releaseOutputBuffer ret:%d", err);
-            break;
-        default:
-            LOG("dequeueOutputBuffer ret:%d", err);
-            // exit(0);
-            // return err;
         }
-    }
 
-    LOG("joinThreadPool");
-    IPCThreadState::self()->joinThreadPool(/*isMain*/true);
-    ABORT("unexpected here");
-#endif
-    return 0;
-}
+        LOG("joinThreadPool");
+        IPCThreadState::self()->joinThreadPool(/*isMain*/true);
+        ABORT("unexpected here");
+        return 0;
+    }
 #endif
