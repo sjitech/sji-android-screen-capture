@@ -195,19 +195,22 @@ extern "C" void asc_capture(ASC* asc) {
         rawImageSize = (width*height) * bytesPerPixel;
 
         if (isFirstTime) {
-            strncpy(asc->pixfmtName, 
-                (vinfo.bits_per_pixel==32&&vinfo.red.offset==0) ? "rgb0" :
-                (vinfo.bits_per_pixel==32&&vinfo.red.offset!=0) ? "bgr0" :
-                (vinfo.bits_per_pixel==24&&vinfo.red.offset==0) ? "rgb24" :
-                (vinfo.bits_per_pixel==24&&vinfo.red.offset!=0) ? "bgr24" :
-                (vinfo.bits_per_pixel==16&&vinfo.red.offset==0) ? "rgb565le" :
-                (vinfo.bits_per_pixel==16&&vinfo.red.offset!=0) ? "bgr565le" :
-                (vinfo.bits_per_pixel==48&&vinfo.red.offset==0) ? "rgb48le" :
-                (vinfo.bits_per_pixel==48&&vinfo.red.offset!=0) ? "bgr48le" :
-                (vinfo.bits_per_pixel==64&&vinfo.red.offset==0) ? "rgba64le" :
-                (vinfo.bits_per_pixel==64&&vinfo.red.offset!=0) ? "bgra64le" :
-                (LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"),
-                sizeof(asc->pixfmtName)-1);
+            if (vinfo.transp.offset==0&&vinfo.bits_per_pixel==32&&vinfo.red.offset==8) strncpy(asc->pixfmtName,"0rgb", sizeof(asc->pixfmtName)-1);
+            else if (vinfo.transp.offset==0&&vinfo.bits_per_pixel==32&&vinfo.red.offset==24) strncpy(asc->pixfmtName,"0bgr", sizeof(asc->pixfmtName)-1);
+            else
+                strncpy(asc->pixfmtName,
+                    (vinfo.bits_per_pixel==32&&vinfo.red.offset==0) ? "rgb0" :
+                    (vinfo.bits_per_pixel==32&&vinfo.red.offset!=0) ? "bgr0" :
+                    (vinfo.bits_per_pixel==24&&vinfo.red.offset==0) ? "rgb24" :
+                    (vinfo.bits_per_pixel==24&&vinfo.red.offset!=0) ? "bgr24" :
+                    (vinfo.bits_per_pixel==16&&vinfo.red.offset==0) ? "rgb565le" :
+                    (vinfo.bits_per_pixel==16&&vinfo.red.offset!=0) ? "bgr565le" :
+                    (vinfo.bits_per_pixel==48&&vinfo.red.offset==0) ? "rgb48le" :
+                    (vinfo.bits_per_pixel==48&&vinfo.red.offset!=0) ? "bgr48le" :
+                    (vinfo.bits_per_pixel==64&&vinfo.red.offset==0) ? "rgba64le" :
+                    (vinfo.bits_per_pixel==64&&vinfo.red.offset!=0) ? "bgra64le" :
+                    (LOG("strange bits_per_pixel:%d", vinfo.bits_per_pixel),"unknown"),
+                    sizeof(asc->pixfmtName)-1);
 
             LOG("gv r %s is %d w %d h %d bpp %d vw %d vh %d"
                 " bits:%d"
