@@ -2,12 +2,12 @@
 using namespace android;
 
 ScreenshotClient::ScreenshotClient() {}
-#if (ANDROID_VER>=500)
-    status_t update(const sp<IBinder>& display, Rect sourceCrop, uint32_t reqWidth, uint32_t reqHeight, bool useIdentityTransform) {}
-#elif (ANDROID_VER>=430)
+#if (ANDROID_VER>=430)
     ScreenshotClient::~ScreenshotClient() {}
 #endif
-#if (ANDROID_VER>=420)
+#if (ANDROID_VER>=500)
+    status_t ScreenshotClient::update(const sp<IBinder>& display, Rect sourceCrop, uint32_t reqWidth, uint32_t reqHeight, bool useIdentityTransform) {}
+#elif (ANDROID_VER>=420)
     status_t ScreenshotClient::update(const sp<IBinder>& display) {}
     status_t ScreenshotClient::update(const sp<IBinder>& display, uint32_t reqWidth, uint32_t reqHeight) {}
 #elif (ANDROID_VER>=400)

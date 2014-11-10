@@ -1,4 +1,4 @@
-#if !defined(libstagefright) && ANDROID_VER>=400
+#if !defined(libstagefright) && ANDROID_VER>=420
 #define libstagefright
 
 #include "libstagefright_foundation.h"
@@ -13,6 +13,7 @@ struct SoftwareRenderer;
 class ICrypto;
 class Surface;
 class IGraphicBufferProducer;
+class SurfaceTextureClient;
 
 struct MediaCodec : public AHandler {
     enum ConfigureFlags {
@@ -27,8 +28,10 @@ struct MediaCodec : public AHandler {
 
     static sp<MediaCodec> CreateByType(const sp<ALooper> &looper, const char *mime, bool encoder);
     #if (ANDROID_VER>=440)
-        status_t configure(const sp<AMessage> &format, const sp<Surface> &nativeWindow, const sp<ICrypto> &crypto, uint32_t flags);
+        status_t configure(const sp<AMessage> &format, /*const sp<Surface> &*/void* nativeWindow, /*const sp<ICrypto> &*/void* crypto, uint32_t flags);
         status_t createInputSurface(sp<IGraphicBufferProducer>* bufferProducer);
+    #elif (ANDROID_VER>=420)
+        status_t configure(const sp<AMessage> &format, /*const sp<SurfaceTextureClient> &*/void* st, /*const sp<ICrypto> &*/void* crypto, uint32_t flags);
     #elif (ANDROID_VER>=440)
     #endif
     status_t start();
