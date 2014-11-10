@@ -25,7 +25,7 @@ for v in 420 430 440 500; do
     echo ---------------android $v --------------------
 	for f in libgui libbinder libutils libcutils libui; do
 		echo ---------------make $f.so --------------------
-		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
+		$CC -DANDROID_VER=$v -fPIC -shared -x c++ $f.h -o $f.so || exit 1
 	done
 
 	echo ---------------make fsc-$v --------------------

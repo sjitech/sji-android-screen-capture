@@ -30,7 +30,7 @@ for v in 400 420 500; do
     echo ---------------android $v --------------------
 	for f in libgui libbinder libutils; do
 		echo ---------------make $f.so --------------------
-		$CC -DANDROID_VER=$v -fPIC -shared $f.cpp -o $f.so || exit 1
+		$CC -DANDROID_VER=$v -fPIC -shared -x c++ $f.h -o $f.so || exit 1
 	done
 
 	echo ---------------make sc-$v --------------------
