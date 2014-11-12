@@ -31,7 +31,7 @@ struct AMessage : public RefBase {
 #if (ANDROID_VER>=440)
     void setString(const char *name, const char *s, int len = -1);
 #else
-    void setString(const char *name, const char *s, ssize_t len = -1);
+    void setString(const char *name, const char *s, long len = -1);
 #endif
 protected:
     virtual ~AMessage();

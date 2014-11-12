@@ -38,6 +38,7 @@ struct MediaCodec : public AHandler {
     status_t dequeueOutputBuffer(size_t *index, size_t *offset, size_t *size, int64_t *presentationTimeUs, uint32_t *flags, int64_t timeoutUs = 0ll);
     status_t releaseOutputBuffer(size_t index);
     status_t getOutputBuffers(Vector<sp<ABuffer> > *buffers) const;
+    status_t getInputBuffers(Vector<sp<ABuffer> > *buffers) const;
 protected:
     virtual ~MediaCodec();
     virtual void onMessageReceived(const sp<AMessage> &msg);

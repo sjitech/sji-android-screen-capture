@@ -256,6 +256,7 @@ public:
     void*           editArrayImpl();
     void*           editItemLocation(size_t index);
     void            finish_vector();
+    inline  size_t  size() const { return mCount; }
 protected:
     virtual void do_construct(void* storage, size_t num) const = 0;
     virtual void do_destroy(void* storage, size_t num) const = 0;
@@ -277,6 +278,7 @@ public:
     inline  ssize_t         add() {return VectorImpl::add();}
     inline  TYPE*           editArray() {return static_cast<TYPE *>(editArrayImpl());}
     inline  TYPE&           editItemAt(size_t index) {return *( static_cast<TYPE *>(editItemLocation(index)) );}
+    inline  size_t          size() const {return VectorImpl::size();}
 protected:
     virtual void do_construct(void* storage, size_t num) const { construct_type( reinterpret_cast<TYPE*>(storage), num ); }
     virtual void do_destroy(void* storage, size_t num) const { destroy_type( reinterpret_cast<TYPE*>(storage), num ); }

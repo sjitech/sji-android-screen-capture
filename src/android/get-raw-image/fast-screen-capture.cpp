@@ -805,15 +805,18 @@ extern "C" void asc_capture(ASC* asc) {
         asc_capture(&asc);
 
         status_t err;
+        // const char* vformat = "video/x-vnd.on2.vp8";
+        const char* vformat = "video/avc";
+        // const char* vformat = "video/mp4v-es";
 
         sp<AMessage> format = new AMessage;
         format->setInt32("width", capture_w);
         format->setInt32("height", capture_h);
-        format->setString("mime", "video/x-vnd.on2.vp8");
+        format->setString("mime", vformat);
         format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
         format->setInt32("bitrate", 4000000);
-        format->setFloat("frame-rate", 15);
-        format->setInt32("i-frame-interval", 2);
+        format->setFloat("frame-rate", 30);
+        format->setInt32("i-frame-interval", 1);
 
         LOG("Creating ALooper");
         sp<ALooper> looper = new ALooper;
@@ -822,9 +825,8 @@ extern "C" void asc_capture(ASC* asc) {
         looper->start();
 
         LOG("Creating codec");
-        sp<MediaCodec> codec = MediaCodec::CreateByType(looper, "video/x-vnd.on2.vp8", true/*encoder*/);
-        if (codec.get() == NULL)
-            ABORT("ERROR: unable to create video/avc codec instance\n");
+        sp<MediaCodec> codec = MediaCodec::CreateByType(looper, vformat, true/*encoder*/);
+        if (codec.get() == NULL) ABORT("ERROR: unable to create codec instance");
         LOG("configure codec");
         static void* nullPtr = NULL;
         #if (ANDROID_VER>=440)
@@ -832,19 +834,23 @@ extern "C" void asc_capture(ASC* asc) {
         #elif (ANDROID_VER>=420)
             err = codec->configure(format, *(sp<SurfaceTextureClient>*)&nullPtr, *(sp<ICrypto>*)&nullPtr, 1/*CONFIGURE_FLAG_ENCODE*/);
         #endif
-        if (err)
-            ABORT("ERROR: unable to configure codec (err=%d)\n", err);
+        if (err) ABORT("ERROR: unable to configure codec (err=%d)", err);
 
         LOG("Starting codec");
         err = codec->start();
-        if (err)
-            ABORT("ERROR: unable to start codec (err=%d)\n", err);
+        if (err) ABORT("ERROR: unable to start codec (err=%d)", err);
 
-        Vector<sp<ABuffer> > buffers;
+        Vector<sp<ABuffer> > obfs;
         LOG("getOutputBuffers");
-        err = codec->getOutputBuffers(&buffers);
-        if (err)
-            ABORT("prepareEncoder ret:%d", err);
+        err = codec->getOutputBuffers(&obfs);
+        if (err) ABORT("getOutputBuffers ret:%d", err);
+        LOG("obfs cnt %d", obfs.size());
+
+        Vector<sp<ABuffer> > ibfs;
+        LOG("getInputBuffers");
+        err = codec->getInputBuffers(&ibfs);
+        if (err) ABORT("getInputBuffers ret:%d", err);
+        LOG("ibfs cnt %d", ibfs.size());
 
         while (true) {
             size_t bufIndex, offset, size;
