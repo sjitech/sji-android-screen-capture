@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <signal.h>
+#include <termios.h>
 
 struct ASC_PRIV_DATA;
 struct ASC {
@@ -97,7 +98,7 @@ static void chkDev() {
 #endif
 
 extern "C" void asc_capture(ASC* asc) {
-    int width, height, internal_width, bytesPerPixel, rawImageSize;
+    int err, width, height, internal_width, bytesPerPixel, rawImageSize;
 
     if (isFirstTime) {
         #if MAKE_TRIAL==1
@@ -118,17 +119,28 @@ extern "C" void asc_capture(ASC* asc) {
             mapbase = NULL;
             lastMapSize = 0;
         #endif
+
+
+        if (isatty(STDOUT_FILENO)) {
+            LOG("iaty");
+            struct termios term;
+            if (tcgetattr(STDOUT_FILENO, &term)) ABORT_ERRNO("tga");
+            LOG("mkr");
+            cfmakeraw(&term);
+            LOG("tsa");
+            if (tcsetattr(STDOUT_FILENO, TCSANOW, &term)) ABORT_ERRNO("tsa");
+        }
     }
 
     #if (ANDROID_VER>=400)
         if (needLog) LOG("c w %d h %d)", asc->width, asc->height);
         for(;;) {
             #if (ANDROID_VER>=500)
-                status_t err = screenshot.update(display, Rect(), asc->width, asc->height, false);
+                err = screenshot.update(display, Rect(), asc->width, asc->height, false);
             #elif (ANDROID_VER>=420)
-                status_t err = screenshot.update(display, asc->width, asc->height);
+                err = screenshot.update(display, asc->width, asc->height);
             #else
-                status_t err = screenshot.update(asc->width, asc->height);
+                err = screenshot.update(asc->width, asc->height);
             #endif
             if(err) {
                 if (needLog) LOG("c e %d", err);

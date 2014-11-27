@@ -72,6 +72,7 @@
       <w>sigkill</w>
       <w>sigpipe</w>
       <w>startservice</w>
+      <w>stayon</w>
       <w>stdin</w>
       <w>stty</w>
       <w>sumatium</w>

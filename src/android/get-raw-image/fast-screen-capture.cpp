@@ -17,12 +17,17 @@
 #include <sys/time.h>
 #include <time.h>
 #include <signal.h>
+#include <termios.h>
 #include <pthread.h>
 #include "libcutils.h"
 #include "libgui.h"
 #include "libui.h"
 #include "libskia.h"
 #include "libstagefright.h"
+#if 0
+    #include "libpowermanager.h"
+    #error please include libpowermanager.so in build script
+#endif
 #if MAKE_STD==1
     #include "libutils_stl.h"
 #endif
@@ -627,6 +632,32 @@ static void asc_init(ASC* asc) {
     logicalFrameSize = capture_w*capture_h*BPP;
     alwaysRotate = (mainDispInfo.w < mainDispInfo.h) != (capture_w < capture_h);
     LOG("c c r w %d h %d ar %d", capture_w, capture_h, alwaysRotate);
+
+
+
+    if (isatty(STDOUT_FILENO)) {
+        LOG("iaty");
+        struct termios term;
+        if (tcgetattr(STDOUT_FILENO, &term)) ABORT_ERRNO("tga");
+        LOG("mkr");
+        cfmakeraw(&term);
+        LOG("tsa");
+        if (tcsetattr(STDOUT_FILENO, TCSANOW, &term)) ABORT_ERRNO("tsa");
+    }
+
+    #if 0
+        LOG("gsp");
+        sp<IBinder> __pm = defaultServiceManager()->getService(String16("power"));
+        sp<IPowerManager> pm = IPowerManager::asInterface(__pm);
+        sp<IBinder> tmpLocalObj = new BBinder();
+        LOG("awl");
+        #if (ANDROID_VER>=440)
+            err = pm->acquireWakeLock(1/*PARTIAL_WAKE_LOCK*/|0x10000000/*ACQUIRE_CAUSES_WAKEUP*/, tmpLocalObj, String16("asc"), String16("asc"));
+        #else
+            err = pm->acquireWakeLock(1/*PARTIAL_WAKE_LOCK*/|0x10000000/*ACQUIRE_CAUSES_WAKEUP*/, tmpLocalObj, String16("asc"));
+        #endif
+        if (err) LOGI("awl e %d", err);
+    #endif
 }
 
 static void asc_create_virtual_display() {

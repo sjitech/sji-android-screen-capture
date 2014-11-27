@@ -14,10 +14,9 @@ CC="$CC -fmax-errors=5"
 CC="$CC -fno-rtti -fno-exceptions"
 
 mkdir bin 2>/dev/null
-rm -f *.so
+rm -f *.so || exit 1
 
-for f in lib*.h; do
-    f="${f%.*}" #remove extension
+for f in libgui libbinder libutils libcutils libui libstagefright libstagefright_foundation; do
     echo ---------------make fake $f.so $v --------------------
     $CC -fPIC -shared -x c++ /dev/null -o $f.so
 done
@@ -28,7 +27,7 @@ t=0
 for v in 420 430 440 500; do
     echo ""
 	echo ---------------make fsc-$v standalone ver--------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_STD=1  -fPIC -shared fast-screen-capture.cpp libgui.so libbinder.so libutils.so libcutils.so libui.so libstagefright.so libstagefright_foundation.so -o bin/fsc-$v-std -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t -DMAKE_STD=1  -fPIC -shared fast-screen-capture.cpp *.so -o bin/fsc-$v-std -Xlinker -rpath=/system/lib || exit 1
 done
 
 rm -f *.so

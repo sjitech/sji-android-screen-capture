@@ -14,10 +14,9 @@ CC="$CC -fmax-errors=5"
 CC="$CC -fno-rtti -fno-exceptions"
 
 mkdir bin 2>/dev/null
-rm -f *.so
+rm -f *.so || exit 1
 
-for f in lib*.h; do
-    f="${f%.*}" #remove extension
+for f in libgui libbinder libutils; do
     echo ---------------make fake $f.so $v --------------------
     $CC -fPIC -shared -x c++ /dev/null -o $f.so
 done
@@ -33,7 +32,7 @@ $CC -DANDROID_VER=$v               -fPIC -shared get-raw-image.cpp -o $TARGET_DI
 for v in 400 420 500; do
     echo ""
 	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared get-raw-image.cpp libgui.so libbinder.so libutils.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
 done
 
 rm -f *.so
