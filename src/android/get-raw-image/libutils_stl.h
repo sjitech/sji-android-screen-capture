@@ -4,6 +4,8 @@
 #include "libutils.h"
 #include <new>
 
+namespace android {
+
 ///////////////////////////////////////////////////////////////////////////////
 //from TypeHelpers.h
 template <typename T> struct trait_trivial_ctor { enum { value = false }; };
