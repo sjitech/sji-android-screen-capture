@@ -39,6 +39,9 @@ struct MediaCodec : public AHandler {
     status_t releaseOutputBuffer(size_t index);
     status_t getOutputBuffers(Vector<sp<ABuffer> > *buffers) const;
     status_t getInputBuffers(Vector<sp<ABuffer> > *buffers) const;
+    status_t dequeueInputBuffer(size_t *index, int64_t timeoutUs = 0ll);
+    status_t queueInputBuffer(size_t index, size_t offset, size_t size, int64_t presentationTimeUs, uint32_t flags, AString *errorDetailMsg = NULL);
+
 protected:
     virtual ~MediaCodec();
     virtual void onMessageReceived(const sp<AMessage> &msg);
@@ -74,6 +77,7 @@ private:
     bool mHaveInputSurface;
     */
 };
+
 
 } //end of namespace android
 

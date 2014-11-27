@@ -10,6 +10,7 @@ struct ALooper : public RefBase {
     ALooper();
     status_t start(bool runOnCallingThread = false, bool canCallJava = false, int32_t priority = 0/*PRIORITY_DEFAULT*/);
     void setName(const char *name);
+    static int64_t GetNowUs();
 protected:
     virtual ~ALooper();
 private:
