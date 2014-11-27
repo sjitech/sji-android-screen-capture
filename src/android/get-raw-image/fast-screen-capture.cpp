@@ -24,7 +24,7 @@
 #include "libskia.h"
 #include "libstagefright.h"
 #if MAKE_STD==1
-    #include <new>
+    #include "libutils_stl.h"
 #endif
 
 using namespace android;
@@ -85,7 +85,8 @@ static Condition cond;
 static sp<IBinder> __csBinder;
 // static sp<ISurfaceComposer> __cs;
 static sp<IBinder> mainDisp, virtDisp;
-static int capture_w, capture_h;
+static DisplayInfo mainDispInfo;
+static int capture_w, capture_h, logicalFrameSize;
 class MyGraphicBufferProducer;
 static MyGraphicBufferProducer* bp;
 static bool alwaysRotate = false;
@@ -95,6 +96,12 @@ static bool alwaysRotate = false;
 static DisplayState* virtDispState = new DisplayState();
 static int TRANS_ID_GET_DISPLAY_INFO = 0;
 static int TRANS_ID_SET_DISPLAY_STATE = 0;
+#define BPP 4
+
+#if MAKE_STD==1
+    static sp<MediaCodec> codec;
+    static Vector<sp<ABuffer> > ibfs;
+#endif
 
 struct CallbackStep {
     int ind;
@@ -157,7 +164,6 @@ static int convertOrient(int orient) {
 
 static int getOrient() {
     LOG("r go");
-    // DisplayInfo mainDispInfo;
     // status_t err = __cs->getDisplayInfo(mainDisp, &mainDispInfo);
 
     Parcel data, reply;
@@ -201,7 +207,6 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     int mGBufUsage;
     char* mGBufData;
     int mInternalWidth;
-    int mBytesPerPixel;
     bool mHaveData;
     int mConsumerUsage;
     int64_t mSeq;
@@ -257,10 +262,13 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         if (w != mWidth || h != mHeight) LOG("d w h abn");
 
         if (mGBuf==NULL) {
+            if (format!=1 && format!=5) ABORT("f %d u", format);
             mFormat = format;
+            int bpp = bytesPerPixel(format);
+            if (bpp != BPP) ABORT("bpp %d u", bpp);
+
             mGBufUsage = (usage&~GRALLOC_USAGE_SW_READ_MASK)|mConsumerUsage;
-            mBytesPerPixel = bytesPerPixel(format);
-            LOG("bbp %d", mBytesPerPixel);
+
             LOG("cr gb");
             mGBuf = new GraphicBuffer(mWidth, mHeight, mFormat, mGBufUsage);
             if (mGBuf==NULL) ABORT("n gb e");
@@ -577,7 +585,6 @@ static void asc_init(ASC* asc) {
 
     sniffTransact(__csBinder);
 
-    DisplayInfo mainDispInfo;
     LOG("gd");
     err = SurfaceComposerClient::getDisplayInfo(mainDisp, &mainDispInfo);
     if (err) ABORT("gdi e %d", err);
@@ -617,9 +624,13 @@ static void asc_init(ASC* asc) {
         capture_w = toEvenInt(asc->w);
         capture_h = toEvenInt(asc->h);
     }
+    logicalFrameSize = capture_w*capture_h*BPP;
     alwaysRotate = (mainDispInfo.w < mainDispInfo.h) != (capture_w < capture_h);
     LOG("c c r w %d h %d ar %d", capture_w, capture_h, alwaysRotate);
+}
 
+static void asc_create_virtual_display() {
+    status_t err;
     Rect mainViewPort, virtViewPort;
     mainViewPort.right = mainViewPort.bottom = max(mainDispInfo.w, mainDispInfo.h);
     virtViewPort.right = virtViewPort.bottom = max(capture_w, capture_h);
@@ -672,8 +683,10 @@ extern "C" void asc_capture(ASC* asc) {
     AutoMutex autoLock(mutex);
     static int64_t seq = 0;
 
-    if (isFirstTime)
+    if (isFirstTime) {
         asc_init(asc);
+        asc_create_virtual_display();
+    }
 
     #if ENABLE_RESEND
         if (!bp->mHaveData && !isFirstTime && lastTime.tv_sec) { //if there are data need be resent
@@ -705,30 +718,11 @@ extern "C" void asc_capture(ASC* asc) {
          bp->mFence->wait(-1);
     }
 
-    #if 0
-        #if ENABLE_RESEND
-            if ((lastTime.tv_nsec += SEND_AFTER_NS) >= 1000000000) {
-                lastTime.tv_nsec -= 1000000000;
-                lastTime.tv_sec++;
-            }
-            LOG("delay max %d ms for read data", SEND_AFTER_NS/1000000);
-            if ((err=cond.waitAbsMono(mutex, &lastTime)) && err != -ETIMEDOUT) {
-                LOG("waitAbsMono err:%d", err);
-            }
-        #endif
-    #endif
-
     if (isFirstTime) {
         asc->w = bp->mInternalWidth;
         asc->h = bp->mHeight;
-        if (bp->mBytesPerPixel!=4) {
-            ABORT("bpp %d u", bp->mBytesPerPixel);
-        }
-        if (bp->mFormat!=1 && bp->mFormat!=5) {
-            ABORT("f %d u", bp->mFormat);
-        }
         strcpy(asc->pixfmtName, bp->mFormat==1?"rgb0":"bgr0");
-        asc->size = bp->mInternalWidth*bp->mHeight*bp->mBytesPerPixel;
+        asc->size = bp->mInternalWidth*bp->mHeight*BPP;
         asc->data = bp->mGBufData;
     }
     
@@ -759,7 +753,7 @@ extern "C" void asc_capture(ASC* asc) {
                 SkData* streamData;
                 {
                     SkBitmap b;
-                    if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*mBytesPerPixel)) ABORT("failed to setConfig");
+                    if (!b.setConfig(SkBitmap::kARGB_8888_Config, mWidth, mHeight, mInternalWidth*BPP)) ABORT("failed to setConfig");
                     b.setPixels(mGBufData);
                     SkDynamicMemoryWStream stream;
                     if (!SkImageEncoder::EncodeStream(&stream, b, SkImageEncoder::kJPEG_Type, 100)) ABORT("failed to encode to jpeg");
@@ -774,6 +768,59 @@ extern "C" void asc_capture(ASC* asc) {
 #endif
 
 #if MAKE_STD==1
+    static void* thread_feed_input(void* thd_param) {
+        for(;;) {
+            status_t err;
+            AutoMutex autoLock(mutex);
+            static int64_t seq = 0;
+
+
+            LOG("codec->dequeueInputBuffer")
+            int ibfs_index;
+            err = codec->dequeueInputBuffer(&ibfs_index);
+            if (err) ABORT('codec->dequeueInputBuffer err %d', err);
+
+
+            while ( !bp->mHaveData ) {
+                LOG("w 4 d");
+                cond.wait(mutex);
+            }
+            LOG("g n d e");
+            bp->mHaveData = false;
+
+            if (bp->mFence && bp->mFence->isValid()) {
+                 LOG("w 4 f");
+                 bp->mFence->wait(-1);
+            }
+
+            LOG("copy data to codec input buf")
+            if (bp->mInternalWidth==bp->mWidth) {
+                memcpy(ibfs->get(ibfs_index)->base(), mGBufData, logicalFrameSize);
+            } else {
+                char* p1 = ibfs.get(ibfs_index)->base();
+                char* p2 = bp->mGBufData;
+                int size1 = bp->mWidth*BPP;
+                int size2 = bp->mInternalWidth*BPP;
+                for (int h=0; h < height; h++, p2 += size2, p1+= size1)
+                    memmove(p1, p2, size1);
+            }
+
+            LOG("codec->queueInputBuffer")
+            err = codec->queueInputBuffer(slot, 0, logicalFrameSize, ALooper::GetNowUs(), 0);
+            if (err) ABORT("codec->queueInputBuffer err %d", err);
+
+            seq++;
+            LOG("r d sq:%lld t c c...", seq);
+
+            if (isFirstTime) {
+                if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
+                    needLog = false;
+                isFirstTime = false;
+            }
+        }
+    }
+
+
     static int mainThreadId = 0;
 
     static void cleanup(const char* msg) {
@@ -791,6 +838,8 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     extern "C" int main(int argc, char** argv) {
+        status_t err;
+
         mainThreadId = gettid();
         LOG("set sig handler for SIGINT, SIGHUP, SIGPIPE");
         signal(SIGINT, on_SIGINT);
@@ -802,9 +851,8 @@ extern "C" void asc_capture(ASC* asc) {
         asc.w = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
         asc.h = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
 
-        asc_capture(&asc);
+        asc_init(asc);
 
-        status_t err;
         // const char* vformat = "video/x-vnd.on2.vp8";
         const char* vformat = "video/avc";
         // const char* vformat = "video/mp4v-es";
@@ -825,7 +873,7 @@ extern "C" void asc_capture(ASC* asc) {
         looper->start();
 
         LOG("Creating codec");
-        sp<MediaCodec> codec = MediaCodec::CreateByType(looper, vformat, true/*encoder*/);
+        codec = MediaCodec::CreateByType(looper, vformat, true/*encoder*/);
         if (codec.get() == NULL) ABORT("ERROR: unable to create codec instance");
         LOG("configure codec");
         static void* nullPtr = NULL;
@@ -846,11 +894,14 @@ extern "C" void asc_capture(ASC* asc) {
         if (err) ABORT("getOutputBuffers ret:%d", err);
         LOG("obfs cnt %d", obfs.size());
 
-        Vector<sp<ABuffer> > ibfs;
         LOG("getInputBuffers");
         err = codec->getInputBuffers(&ibfs);
         if (err) ABORT("getInputBuffers ret:%d", err);
         LOG("ibfs cnt %d", ibfs.size());
+
+        pthread_t thd_feed_input;
+        err = pthread_create(&thd_feed_input, NULL, thread_feed_input, NULL); 
+        if (err) ABORT("pthread_create err %d", err);
 
         while (true) {
             size_t bufIndex, offset, size;
