@@ -95,7 +95,6 @@ protected:
 class IServiceManager : public IInterface {
 public:
     virtual const String16& getInterfaceDescriptor() const;
-    IServiceManager();
     virtual ~IServiceManager();
 
     virtual sp<IBinder>         getService( const String16& name) const = 0;

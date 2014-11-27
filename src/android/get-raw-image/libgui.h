@@ -131,7 +131,6 @@ private:
     class IGraphicBufferAlloc : public IInterface {
     public:
         virtual const String16& getInterfaceDescriptor() const;
-        IGraphicBufferAlloc();
         virtual ~IGraphicBufferAlloc();
 
         virtual sp<GraphicBuffer> createGraphicBuffer(uint32_t w, uint32_t h, PixelFormat format, uint32_t usage, status_t* error) = 0;
@@ -144,7 +143,6 @@ private:
     public:
         static const android::String16 descriptor;
         virtual const String16& getInterfaceDescriptor() const;
-        ISurfaceComposer();
         virtual ~ISurfaceComposer();
         static sp<ISurfaceComposer> asInterface(const sp<IBinder>& obj);
 
@@ -264,11 +262,9 @@ private:
 
         #if (ANDROID_VER>=430)
             virtual const String16& getInterfaceDescriptor() const;
-            IGraphicBufferProducer();
             virtual ~IGraphicBufferProducer();
         #elif (ANDROID_VER>=420)
             virtual const String16& getInterfaceDescriptor() const;
-            ISurfaceTexture();
             virtual ~ISurfaceTexture();
         #endif
 
