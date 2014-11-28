@@ -888,7 +888,10 @@ function adminWeb_handler(req, res) {
       return scheduleUpdateLiveUI();
     case '/getServerLog':  //------------------------------get server log---------------------------------------------
       q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
-      if (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE) || q.mode === 'tail' && !(q._fileSize = getFileSizeSync(q._logFilePath))) {
+      if (!(q._fileSize = getFileSizeSync(q._logFilePath))) {
+        return end(res, chk.err);
+      }
+      if (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)) {
         return end(res, chk.err);
       }
       q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
@@ -898,7 +901,7 @@ function adminWeb_handler(req, res) {
           i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
         });
       }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(q.device));
-      return fs.createReadStream(q._logFilePath, q.mode ? {start: q.mode === 'tail' ? q._fileSize - q.size : 0, end: q.mode === 'tail' ? q._fileSize - 1 : q.size - 1} : null)
+      return fs.createReadStream(q._logFilePath, {start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0, end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1) })
           .on('error',function (err) {
             end(res, stringifyError(err));
           }).pipe(res);
