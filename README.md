@@ -5,7 +5,7 @@ sji-android-screen-capture
 New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player.  <br>We have not yet used hardware assisted video encoder so still can not transmit fullscreen size in 30fps, but smaller is faster(Acording to size, you can check youtube link below).  <br><br>But sorry...this project have been kept private. We will open the source later, i am not sure when.  <br><br><br>
 <b>Only if your company really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br><br>
 
-<b>New: I can provide an online demo site for you to operate my android device remotely temporarily</b><br><br>
+<b>New: I can provide a experience site for you to view and touch my android device remotely</b><br><br>
 ==========================
 
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
