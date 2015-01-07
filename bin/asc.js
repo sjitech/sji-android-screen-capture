@@ -222,7 +222,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
             (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + device);
             dev.status === ERR_DEV_NOT_FOUND && scheduleUpdateWholeUI();
             dev.status === ERR_DEV_NOT_FOUND && (dev.status = dev.touchStatus = '');
-            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status) && prepareDeviceFile(dev, mode === 'forcePrepare');
+            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status || dev.isOsStartingUp) && prepareDeviceFile(dev, mode === 'forcePrepare');
             dev._status = _status;
           }
         }
@@ -303,6 +303,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
   }
 }
 function getMoreInfo(dev, ary/*result of cmd_getExtraInfo*/) {
+  dev.isOsStartingUp = (ary[1] === "Can't find service: window");
   (ary[1] = ary[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(ary[1][1], ary[1][2]), h: Math.max(ary[1][1], ary[1][2])}) && [1, 2, 4, 5, 6, 7].forEach(function (i) {
     dev.disp[i] = {w: Math.ceil(dev.disp.w * i / 8 / 2) * 2, h: Math.ceil(dev.disp.h * i / 8 / 2) * 2};
   });
