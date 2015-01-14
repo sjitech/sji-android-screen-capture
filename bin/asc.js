@@ -400,7 +400,7 @@ function setDeviceOrientation(dev, orientation) {
   spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 0, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(dev, q, force_ajpg) {
