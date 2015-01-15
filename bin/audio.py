@@ -17,36 +17,50 @@ def main():
 
     serial_number = dev.serial_number
     log("Device Serial: "+dev.serial_number + " " +dev.manufacturer + " "+dev.product)
+    dev = None
 
+    did_set_audio_mode = False
     start_tm = time.time()
     while True:
-        dev = usb.core.find(custom_match = lambda d: d.serial_number==serial_number and d.idProduct in ANDROID_AUDIO_ID_LIST);
-        if dev is None:
-            log("No compatible device not found")
-            sys.exit(1)
+        try:
+            for _dev in usb.core.find(find_all=True, custom_match = lambda d: d.idVendor in ANDROID_VENDOR_ID_LIST):
+                if _dev.serial_number == serial_number:
+                    dev = _dev
+                    break
 
-        if dev.idProduct in ANDROID_AUDIO_ID_LIST:
-            log("device is already in audio mode")
-        else:
-            log("set to audio mode")
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 2, "d") == 1 #description 
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 3, "v") == 1 #version
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 4, "u") == 1 #url
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 5, "s") == 1 #serialNumber   
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 58, 1, 0, "") == 0  #set stereo audio
-            assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 53, 0, 0, "") == 0  #accessory_start
+            if dev != None:
+                if dev.idProduct in ANDROID_AUDIO_ID_LIST:
+                    if not did_set_audio_mode: log("device is already in audio mode")
+                elif not did_set_audio_mode:
+                    log("set to audio mode")
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 2, "d") == 1 #description 
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 3, "v") == 1 #version
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 4, "u") == 1 #url
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 52, 0, 5, "s") == 1 #serialNumber   
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 58, 1, 0, "") == 0  #set stereo audio
+                    assert dev.ctrl_transfer( usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT, 53, 0, 0, "") == 0  #accessory_start
+                    did_set_audio_mode = True
 
-        cfg = dev.get_active_configuration()
-        intf = usb.util.find_descriptor(cfg, bInterfaceNumber = 1, bAlternateSetting=1)
-        # log("intf: "+str(intf))
-        if intf != None:
-            ep_in = usb.util.find_descriptor( intf, custom_match = lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN )
-            # log("Endpoint: "+str(ep_in))
-            if ep_in != None: break
+                cfg = dev.get_active_configuration()
+                intf = usb.util.find_descriptor(cfg, bInterfaceNumber = 1, bAlternateSetting=1)
+                # log("intf: "+str(intf))
+                if intf != None:
+                    ep_in = usb.util.find_descriptor( intf, custom_match = lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN )
+                    # log("Endpoint: "+str(ep_in))
+                    if ep_in != None: break
 
-        if time.time() - start_tm >= 2:
+        except usb.core.USBError as e:
+            pass
+
+        if time.time() - start_tm >= 5:
             log("time out")
             sys.exit(1)
+        
+        time.sleep(0.25)
+
+    if dev == None:
+        log("No compatible device not found")
+        sys.exit(1)
 
     dev.set_interface_altsetting(interface=1, alternate_setting=1)
 
