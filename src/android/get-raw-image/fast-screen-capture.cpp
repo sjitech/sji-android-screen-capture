@@ -67,16 +67,14 @@ static void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
-#undef ENABLE_RESEND
-#if (ANDROID_VER<440)
-    #define ENABLE_RESEND 1
-#endif
+#define ENABLE_RESEND 1
 
 #if ENABLE_RESEND 
-    static struct timespec lastTime = {0};
-    // #define SEND_AFTER_NS  ((int)(0.005*1000000000))
-    #define SEND_AFTER_NS  0
-    #define RESEND_AFTER_NS ((int)(1000000000*0.25-SEND_AFTER_NS))
+    struct timespec origTime = {0};
+    struct timespec lastRereadTime = {0};
+    static int resend_count = 0;
+    #define RESEND_INTERVAL_NS ((int)(1000000000*0.25))
+    #define RESEND_COUNT 2
 #endif
 
 #define toEvenInt(n) ((int)(ceil(((float)(n))/2)*2))
@@ -319,13 +317,11 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
         if (convertOrient(orient) != virtDispState->orientation) {
             setVirtDispOrient(orient);
-            #if ENABLE_RESEND
-                if(lastTime.tv_sec) cond.signal(); //wake up resend thread
-            #endif
         } else {
             mHaveData = true;
             #if ENABLE_RESEND
-                clock_gettime(CLOCK_MONOTONIC, &lastTime);
+                clock_gettime(CLOCK_MONOTONIC, &origTime);
+                resend_count = 0;
             #endif
             cond.signal(); //anyway wake up main or resend thread
         }
@@ -720,19 +716,30 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     #if ENABLE_RESEND
-        if (!bp->mHaveData && !isFirstTime && lastTime.tv_sec) { //if there are data need be resent
-            if ((lastTime.tv_nsec += RESEND_AFTER_NS) >= 1000000000) {
-                lastTime.tv_nsec -= 1000000000;
-                lastTime.tv_sec++;
-            }
-            LOG("dl mx %d ms 4 ru d", RESEND_AFTER_NS/1000000);
-            if ((err=cond.waitAbsMono(mutex, &lastTime)) && err != -ETIMEDOUT) {
-                LOG("w err:%d", err);
-            }
-            if (!bp->mHaveData) {
-                LOGI("rt pr d sq %lld  t c c...", seq);
-                lastTime.tv_sec = 0;
-                return;
+        if (!isFirstTime && !bp->mHaveData && resend_count < RESEND_COUNT) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if ( (now.tv_sec-origTime.tv_sec)*1000000000 + (now.tv_nsec-origTime.tv_nsec) >= RESEND_INTERVAL_NS*RESEND_COUNT) {
+                if (resend_count == 0) {
+                    LOGI("rt pr d rs lst sq %lld t c c...", seq);
+                    resend_count = RESEND_COUNT;
+                    return; //this cause caller reuse previous buffer pointer which contents maybe has been changed
+                }
+            } else {
+                struct timespec untilTime = (resend_count==0) ? origTime : lastRereadTime;
+                if ((untilTime.tv_nsec += RESEND_INTERVAL_NS) >= 1000000000) {
+                    untilTime.tv_nsec -= 1000000000;
+                    untilTime.tv_sec++;
+                }
+                LOG("dl mx %d ms 4 ru d", ((untilTime.tv_sec-now.tv_sec)*1000000000 + (untilTime.tv_nsec-now.tv_nsec))/1000000);
+                if ((err=cond.waitAbsMono(mutex, &untilTime)) == -ETIMEDOUT) {
+                    LOGI("rt pr d rs sq %lld  t c c...", seq);
+                    resend_count++;
+                    #if RESEND_COUNT > 1
+                        clock_gettime(CLOCK_MONOTONIC, &lastRereadTime);
+                    #endif
+                    return; //this cause caller reuse previous buffer pointer which contents maybe has been changed
+                }
             }
         }
     #endif
