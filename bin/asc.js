@@ -16,7 +16,7 @@ var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: i
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture'];
+var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture', 'alsoRecordAsWebM'];
 true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
@@ -407,10 +407,7 @@ function chkCaptureParameter(dev, q, force_ajpg) {
   if (dev && dev.status !== 'OK' && (chk.err = 'error: device not ready')
       || !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
       || q.scale && !(q._sz = q.scale.match(/^([1-9]\d{1,3})[xX:]([1-9]\d{1,3})$|^([1-9]\d{1,3})[xX:]Auto$|^Auto[xX:]([1-9]\d{1,3})$/i)) && !((q._scaleFactor = Number(q.scale)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`scale`: must be in pattern "9999x9999" or "9999xAuto" or "Auto' + 'x9999" or resize factor from 0.1 to 1')
-      || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])
-      || dev && !chk('fastResize', (q.fastResize = q.fastResize || cfg.fastResize.toString()), ['true', 'false'])
-      || dev && !chk('useFastCapture', (q.useFastCapture = q.useFastCapture || cfg.useFastCapture.toString()), ['true', 'false'])
-      ) {
+      || q.rotate && !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])) {
     return false;
   }
   q.scale = q.scale || '';
@@ -422,8 +419,8 @@ function chkCaptureParameter(dev, q, force_ajpg) {
     q._sz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : !q.scale ? {w: dev.disp.w, h: dev.disp.h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
     q._sz = {w: Math.min(dev.disp.w, Math.ceil((q._sz.w || q._sz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._sz.h || q._sz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
 
-    q.useFastCapture = (q.useFastCapture === 'true') && !!dev.fastLibPath;
-    q.fastResize = (q.fastResize === 'true') && (q.useFastCapture || dev.libPath >= './sc-400');
+    q.useFastCapture = (q.useFastCapture === undefined ? cfg.useFastCapture : (q.useFastCapture === 'true')) && !!dev.fastLibPath;
+    q.fastResize = (q.fastResize === undefined ? cfg.fastResize : (q.fastResize === 'true')) && (q.useFastCapture || dev.libPath >= './sc-400');
     if (q.fastResize) { //resize image by hardware
       var r = Math.max(q._sz.w * 8 / dev.disp.w, q._sz.h * 8 / dev.disp.h);
       q._sz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
@@ -538,16 +535,17 @@ function endCaptureProcess(dev) {
   scheduleUpdateLiveUI();
 }
 function doRecord(dev, q/*same as capture*/) {
+  q.webm = (q.webm === undefined ? cfg.alsoRecordAsWebM : (q.webm === 'true'));
   var src = querystring.escape(q.device) + '~rec_' + q._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
   dev.recordingFileTimestampSet[q.timestamp] = true;
   var childProc = spawn('[REC ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
       '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
-      (cfg.alsoRecordAsWebM ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
+      (q.webm ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
-    dev.subOutputDir && cfg.alsoRecordAsWebM && !(q.webm === 'false') && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
+    dev.subOutputDir && q.webm && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
     delete dev.recordingFileTimestampSet[q.timestamp];
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
   childProc.stdin.__feedConvertTimer = setInterval(function () {
@@ -556,7 +554,7 @@ function doRecord(dev, q/*same as capture*/) {
   childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
   childProc.stdin.__tag = REC_TAG;
   doCapture(dev, childProc.stdin, q);
-  return 'OK: ' + src + '.mp4' + (cfg.alsoRecordAsWebM ? ' ' + src + '.webm' : '');
+  return 'OK: ' + src + '.mp4' + (q.webm ? ' ' + src + '.webm' : '');
 }
 
 function scheduleUpdateLiveUI() {
