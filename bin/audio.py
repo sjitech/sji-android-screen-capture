@@ -86,16 +86,18 @@ def main():
     intf.set_altsetting()
 
     log("OK, start read. wMaxPacketSize:"+str(ep_in.wMaxPacketSize))
-    buf = usb.util.create_buffer(ep_in.wMaxPacketSize*128)
-    n = 0
+
+    buf = usb.util.create_buffer(ep_in.wMaxPacketSize*16)
+
     while True:
+        n = 0
         try:
             n = ep_in.read(buf, 10000)
         except usb.core.USBError as e:
             if e.errno != errno.ETIMEDOUT:
-                log("read err "+ str(e) + " backend_error_code:"+str(e.backend_error_code))
+                log("read err "+ str(e))
                 exit(1)
-        if n:
+        if n > 0:
             log("read "+str(n) + " bytes")
             buf.tofile(sys.stdout)
  
