@@ -89,10 +89,10 @@ static sp<IBinder> __csBinder;
 // static sp<ISurfaceComposer> __cs;
 static sp<IBinder> mainDisp, virtDisp;
 static DisplayInfo mainDispInfo;
+static bool internal_w_gt_h = false;
 static int capture_w, capture_h, logicalFrameSize;
 class MyGraphicBufferProducer;
 static MyGraphicBufferProducer* bp;
-static bool alwaysRotate = false;
 // static Vector<ComposerState> _emptyComposerStates; //dummy
 // static Vector<DisplayState > _displayStates;
 // static DisplayState* virtDispState = NULL;
@@ -155,7 +155,22 @@ static int bpCodeToVirtIndex(uint32_t code) {
 }
 
 static int convertOrient(int orient) {
-    return !alwaysRotate ? orient : orient==0 ? 1 : orient==1 ? 0 : orient==2 ? 3 : orient==3 ? 2 : 4;
+    enum {
+        R90          = 1,
+        R180         = 2,
+        R270         = 3
+    };
+    if (internal_w_gt_h) {
+        if (capture_w < capture_h)
+            return orient==0 ? R270 : orient==R270 ? 0 : orient==R180 ? R90 : orient==R90 ? R180 : orient;
+        else
+            return orient;
+    } else { //this is the normal case
+        if (capture_w > capture_h)
+            return orient==0 ? R90 : orient==R90 ? 0 : orient==R180 ? R270 : orient==R270 ? R180 : orient;
+        else //this is the normal case
+            return orient;
+    }
 }
 
 #if (ANDROID_VER>=500)
@@ -609,6 +624,14 @@ static void asc_init(ASC* asc) {
     }
     LOG(".r gd w %d h %d o %d", mainDispInfo.w, mainDispInfo.h, mainDispInfo.orientation);
 
+    if (mainDispInfo.w > mainDispInfo.h) {
+        LOGI("i w gt h");
+        int h = mainDispInfo.h;
+        mainDispInfo.h = mainDispInfo.w;
+        mainDispInfo.w = h;
+        internal_w_gt_h = true;
+    }
+
     //sample mainDispInfo: {w:720, h:1280}
 
     LOG("o c r w %d h %d", asc->w, asc->h);
@@ -626,8 +649,7 @@ static void asc_init(ASC* asc) {
         capture_h = toEvenInt(asc->h);
     }
     logicalFrameSize = capture_w*capture_h*BPP;
-    alwaysRotate = (mainDispInfo.w < mainDispInfo.h) != (capture_w < capture_h);
-    LOG("c c r w %d h %d ar %d", capture_w, capture_h, alwaysRotate);
+    LOG("c c r w %d h %d ar", capture_w, capture_h);
 
 
 
