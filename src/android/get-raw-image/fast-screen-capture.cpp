@@ -155,21 +155,17 @@ static int bpCodeToVirtIndex(uint32_t code) {
 }
 
 static int convertOrient(int orient) {
-    enum {
-        R90          = 1,
-        R180         = 2,
-        R270         = 3
-    };
-    if (internal_w_gt_h) {
-        if (capture_w < capture_h)
-            return orient==0 ? R270 : orient==R270 ? 0 : orient==R180 ? R90 : orient==R90 ? R180 : orient;
-        else
+    //orient: 1=90 2=180 3=270
+    if (internal_w_gt_h) { //sample device: FUJITSU F-02F 4.2.2
+        if (capture_w < capture_h) //normal case: draw in portrait canvas
+            return (orient+1)%4;
+        else //special case: draw in landscape canvas
             return orient;
-    } else { //this is the normal case
-        if (capture_w > capture_h)
-            return orient==0 ? R90 : orient==R90 ? 0 : orient==R180 ? R270 : orient==R270 ? R180 : orient;
-        else //this is the normal case
+    } else { //this is for normal device
+        if (capture_w < capture_h) //normal case: draw in portrait canvas
             return orient;
+        else //special case: draw in landscape canvas
+            return (orient+3)%4;
     }
 }
 
@@ -191,7 +187,7 @@ static int getOrient() {
     if (err) ABORT("r go e %d", err);
     if (reply.dataSize() < MIN_DISP_INFO_SIZE) ABORT("r go s t l");
     DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD);
-    LOG("r go o %d", info->orientation);
+    LOGI("r go o %d", info->orientation);
     return info->orientation;
 }
 
