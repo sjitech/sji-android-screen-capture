@@ -1,6 +1,6 @@
 var AscUtil = {showEventsOnly: false, debug: false};
 
-(function () {
+(function ($) {
   'use strict';
   AscUtil.setTouchHandler = function (liveImage, touchServerUrl, rootRotator) {
     var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
@@ -10,7 +10,14 @@ var AscUtil = {showEventsOnly: false, debug: false};
     !typeMap && console.log({changedTouches: null, touches: null}); //just to avoid compiler warning
 
     $liveImage
-        .unbind('mousedown touchstart dragstart')
+        .unbind('mousedown touchstart dragstart mouseenter mouseout')
+        .on('mouseenter.detect_input_focus', function () {
+          AscUtil.url_sendKey = touchServerUrl.replace(/touch\?/, 'sendKey?');
+          AscUtil.url_sendText = touchServerUrl.replace(/touch\?/, 'sendText?');
+        })
+        .on('mouseout.detect_input_focus', function () {
+          AscUtil.url_sendKey = AscUtil.url_sendText = null;
+        })
         .on('mousedown', function (e) { //touch handler for desktop browser
           if (e.which === 3) return; //skip right button
           saveOrSendMouseAction(e);
@@ -18,9 +25,9 @@ var AscUtil = {showEventsOnly: false, debug: false};
               .on('mousemove', function (e) {
                 saveOrSendMouseAction(e);
               })
-              .on('mouseup mouseout', function (e) {
+              .on('mouseup mouseout.detect_click_or_move', function (e) {
                 saveOrSendMouseAction(e);
-                $liveImage.unbind('mousemove mouseup mouseout');
+                $liveImage.unbind('mousemove mouseup mouseout.detect_click_or_move');
               })
           ;
         })
@@ -57,6 +64,48 @@ var AscUtil = {showEventsOnly: false, debug: false};
           return false; //e.preventDefault() has no effect
         })
     ;
+
+    if (!AscUtil.textQueue) {
+      AscUtil.keyQueue = [];
+      AscUtil.textQueue = [];
+
+      $(document.body).unbind('keydown.live_input keypress.live_input')
+          .on('keydown.live_input', function (e) {
+            if (!AscUtil.url_sendKey) return; //do nothing if mouse is not inside some live image
+            var c = e.which === 0xd ? 66/*KEYCODE_ENTER*/ : e.which === 0x8 ? 67 /*KEYCODE_DEL*/ : e.which === 0x2e ? 112 /*KEYCODE_FORWARD_DEL*/ : 0;
+            if (!c) return;
+            AscUtil.keyQueue.push(c) && AscUtil.keyQueue.length === 1 && sendKey();
+            e.preventDefault();
+
+            function sendKey() {
+              if (!AscUtil.keyQueue.length) return;
+              $.ajax(AscUtil.url_sendKey + '&keyCode=' + AscUtil.keyQueue.shift(), {timeout: 3000})
+                  .done(function () {
+                    sendKey();
+                  })
+                  .fail(function () {
+                    AscUtil.keyQueue = [];
+                  });
+            }
+          })
+          .on('keypress.live_input', function (e) {
+            if (!AscUtil.url_sendText) return; //do nothing if mouse is not inside some live image
+            if (e.which < 0x20 || e.which > 0x7f) return;
+            var c = e.which === 0x20 ? '%s' : String.fromCharCode(e.which);
+            AscUtil.textQueue.push(c) && AscUtil.textQueue.length === 1 && sendText();
+            e.preventDefault();
+
+            function sendText() {
+              if (!AscUtil.textQueue.length) return;
+              var t = AscUtil.textQueue.join('');
+              AscUtil.textQueue = [];
+              $.ajax(AscUtil.url_sendText + '&text=' + encodeURIComponent(t), {timeout: 3000})
+                  .done(function () {
+                    sendText();
+                  })
+            }
+          });
+    }
 
     function isMultiTouch(_e) {
       return _e && (_e.changedTouches && _e.changedTouches.length > 1 || _e.touches && _e.touches.length > 1);
@@ -188,4 +237,4 @@ var AscUtil = {showEventsOnly: false, debug: false};
       $liveImage.prop('src', src + '&timestamp=' + Date.now());
     }, 1000 / 4);
   }
-})();
+})($/*jQuery*/);

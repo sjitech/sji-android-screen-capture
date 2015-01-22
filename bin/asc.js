@@ -742,10 +742,16 @@ function streamWeb_handler(req, res) {
         return end(res, JSON.stringify('OK'), 'text/json');
       }
     case '/sendKey':
-      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187]) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112]) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
         return end(res, chk.err);
       }
       spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+      return end(res, 'OK');
+    case '/sendText':
+      if (!chk('text', q.text) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+        return end(res, chk.err);
+      }
+      spawn('[sendText ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
       return end(res, 'OK');
     case '/turnOnScreen':
       if (Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {

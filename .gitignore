@@ -10,3 +10,4 @@ log/*
 desktop.ini
 coverage
 src/**/std_toolchain
+bin/usb
