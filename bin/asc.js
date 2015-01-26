@@ -1,4 +1,4 @@
-//'use strict';
+'use strict';
 var old_work_dir = process.cwd();
 process.chdir(__dirname); //set dir of current file as working dir
 var child_process = require('child_process'), fs = require('fs'), os = require('os'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'),
@@ -273,7 +273,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.CrCount = Math.max(0, stdout.match(/\r?\r?\n$/)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/); //in unix/linux this will be 0
       dev.info = parts[0].split(/\r*\n/);
       dev.sysVer = (dev.info[2] + '.0.0').split('.').slice(0, 3).join('.'); // 4.2 -> 4.2.0
-      dev.armv = dev.info[3].slice(0, 9) === 'armeabi-v' && parseInt(dev.info[3].slice(9)) >= 7 ? 7 : 5; //armeabi-v7a -> 7
+      dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
       dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[1]);
       if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
