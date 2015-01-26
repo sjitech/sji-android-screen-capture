@@ -71,9 +71,6 @@ td ul li {list-style-position: inside}
     -moz-user-select: none;
     -ms-user-select: none;
 }
-#viewerContainer:hover {
-    border: 8px solid blue;
-}
 
 #darkMask {
     width: 100%;
