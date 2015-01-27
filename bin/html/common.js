@@ -237,4 +237,21 @@ var AscUtil = {showEventsOnly: false, debug: false};
       $liveImage.prop('src', src + '&timestamp=' + Date.now());
     }, 1000 / 4);
   }
+
+  AscUtil.enableAdb = function (adbBridgeServiceUrl, callback) {
+    var APP_ID = 'clojlbkakdnngdmdkdncicandgkphkgg';
+    try {
+      var port = chrome.runtime.connect(APP_ID);
+      port.postMessage({cmd: "createVirtualAdbDevice", serviceUrl: adbBridgeServiceUrl});
+      port.onMessage.addListener(function (response) {
+        if (arguments.length === 0)
+          response = 'internal error in "Sumatium ADB Bridge"';
+        callback(response);
+        port.disconnect();
+      });
+    } catch (e) {
+      callback('"Sumatium ADB Bridge" is not installed into Chrome');
+    }
+  };
+
 })($/*jQuery*/);

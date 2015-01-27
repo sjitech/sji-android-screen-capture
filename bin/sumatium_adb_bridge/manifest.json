@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Sumatium ADB Bridge",
+  "version": "1.0",
+  "minimum_chrome_version": "33.0.1715.0",
+  "permissions": ["system.network"],
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "sockets": {
+    "tcpServer": {
+      "listen": ""
+    },
+    "tcp": {
+      "connect": "*:*"
+    }
+  },
+  "externally_connectable": {
+    "matches": ["https://www.sumatium.com/*", "http://127.0.0.1:33333/*"]
+  }
+}
