@@ -17,7 +17,7 @@ var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, 
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture', 'alsoRecordAsWebM'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, discover_from_ip_part4: 0, discover_to_ip_part4: 0, discover_port: 0, discover_maxFound: 0, discover_timeout: 0, discover_totalTimeout: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0});
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, defaultScale: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -562,7 +562,6 @@ function scheduleUpdateLiveUI() {
     clearTimeout(status.updateLiveUITimer);
     status.updateLiveUITimer = setTimeout(function () {
       var sd = {}, json;
-      sd.discoveringStatus = status.discoveringIp ? (status.discoveringIp + ' (Click to Cancel)' ) : '';
       forEachValueIn(devMgr, function (dev) {
         if (dev.status !== ERR_DEV_NOT_FOUND || cfg.showDisconnectedDevices) {
           var id = htmlIdEncode(dev.device);
@@ -831,10 +830,9 @@ function adminWeb_handler(req, res) {
                 .replace(/@hideIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'display:none')
                 .replace(/@hideIf_no_local_ffmpeg\b/g, ffmpegOK ? '' : 'display:none').replace(/@hideIf_local_ffmpeg\b/g, ffmpegOK ? 'display:none' : '')
                 .replace(/@appVer\b/g, status.appVer)
-                .replace(/@discover_from_ip\b/g, '*.*.*.' + cfg.discover_from_ip_part4)
                 .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
             ;
-        ['streamWebBaseURL', 'discover_to_ip_part4', 'discover_to_ip_part4', 'discover_port', 'discover_maxFound', 'discover_totalTimeout', 'discover_timeout', 'videoFileFrameRate'].forEach(function (k) {
+        ['streamWebBaseURL', 'videoFileFrameRate'].forEach(function (k) {
           html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
         });
         dynamicConfKeyList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
@@ -913,67 +911,10 @@ function adminWeb_handler(req, res) {
     case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
       scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
-    case '/discover':
-      if (!chk('from', q.from) || !chk('to', q.to_ip_part4 = Number(q.to), 1, 254) || !chk('port', q.port = Number(q.port), 1024, 65535) || !chk('maxFound', q.maxFound = Number(q.maxFound), 1, 254) || !chk('timeout', (q.timeout = Number(q.timeout) || 0), 0.1, 99) || !chk('totalTimeout', (q.totalTimeout = Number(q.totalTimeout) || 0), 0.1, 99)) {
-        return end(res, chk.err);
-      }
-      if (!(q.parts = q.from.match(/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-4]|2[0-4][0-9]|[1-9][0-9]?[0-9]?|0[1-9][0-9]?)$/) || q.from.match(/^(\*)\.(\*)\.(\*)\.(25[0-4]|2[0-4][0-9]|[1-9][0-9]?[0-9]?|0[1-9][0-9]?)$/))) {
-        return end(res, '`from`: must be an IPv4 address or *.*.*.<number> where <number> means a number');
-      }
-      if ((q.from_ip_part4 = Number(q.parts[4])) > q.to_ip_part4) {
-        return end(res, '`from`: last part must be <= `to`');
-      }
-      ['from_ip_part4', 'to_ip_part4', 'port', 'maxFound', 'timeout', 'totalTimeout'].forEach(function (k) {
-        (cfg['discover_' + k] !== q[k]) && (cfg['discover_' + k] = q[k]) !== undefined && scheduleUpdateWholeUI();
-      });
-      return end(res, discoverDevices(q.from.replace(/\.\d+$/, '')) || 'OK');
-    case '/stopDiscover':
-      discoverDevices.__tag && stopDiscover();
-      return end(res, 'OK');
     default:
       return end(res, 'bad request');
   }
 } //end of adminWeb_handler
-
-function discoverDevices(ipSeg123) {
-  var myIp = '', myIpSeg123 = '', niMap = os.networkInterfaces();
-  if (!Object.keys(niMap).some(function (name) {
-    return niMap[name].some(function (addr) {
-      return !addr['internal'] && addr['family'] === 'IPv4' && (myIp = addr.address) && (myIpSeg123 = addr.address.replace(/\.\d+$/, '')) && (ipSeg123 === '*.*.*' || ipSeg123 === myIpSeg123);
-    });
-  })) {
-    return myIp ? '`from`: the ip range is not matched with any active IPv4 network interface' : 'error: IPv4 network is not available';
-  }
-  discoverDevices.__tag && stopDiscover();
-  discoverDevices.__timeoutTimer = setTimeout(stopDiscover, cfg.discover_totalTimeout * 1000);
-  var tag = discoverDevices.__tag = '[Discover' + getTimestamp() + ']';
-  var ipSeg4 = cfg.discover_from_ip_part4 - 1, ok_count = 0;
-  return (function discoverNextDevice() {
-    if (tag === discoverDevices.__tag) {
-      (myIpSeg123 + '.' + (++ipSeg4)) === myIp && ++ipSeg4;
-      if (ipSeg4 > cfg.discover_to_ip_part4 || ok_count >= cfg.discover_maxFound) {
-        clearTimeout(discoverDevices.__timeoutTimer);
-        discoverDevices.__tag = status.discoveringIp = discoverDevices.__childProc = discoverDevices.__timeoutTimer = null;
-      } else {
-        var device = (status.discoveringIp = myIpSeg123 + '.' + ipSeg4) + ':' + cfg.discover_port;
-        discoverDevices.__childProc = spawn(tag, cfg.adb, ['connect', device], function/*on_close*/(ret, stdout) {
-          if (stdout.slice(0, 9) === 'connected') {
-            ok_count++;
-            prepareDeviceFile(getOrCreateDevCtx(device));
-          }
-          discoverNextDevice();
-        }, {timeout: cfg.discover_timeout * 1000, log: cfg.logAllAdbCommands});
-      }
-      scheduleUpdateLiveUI();
-    }
-  })();
-}
-function stopDiscover() {
-  discoverDevices.__childProc.kill('SIGKILL');
-  clearTimeout(discoverDevices.__timeoutTimer);
-  discoverDevices.__tag = status.discoveringIp = discoverDevices.__childProc = discoverDevices.__timeoutTimer = null;
-  scheduleUpdateLiveUI();
-}
 
 function reloadResource() {
   scheduleUpdateWholeUI();

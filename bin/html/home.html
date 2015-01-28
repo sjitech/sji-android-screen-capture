@@ -122,32 +122,6 @@
         </label>
       </div>
     </form>
-    <form action="discover" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
-      <button type="submit" title="Discover Remote Devices Which running ADB Server in TCP/IP Mode">Discover Devices</button>
-      <a id="discoveringStatus" href="stopDiscover?adminKey=@adminKey" target="resultIFrame" style="background-color: blue; color: white; font-size: 1em; margin-left: 16px; display: block"></a>
-      <div style="margin-left: 16px">
-        <label>
-          IP<input type="text" name="from" value="@discover_from_ip" maxlength="15" style="width: 100px"/>-<input type="text" name="to" value="@discover_to_ip_part4" maxlength="3" size="3"/>
-        </label>
-        <label>
-          Port<input type="text" name="port" value="@discover_port" maxlength="5" size="5"/>
-        </label>
-      </div>
-      <div style="margin-left: 16px">
-        <label>
-          Within<input type="text" name="totalTimeout" value="@discover_totalTimeout" maxlength="2" size="2"/>s.
-        </label>
-        <label>
-          <input type="text" name="timeout" value="@discover_timeout" maxlength="2" size="2"/>s/device
-        </label>
-      </div>
-      <div style="margin-left: 16px">
-        <label>
-          Until<input type="text" name="maxFound" value="@discover_maxFound" maxlength="3" size="3"/>new devices found
-        </label>
-      </div>
-    </form>
     <form action="set" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       Stream Web: <span style="border: 1px solid #000000; padding: 2px;">@result_streamWebBaseURL</span>

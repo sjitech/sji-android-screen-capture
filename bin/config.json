@@ -39,14 +39,6 @@
   "defaultScale": "400xAuto", //example: "0.5" means half size
   "streamWebBaseURL": "", //empty means auto. You can speficy it like http://user:pwd@www.abc.com:8888/virtualPath1/
 
-  //discovery settings
-  "discover_from_ip_part4": 1,
-  "discover_to_ip_part4": 254,
-  "discover_port": 5555,
-  "discover_maxFound": 254,
-  "discover_timeout": 10, //timeout for each device scan
-  "discover_totalTimeout": 60, //total timeout
-
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
   "adbOption": [], //such as ["-H", "172.21.137.5"],
