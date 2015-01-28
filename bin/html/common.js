@@ -238,20 +238,40 @@ var AscUtil = {showEventsOnly: false, debug: false};
     }, 1000 / 4);
   }
 
-  AscUtil.enableAdb = function (adbBridgeServiceUrl, callback) {
-    var APP_ID = 'clojlbkakdnngdmdkdncicandgkphkgg';
+  var CHROME_EXTENSION_ID = 'nejeldogfcfcfinihepdibgemcegoidm';
+  AscUtil.createAdbDevice = function (adbBridgeServiceUrl, callback) {
     try {
-      var port = chrome.runtime.connect(APP_ID);
-      port.postMessage({cmd: "createVirtualAdbDevice", serviceUrl: adbBridgeServiceUrl});
+      var port = chrome.runtime.connect(CHROME_EXTENSION_ID);
+      port.postMessage({cmd: "createAdbDevice", serviceUrl: adbBridgeServiceUrl});
       port.onMessage.addListener(function (response) {
         if (arguments.length === 0)
-          response = 'internal error in "Sumatium ADB Bridge"';
-        callback(response);
+          response = 'internal error in "Sumatium ADB Bridge" chrome extension/app';
+        if (typeof(response) === 'string')
+          callback(response);
+        else
+          callback(null, 'localhost:' + response.port, response.connected);
         port.disconnect();
       });
     } catch (e) {
-      callback('"Sumatium ADB Bridge" is not installed into Chrome');
+      callback('"Sumatium ADB Bridge" chrome extension has not been installed into Chrome');
     }
   };
 
+  AscUtil.getAdbDevice = function (adbBridgeServiceUrl, callback) {
+    try {
+      var port = chrome.runtime.connect(CHROME_EXTENSION_ID);
+      port.postMessage({cmd: "getAdbDevice", serviceUrl: adbBridgeServiceUrl});
+      port.onMessage.addListener(function (response) {
+        if (arguments.length === 0)
+          response = 'internal error in "Sumatium ADB Bridge" chrome extension/app';
+        if (typeof(response) === 'string')
+          callback(response);
+        else
+          callback(null, 'localhost:' + response.port, response.connected);
+        port.disconnect();
+      });
+    } catch (e) {
+      callback('"Sumatium ADB Bridge" chrome extension has not been installed into Chrome');
+    }
+  };
 })($/*jQuery*/);
