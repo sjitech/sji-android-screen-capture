@@ -845,7 +845,7 @@ function adminWeb_handler(req, res) {
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
         var result_streamWebBaseURL = cfg.streamWebBaseURL || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html']
-                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, q.adminUrlSuffix || '')
+                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '').replace(/@showIf_adminUrlSuffix\b/g, cfg.adminUrlSuffix ? '' : 'display:none')
                 .replace(new RegExp('_selectedIf_rotate_' + cfg.rotate, 'g'), 'selected')
                 .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, '')).replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
                 .replace(/#localStreamWebBaseURL\b/g, (cfg.streamWeb_protocol + '://localhost:' + cfg.streamWeb_port + '/'))
