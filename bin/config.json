@@ -10,6 +10,7 @@
   "adminWeb_ip": "localhost", //IP or hostname to which admin web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
   "adminWeb_protocol": "http", //or "https", when use https, the server certificate (PKCS12 file) is in ./ssl/adminWeb.pfx, you can replace it with yours.
   "adminKey": "", //access key of admin web server and it is also used as source of auto-generated access key for device. If not but use https, then this will be auto generated.
+  "adminUrlSuffix": "", //protect some url such as for get server log, get device log, and execute any adb command.
 
   "outputDir": "../out", //dir to store recorded file
   "maxRecordTime": 7200, //max recorded time
@@ -38,7 +39,7 @@
   "showDisconnectedDevices": false,
   "scale": "400xAuto", //set default size. Example: 0.5, 400x600, 400x, x600
   "rotate": 0, //set default rotate. 0 means portrait, 270 means landscape
-  "streamWebBaseURL": "", //empty means auto. You can speficy it like http://user:pwd@www.abc.com:8888/virtualPath1/
+  "streamWebBaseURL": "", //All live view concerned links will use this URL as base. Empty means auto. You can speficy it like http://user:pwd@www.abc.com:8888/virtualPath1/
 
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path

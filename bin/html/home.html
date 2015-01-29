@@ -81,13 +81,13 @@
         <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device" title="Saved Images">
           Imgs
         </a>
-        <a class="internal SLog" href="getServerLog?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
+        <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
           Log
         </a>
-        <a class="internal" href="cmd?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
           L
         </a>
-        <a class="internal" href="cmd?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
           T
         </a>
         &nbsp;<span class="captureIndicator" id="captureParameter_$device" style="float: right"></span>
@@ -99,7 +99,7 @@
 <div class="expandable" style="position: fixed; top: 1px; right: 1px; max-width:80%; max-height:90%">
   <div>Admin</div>
   <div>
-    <form action="getServerLog" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
+    <form action="getServerLog@adminUrlSuffix" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Get Server Log</button>
       <label>
@@ -201,6 +201,13 @@
         <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />
       </label>
     </form>
+    <form style="border-top: 1px solid lightgray; margin-top: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit">AdvKey</button>
+      <label>:
+        <input type="text" name="adminUrlSuffix" value="" style="width: 50px" />
+      </label>
+    </form>
     <div style="border-top: 1px solid lightgray; margin-top: 4px">
       <a class="button" href="stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
         Stop Server
@@ -251,7 +258,7 @@
   function adb(cmd, timeout, device) {
     var devAry = Array.isArray(device) ? device : device ? [device] : _devAry;
     devAry.forEach(function (device) {
-      $.ajax('cmd?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
+      $.ajax('cmd@adminUrlSuffix?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
         .done(function (res) {
           console.log(device + ': ' + res);
         })
@@ -261,7 +268,7 @@
     });
   }
 
-  var $frmSLog = $('form[action="getServerLog"]');
+  var $frmSLog = $('form[action="getServerLog@adminUrlSuffix"]');
   $(document).on('mouseover click', '.SLog', function (e) {
     var $this = $(e.currentTarget);
     $this.prop('href', $this.prop('href')
