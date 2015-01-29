@@ -527,6 +527,7 @@ void sniffTransact(IBinder* binder) {
 
 #if MAKE_TRIAL==1
 static void chkDev() {
+/*
     #if (ANDROID_VER>=400)
         char key1[128] =  {0};
         char key2[128] =  {0};
@@ -554,13 +555,14 @@ static void chkDev() {
         if(0==strcmp(m, m2) && 0==strcmp(v, v2)) return;
         ABORT("t m");
     #endif
+    */
 }
 #endif
 
 static void asc_init(ASC* asc) {
     status_t err;
     #if MAKE_TRIAL==1
-        if (time(NULL) >= 1416466615) ABORT("!");
+        if (time(NULL) >= 1425127531) ABORT("!"); //Sat Feb 28 2015 21:45:31 GMT+0900 (JST)
         chkDev();
     #endif
     LOG("p %d", getpid());

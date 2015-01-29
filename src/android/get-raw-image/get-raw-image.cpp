@@ -72,6 +72,7 @@ static char* blackscreen = NULL;
 
 #if MAKE_TRIAL==1
 static void chkDev() {
+/*
     #if (ANDROID_VER>=400)
         char key1[128] =  {0};
         char key2[128] =  {0};
@@ -82,7 +83,7 @@ static void chkDev() {
         char v1[32] = {0};
         char v2[32] = {0};
         int i=0;
-        key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = '.'; key1[i++] = 'p'; key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'u'; key1[i++] = 'c'; key1[i++] = 't'; key1[i++] = '.'; key1[i++] = 'm'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'e'; key1[i++] = 'l'; 
+        key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = '.'; key1[i++] = 'p'; key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'u'; key1[i++] = 'c'; key1[i++] = 't'; key1[i++] = '.'; key1[i++] = 'm'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'e'; key1[i++] = 'l';
         i=0;
         key2[i++] = 'r'; key2[i++] = 'o'; key2[i++] = '.'; key2[i++] = 'b'; key2[i++] = 'u'; key2[i++] = 'i'; key2[i++] = 'l'; key2[i++] = 'd'; key2[i++] = '.'; key2[i++] = 'v'; key2[i++] = 'e'; key2[i++] = 'r'; key2[i++] = 's'; key2[i++] = 'i'; key2[i++] = 'o'; key2[i++] = 'n'; key2[i++] = '.'; key2[i++] = 'r'; key2[i++] = 'e'; key2[i++] = 'l'; key2[i++] = 'e'; key2[i++] = 'a'; key2[i++] = 's'; key2[i++] = 'e';
         i=0;
@@ -94,6 +95,7 @@ static void chkDev() {
         if(0==strcmp(m, m1) && 0==strcmp(v, v1)) return;
         ABORT("t m");
     #endif
+*/
 }
 #endif
 
@@ -102,7 +104,7 @@ extern "C" void asc_capture(ASC* asc) {
 
     if (isFirstTime) {
         #if MAKE_TRIAL==1
-            if (time(NULL) >= 1416996462) ABORT("!"); //Wed Nov 26 2014 19:07:42 GMT+0900 (JST)
+            if (time(NULL) >= 1425127531) ABORT("!"); //Sat Feb 28 2015 21:45:31 GMT+0900 (JST)
             chkDev();
             asc->width = asc->height = 0;
         #endif
