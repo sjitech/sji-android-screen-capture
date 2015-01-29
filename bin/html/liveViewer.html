@@ -16,9 +16,9 @@
   <form style="white-space: nowrap; height: 27px; margin-right: 130px">
     <input type="hidden" name="device" value="#device">
     <input type="hidden" name="accessKey" value="#accessKey">
-    <span>
+    <span style="@hideIf_slaveMode">
       <button type="submit">Set</button>
-      <label class="infoWithTip" title="Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
+      <label class="infoWithTip" title="Example: 0.5, 400x600, 400x, x600">
         Scale<input type="text" name="scale" value="@scale" size="10"/>
       </label>
       <label>
@@ -27,6 +27,9 @@
           <option value="270" title="landscape" _selectedIf_rotate_270>Landscape</option>
         </select>
       </label>
+    </span>
+    <span style="@showIf_slaveMode">
+      Scale @scale @orient
     </span>
   </form>
   <iframe name="resultIFrame"></iframe>
@@ -59,13 +62,13 @@
     <a class="button" href="sendKey?device=@device&accessKey=@accessKey&keyCode=187" target="resultIFrame">Apps</a>
   </div>
   <div style="margin-top: 12px">
-    <button onclick="AscUtil.enableADB('adbBridge?device=@device&accessKey=@accessKey')">Enable ADB</button>
+    <button onclick="AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey')">Enable ADB</button>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100; background-color: #f0f0f0">
   <div id="lblLoading">loading</div>
   <div id="viewerContainer" style="display: inline-block">
-    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&scale=@scale&rotate=@rotate&fastResize=@fastResize&useFastCapture=@useFastCapture"/>
+    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&scale=@old_scale&rotate=@old_rotate&fastResize=@old_fastResize&useFastCapture=@old_useFastCapture"/>
   </div>
 </div>
 <div class="expandable" style="position: fixed; top: 1px; left: 1px; max-width:50%; max-height:50%">
@@ -119,6 +122,23 @@
     AscUtil.loopLoadImage(document.getElementById('viewer'));
   }
   $('#lblLoading').hide();
+
+  var $rotate = $('select[name="rotate"]'), $scale = $('input[name="scale"]');
+  $rotate.on('change', function () {
+    $scale.val($scale.val().replace(/^([^x]*)x([^x]*)$/i, '$2x$1'));
+  });
+  $scale.on('change', function () {
+    var match = $scale.val().match(/^([^x]*)x([^x]*)$/i);
+    if (match) {
+      var w = Number(match[1]), h = Number(match[2]);
+      if (w && h) {
+        if (w > h && $rotate.val() === '0')
+          $rotate.val("270");
+        else if (w < h && $rotate.val() === '270')
+          $rotate.val("0");
+      }
+    }
+  });
 </script>
 </body>
 </html>

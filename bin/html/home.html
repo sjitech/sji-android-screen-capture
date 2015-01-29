@@ -16,11 +16,11 @@
 </head>
 <body onunload="">
 <div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; height: 56px">
-  <form style="white-space: nowrap; height: 27px; margin-right: 50px">
+  <form action="set" target="resultIFrame" style="white-space: nowrap; height: 27px; margin-right: 50px">
     <input type="hidden" name="adminKey" value="#adminKey"/>
     <button type="submit" title="Set default value">Set</button>
-    <label class="infoWithTip" title="Set default scale. Example: 0.5 or 800x400 or 800xAuto or Autox400 or Empty string means full size">
-      Scale<input type="text" name="scale" value="@scale" size="10"/>
+    <label class="infoWithTip" title="Set default scale. Example: 0.5, 400x600, 400x, x600">
+      Default Scale<input type="text" name="scale" value="@scale" size="10"/>
     </label>
     <label>
       <select name="rotate">
@@ -43,7 +43,7 @@
           <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
           <!--<button type="submit" class="internal">Set</button>-->
-          <label title="Access Key">
+          <label title="Access Key. Set a key to protect access to live view page, and disable resize from live view page">
             &nbsp;<input type="text" name="accessKey" value="#accessKey" style="width: 40px; margin: 0; vertical-align: top" />
           </label>
         </form>
@@ -56,7 +56,7 @@
     <tr id="row2_$device" class="@devStatusClass" style="border-bottom: 1px solid #000000">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap">
-          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey&scale=@scale&rotate=@rotate" target="liveView_$device" title="Show Live View">
+          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
@@ -66,7 +66,7 @@
         </span>
         <span style="@hideIf_no_local_ffmpeg; white-space: nowrap">
           <span style="background-color: darkgray">&nbsp;</span>
-          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey&scale=@scale&rotate=@rotate" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure?')" title="Record">
+          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('This will stop current recording and start a new recording, Sure?')" title="Record">
             Rec
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
@@ -274,6 +274,23 @@
   $(document).on('click', '.button input:checkbox', function (e) {
     e.preventDefault();
     this.parentNode.click();
+  });
+
+  var $rotate = $('select[name="rotate"]'), $scale = $('input[name="scale"]');
+  $rotate.on('change', function () {
+    $scale.val($scale.val().replace(/^([^x]*)x([^x]*)$/i, '$2x$1'));
+  });
+  $scale.on('change', function () {
+    var match = $scale.val().match(/^([^x]*)x([^x]*)$/i);
+    if (match) {
+      var w = Number(match[1]), h = Number(match[2]);
+      if (w && h) {
+        if (w > h && $rotate.val() === '0')
+          $rotate.val("270");
+        else if (w < h && $rotate.val() === '270')
+          $rotate.val("0");
+      }
+    }
   });
 </script>
 </body>
