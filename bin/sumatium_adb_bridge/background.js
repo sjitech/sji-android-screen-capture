@@ -23,15 +23,12 @@ chrome.runtime.onConnectExternal.addListener(function(port) {
     
     port.onMessage.addListener(function(request) {
         console.log("external msg: " + JSON.stringify(request));
-        var adbDev = adbDevMap[request.serviceUrl];
+        var adbDev = adbDevMap[request.websocket_url];
         if (request.cmd === 'getAdbDevice') {
             sendResponse(adbDev ? adbDev : 'device not found');
             return;
         }
-        if (request.cmd !== 'createAdbDevice') {
-            sendResponse('invalid parameter');
-            return;
-        }
+        //other command is treated as "createAdbDevice"
         
         if (adbDev) {
             registerDevToAdbHost(adbDev, sendResponse);
@@ -57,7 +54,7 @@ chrome.runtime.onConnectExternal.addListener(function(port) {
                 
                 tcpServer.getInfo(createInfo.socketId, function(socketInfo) {
                     console.log('adbDev.port: ' + socketInfo.localPort);
-                    adbDev = adbDevMap[request.serviceUrl] = {port: socketInfo.localPort,connected: false};
+                    adbDev = adbDevMap[request.websocket_url] = {port: socketInfo.localPort,connected: false};
                     registerDevToAdbHost(adbDev, sendResponse);
                     
                     var onAccept, onAcceptError;
@@ -66,7 +63,7 @@ chrome.runtime.onConnectExternal.addListener(function(port) {
                             return;
                         console.log('[adbDev ]incoming connection: ' + acceptInfo.clientSocketId);
                         
-                        process_connection(acceptInfo.clientSocketId, request.serviceUrl);
+                        process_connection(acceptInfo.clientSocketId, request.websocket_url);
                     });
                     
                     tcpServer.onAcceptError.addListener(onAcceptError = function(acceptInfo) {
@@ -135,7 +132,9 @@ function registerDevToAdbHost(adbDev, sendResponse) {
     });
 }
 
-function process_connection(socketId, serviceUrl) {
+function process_connection(socketId, websocket_url) {
+    var ws = new WebSocket(websocket_url);
+
     var logHead = '[adbDev ' + socketId + ']';
     var onReceive, onReceiveError;
     tcp.onReceive.addListener(onReceive = function(recvInfo) {
@@ -154,7 +153,7 @@ function process_connection(socketId, serviceUrl) {
         if (cmd === 0x434e584e) {
             on_adb_connect(socketId);
         } else {
-        // xhr.open("POST", serviceUrl, true);
+        // xhr.open("POST", websocket_url, true);
         // xhr.onreadystatechange = function() {
         //   if (xhr.readyState == 4) {
         //     console.log('xhr res: ' + xhr.responseText);

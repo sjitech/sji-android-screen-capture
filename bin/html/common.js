@@ -236,34 +236,22 @@ var AscUtil = {showEventsOnly: false, debug: false};
     liveImage.__liveImageTimer = setInterval(function () {
       $liveImage.prop('src', src + '&timestamp=' + Date.now());
     }, 1000 / 4);
-  }
-
-  var CHROME_EXTENSION_ID = 'nejeldogfcfcfinihepdibgemcegoidm';
-  AscUtil.createAdbDevice = function (adbBridgeServiceUrl, callback) {
-    try {
-      var port = chrome.runtime.connect(CHROME_EXTENSION_ID);
-      port.postMessage({cmd: "createAdbDevice", serviceUrl: adbBridgeServiceUrl});
-      port.onMessage.addListener(function (response) {
-        if (arguments.length === 0)
-          response = 'internal error in "Sumatium ADB Bridge" chrome extension/app';
-        if (typeof(response) === 'string')
-          callback(response);
-        else
-          callback(null, 'localhost:' + response.port, response.connected);
-        port.disconnect();
-      });
-    } catch (e) {
-      callback('"Sumatium ADB Bridge" chrome extension has not been installed into Chrome');
-    }
   };
 
-  AscUtil.getAdbDevice = function (adbBridgeServiceUrl, callback) {
+  var CHROME_EXTENSION_ID = 'nejeldogfcfcfinihepdibgemcegoidm';
+
+  function getOrCreateAdbDevice(websocket_url, callback, isCreate) {
+    if (!websocket_url.match(/^ws:\/\//) && !websocket_url.match(/^wss:\/\//)) {
+      callback('invalid parameter(websocket_url must start with ws:// or ws://');
+      return;
+    }
+
     try {
       var port = chrome.runtime.connect(CHROME_EXTENSION_ID);
-      port.postMessage({cmd: "getAdbDevice", serviceUrl: adbBridgeServiceUrl});
+      port.postMessage({cmd: isCreate ? 'createAdbDevice' : 'getAdbDevice', websocket_url: websocket_url});
       port.onMessage.addListener(function (response) {
         if (arguments.length === 0)
-          response = 'internal error in "Sumatium ADB Bridge" chrome extension/app';
+          response = 'internal error in "Sumatium ADB Bridge" chrome extension';
         if (typeof(response) === 'string')
           callback(response);
         else
@@ -271,7 +259,15 @@ var AscUtil = {showEventsOnly: false, debug: false};
         port.disconnect();
       });
     } catch (e) {
-      callback('"Sumatium ADB Bridge" chrome extension has not been installed into Chrome');
+      callback('please install "Sumatium ADB Bridge" chrome extension into Chrome from Chrome Store');
     }
+  }
+
+  AscUtil.createAdbDevice = function (websocket_url, callback) {
+    getOrCreateAdbDevice(websocket_url, callback, true);
+  };
+
+  AscUtil.getAdbDevice = function (websocket_url, callback) {
+    getOrCreateAdbDevice(websocket_url, callback, false);
   };
 })($/*jQuery*/);
