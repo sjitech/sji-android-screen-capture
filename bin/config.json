@@ -47,6 +47,7 @@
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
   "adbOption": [], //such as ["-H", "172.21.137.5"],
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
+  "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
   "androidLogPath": "/data/local/tmp/sji-asc.log",
   "maxProcesses": 128,
