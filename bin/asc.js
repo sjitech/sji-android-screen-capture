@@ -246,7 +246,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
     !mode && deviceList.forEach(function (device) {
       if (devMgr[device].status === 'OK' && Date.now() - (devMgr[device].lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
         devMgr[device].lastKeepAliveDateMs = Date.now();
-        spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'echo', 'alive'), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
+        spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
       }
     });
   }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
