@@ -32,13 +32,13 @@
   <iframe name="resultIFrame"></iframe>
 </div>
 <div style="margin-top: 56px; text-align: center">
-  <div style="@hideIf_local_ffmpeg; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
+  <div style="@hideIf_ffmpegOK; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
   <table id="device_tbl" style="max-width:100%; border-collapse: collapse; display: inline-block">
     <!--repeatBegin-->
     <tr id="row1_$device" class="@devStatusClass">
       <td style="text-align: left; vertical-align: top">
         <span style="white-space: nowrap" class="deviceSN">#device</span>
-        <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure?')" style="display: inline-block; white-space: nowrap; float: right">
+        <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure to set/clear protect key? All running live view and recording will be stopped.')" style="display: inline-block; white-space: nowrap; float: right">
           <input type="hidden" name="adminKey" value="#adminKey"/>
           <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
@@ -60,17 +60,17 @@
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
-          <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop All Live View" style="display: none">
+          <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop all live view?')" title="Stop All Live View" style="display: none">
             x
           </a>
         </span>
-        <span style="@hideIf_no_local_ffmpeg; white-space: nowrap">
+        <span style="@showIf_ffmpegOK; white-space: nowrap">
           <span style="background-color: darkgray">&nbsp;</span>
-          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('This will stop current recording and start a new recording, Sure?')" title="Record">
+          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure to stop current recording and start a new recording?')" title="Record">
             Rec
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
-          <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure?')" title="Stop Recording" style="display: none">
+          <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop recording?')" title="Stop Recording" style="display: none">
             x
           </a>
         </span>

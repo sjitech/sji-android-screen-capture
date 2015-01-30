@@ -212,8 +212,8 @@ function getOrCreateDevCtx(device/*device serial number*/) {
 function newAutoAccessKeyIfStreamWebPublic(firstTime) {
   return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '-----------' : '') + '_auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
 }
-function isExplicitAccessKey(accessKey) {
-  return accessKey && (accessKey = accessKey.slice(11, 17)) && accessKey !== '_auto_';
+function isMasterMode(dev) {
+  return dev.accessKey && dev.accessKey.length > 11 && dev.accessKey.slice(11, 17) !== '_auto_';
 }
 
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
@@ -470,7 +470,7 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
     q.timestamp = getTimestamp();
     q._FpsScaleRotateDisp = (q.useFastCapture ? 'F30' : q.fastResize ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
 
-    if (dev.capture && q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate && q.__explicit >= dev.capture.q.__explicit && !isExplicitAccessKey(dev.accessKey) && !forRecording)
+    if (dev.capture && q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate && q.__explicit >= dev.capture.q.__explicit && !isMasterMode(dev) && !forRecording)
       endCaptureProcess(dev); //stop incompatible capture process immediately if necessary
   }
   return true;
@@ -642,8 +642,12 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
 }
 function replaceComVar(html, dev) {
   return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, htmlIdEncode(dev.device))
-      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey));
+      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey))
+      .replace(/#devInfo\b/g, htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
 }
+String.prototype.replaceShowIf = function (placeHolder, show) {
+  return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
+};
 function isAccessKeyDiff(dev, accessKey) {
   return accessKey !== dev.accessKey && accessKey !== dev.accessKey.slice(11);
 }
@@ -690,7 +694,7 @@ function streamWeb_handler(req, res) {
       return end(res, replaceComVar(htmlCache[urlPath], dev)
           .replace(/@scale\b/g, (dev.capture && dev.capture.q || q).scale).replace(/@rotate\b/g, (dev.capture && dev.capture.q || q).rotate).replace(new RegExp('_selectedIf_rotate_' + ((dev.capture && dev.capture.q || q).rotate), 'g'), 'selected').replace(/@orient\b/g, (dev.capture && dev.capture.q || q).rotate === 270 ? 'Landscape' : 'Portrait')
           .replace(/@fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize).replace(/@useFastCapture\b/g, (dev.capture && dev.capture.q || q).useFastCapture)
-          .replace(/@hideIf_slaveMode\b/g, isExplicitAccessKey(dev.accessKey) ? 'display:none' : '').replace(/@showIf_slaveMode\b/g, isExplicitAccessKey(dev.accessKey) ? '' : 'display:none')
+          .replaceShowIf('masterMode', isMasterMode(dev))
           .replace(/@old_scale\b/g, q.__old.scale || '').replace(/@old_rotate\b/g, q.__old.rotate || '').replace(/@old_fastResize\b/g, q.__old.fastResize || '').replace(/@old_useFastCapture\b/g, q.__old.useFastCapture || '')
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
@@ -845,14 +849,11 @@ function adminWeb_handler(req, res) {
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
         var result_streamWebBaseURL = cfg.streamWebBaseURL || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html']
-                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '').replace(/@showIf_adminUrlSuffix\b/g, cfg.adminUrlSuffix ? '' : 'display:none')
+                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '').replaceShowIf('adminUrlSuffix', cfg.adminUrlSuffix)
                 .replace(new RegExp('_selectedIf_rotate_' + cfg.rotate, 'g'), 'selected')
                 .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, '')).replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
-                .replace(/#localStreamWebBaseURL\b/g, (cfg.streamWeb_protocol + '://localhost:' + cfg.streamWeb_port + '/'))
-                .replace(/_checkedIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'checked')
-                .replace(/@hideIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'display:none')
-                .replace(/@hideIf_no_local_ffmpeg\b/g, ffmpegOK ? '' : 'display:none').replace(/@hideIf_local_ffmpeg\b/g, ffmpegOK ? 'display:none' : '')
-                .replace(/@appVer\b/g, status.appVer)
+                .replace(/_checkedIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'checked').replaceShowIf('autoChooseStreamWebBaseURL', !cfg.streamWebBaseURL)
+                .replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
                 .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
             ;
         ['streamWebBaseURL', 'videoFileFrameRate', 'scale', 'rotate'].forEach(function (k) {
@@ -866,7 +867,6 @@ function adminWeb_handler(req, res) {
           return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
             return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
                 : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
-                .replace(/#devInfo\b/g, htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)))
                 .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
                 .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
           }, ''/*initial joinedStr*/);

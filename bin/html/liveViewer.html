@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Live JPG of #device</title>
+  <title>LIVE: #devInfo</title>
   <link rel="stylesheet" type="text/css" href="common.css">
   <style>
     .expandable > * {display: none}
@@ -16,7 +16,7 @@
   <form style="white-space: nowrap; height: 27px; margin-right: 130px">
     <input type="hidden" name="device" value="#device">
     <input type="hidden" name="accessKey" value="#accessKey">
-    <span style="@hideIf_slaveMode">
+    <span style="@hideIf_masterMode">
       <button type="submit">Set</button>
       <label class="infoWithTip" title="Example: 0.5, 400x600, 400x, x600">
         Scale<input type="text" name="scale" value="@scale" size="10"/>
@@ -28,7 +28,7 @@
         </select>
       </label>
     </span>
-    <span style="@showIf_slaveMode">
+    <span style="@showIf_masterMode">
       Scale @scale @orient
     </span>
   </form>
