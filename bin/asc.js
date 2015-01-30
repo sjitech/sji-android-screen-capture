@@ -207,7 +207,7 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: '', recordingFileTimestampSet: {}});
+  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: '', recordingFileTimestampSet: {}});
 }
 function newAutoAccessKeyIfStreamWebPublic(firstTime) {
   return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '-----------' : '') + '_auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
@@ -281,8 +281,9 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.info = parts[0].split(/\r*\n/);
       dev.sysVer = (dev.info[2] + '.0.0').split('.').slice(0, 3).join('.'); // 4.2 -> 4.2.0
       dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
-      dev.info[3] = (dev.info[3] = dev.info[3].replace('armeabi-', '')) == 'v7a' ? '' : dev.info[3];
+      dev.info[3] = (dev.info[3] = dev.info[3].replace(/^armeabi-|^arm64-/, '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[1]);
+      dev.info_disp = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
       if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
         return on_complete('OK');
       }
@@ -318,6 +319,7 @@ function getMoreInfo(dev, ary/*result of cmd_getExtraInfo*/) {
   (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
   dev.libPath = ary[4].split(/\r*\n/).sort().pop();
   dev.fastLibPath = ary[5].split(/\r*\n/).sort().pop();
+  dev.info_disp = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
   return dev.libPath && dev.disp;
 }
 function getTouchDeviceInfo(dev, stdout) {
@@ -642,8 +644,7 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
 }
 function replaceComVar(html, dev) {
   return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, htmlIdEncode(dev.device))
-      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey))
-      .replace(/#devInfo\b/g, htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
+      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey)).replace(/#devInfo\b/g, dev.info_disp);
 }
 String.prototype.replaceShowIf = function (placeHolder, show) {
   return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
@@ -864,12 +865,14 @@ function adminWeb_handler(req, res) {
         });
         cfg.adminKey && res.setHeader('Set-Cookie', 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-          return Object.keys(devMgr).sort().reduce(function (joinedStr, device) {
-            return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
-                : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
-                .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
-                .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
-          }, ''/*initial joinedStr*/);
+          return Object.keys(devMgr).sort(function (sn1, sn2) {
+            return devMgr[sn1].info_disp.localeCompare(devMgr[sn2].info_disp);
+          }).reduce(function (joinedStr, device) {
+                return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
+                    : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
+                    .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
+                    .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+              }, ''/*initial joinedStr*/);
         }), 'text/html');
       });
     case '/stopServer':  //------------------------------------stop server management---------------------------------
