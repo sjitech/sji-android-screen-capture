@@ -51,7 +51,7 @@
   "androidWorkDir": "/data/local/tmp/sji-asc",
   "androidLogPath": "/data/local/tmp/sji-asc.log",
   "maxProcesses": 128,
-  "adbGetDeviceListTimeout": 5,
+  "adbGetDeviceListTimeout": 60,
   "adbEchoTimeout": 10,
   "adbCheckDeviceTimeout": 300,
   "adbPushFileToDeviceTimeout": 600,

@@ -217,6 +217,10 @@ function isMasterMode(dev) {
 }
 
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
+  if (scanAllDevices.waiters) {
+    return on_gotAllRealDev && scanAllDevices.waiters.push(on_gotAllRealDev);
+  }
+  scanAllDevices.waiters = on_gotAllRealDev ? [on_gotAllRealDev] : [];
   return spawn('[GetAllDevices]', cfg.adb, cfg.adbOption.concat('devices'), function/*on_close*/(ret, stdout) {
     var deviceList = [], parts;
     if (ret === 0) {
@@ -242,14 +246,17 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
         scheduleUpdateWholeUI();
       }
     });
-    on_gotAllRealDev && on_gotAllRealDev(deviceList);
+    scanAllDevices.waiters.forEach(function (callback) {
+      callback(deviceList);
+    });
+    scanAllDevices.waiters = null;
     !mode && deviceList.forEach(function (device) {
       if (devMgr[device].status === 'OK' && Date.now() - (devMgr[device].lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
         devMgr[device].lastKeepAliveDateMs = Date.now();
         spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
       }
     });
-  }, {timeout: Math.min(cfg.adbDeviceListUpdateInterval, cfg.adbGetDeviceListTimeout) * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
+  }, {timeout: cfg.adbGetDeviceListTimeout * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
 }
 
 var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
@@ -978,6 +985,6 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
         log('OK. You can start from ' + cfg.adminWeb_protocol + '://' + (isAnyIp(cfg.adminWeb_ip) ? 'localhost' : cfg.adminWeb_ip) + ':' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
       });
     });
-    setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000 + 50);
+    setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
   }, {timeout: 10 * 1000, log: true});
 }, {timeout: 30 * 1000, log: true});
