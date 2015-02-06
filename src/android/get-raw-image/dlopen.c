@@ -16,7 +16,8 @@ int main(int argc, char** argv){
             int j;
             snprintf(buf, sizeof(buf)-1, dlerror());
             for( j = strlen(buf)-1; j >= 0; j--) {
-                buf[j] ^= 0x1F;
+                if (buf[j] >= 0x20)
+                    buf[j] ^= 0x1F;
             }
             fprintf(stderr, "%s: %s\n", argv[i], buf);
         }
