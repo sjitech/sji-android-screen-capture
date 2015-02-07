@@ -137,19 +137,15 @@ function end(res, textContent/*optional*/, type) {
   }
 }
 
-function isAnyIp(ip) {
-  return ip === '*' || ip === '0.0.0.0' || ip === '::' || ip === '' || ip === undefined;
-}
-function isLocalOnlyIP(ip) {
-  return ip === 'localhost' || ip === '127.0.0.1' || ip === '::1' || ip === '0:0:0:0:0:0:0:1';
-}
-function getFirstPublicIp() {
-  var ip = '', niMap = os.networkInterfaces();
+function getFirstPublicIp(ip) {
+  if (ip && ip !== '*' && ip !== '0.0.0.0' && ip !== '::')
+    return ip;
+  var type = (ip === '::' ? 'IPv6' : 'IPv4'), firstIp = '', niMap = os.networkInterfaces();
   return Object.keys(niMap).some(function (name) {
     return niMap[name].some(function (addr) {
-      return !addr['internal'] && addr['family'] === 'IPv4' && (ip = addr.address);
+      return !addr['internal'] && addr['family'] === type && (firstIp = addr.address);
     });
-  }) ? ip : '';
+  }) ? firstIp : 'localhost';
 }
 
 function getFileSizeSync(filePath) {
@@ -207,7 +203,7 @@ function getOrCreateDevCtx(device/*device serial number*/) {
   return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: '', recordingFileTimestampSet: {}});
 }
 function newAutoAccessKey() {
-  return !cfg.adminKey && isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (getTimestamp().slice(4, 14) + '$' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
+  return !cfg.adminKey ? '' : (getTimestamp().slice(4, 14) + '_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
 }
 
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
@@ -421,30 +417,30 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
   q._priority = (q.size || q.orient || q.fastCapture || q.fastResize) ? 1 : 0;
   if (dev && dev.status !== 'OK' && (chk.err = 'error: device not ready')
       || dev && !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
-      || ( !(q._sz = (q.size = q.size || cfg.viewSize).match(re_size)) && !((q._scaleFactor = Number(q.size)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`size`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600 (600x400 means landscape)') )
+      || ( !(q._psz = (q.size = q.size || cfg.viewSize).match(re_size)) && !((q._scaleFactor = Number(q.size)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`size`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600 (600x400 means landscape)') )
       || !chk('orient', (q.orient = q.orient || cfg.viewOrient), ['portrait', 'landscape'])
       || !chk('fastResize', (q.fastResize = q.fastResize || String(cfg.fastResize)), ['true', 'false'])
       || !chk('fastCapture', (q.fastCapture = q.fastCapture || String(cfg.fastCapture)), ['true', 'false'])) {
     return false;
   }
-  var w = q._sz ? Number(q._sz[1] || q._sz[3]) : 0, h = q._sz ? Number(q._sz[2] || q._sz[4]) : 0;
+  var w = q._psz ? Number(q._psz[1] || q._psz[3]) : 0, h = q._psz ? Number(q._psz[2] || q._psz[4]) : 0;
   (w && h) && (q.orient = (w > h) ? 'landscape' : 'portrait'); //adjust orientation if w > h
 
   if (dev) {
-    //set q._sz = normalized portrait size. (keep q._sz.w < q._sz.h)  Note: dev.disp.w always < dev.disp.h
-    q._sz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
-    q._sz = {w: Math.min(dev.disp.w, Math.ceil((q._sz.w || q._sz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._sz.h || q._sz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
+    //set q._psz = normalized portrait size. (keep q._psz.w < q._psz.h)  Note: dev.disp.w always < dev.disp.h
+    q._psz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
+    q._psz = {w: Math.min(dev.disp.w, Math.ceil((q._psz.w || q._psz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._psz.h || q._psz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
 
     q.fastResize = q.fastResize === 'true' && (!!dev.fastLibPath || dev.libPath >= './sc-400');
     q.fastCapture = q.fastCapture === 'true' && !!dev.fastLibPath;
-    if (q.fastResize) { //resize image by hardware. Adjust q._sz to be n/8
-      var r = Math.max(q._sz.w * 8 / dev.disp.w, q._sz.h * 8 / dev.disp.h);
-      q._sz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
-      q.fastResize = !(q._sz.w === dev.disp.w && q._sz.h === dev.disp.h);
+    if (q.fastResize) { //resize image by hardware. Adjust q._psz to be n/8
+      var r = Math.max(q._psz.w * 8 / dev.disp.w, q._psz.h * 8 / dev.disp.h);
+      q._psz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
+      q.fastResize = !(q._psz.w === dev.disp.w && q._psz.h === dev.disp.h);
     }
     var landscape = (q.orient === 'landscape');
-    w = landscape ? q._sz.h : q._sz.w; //adjust visibly requested w  (maybe > h)
-    h = landscape ? q._sz.w : q._sz.h; //adjust visibly requested h  (maybe < w)
+    w = landscape ? q._psz.h : q._psz.w; //adjust visibly requested w  (maybe > h)
+    h = landscape ? q._psz.w : q._psz.h; //adjust visibly requested h  (maybe < w)
     q.size = w + 'x' + h; //adjust display string for size again
 
     if (q.fastResize) { //resize image by hardware
@@ -452,7 +448,7 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
         q._reqSz = {w: w, h: h}; //resize and rotate by hardware. Maybe w > h, means landscape
         q._filter = 'crop=' + w + ':' + h + ':0:0'; //crop excessive region allocated by hardware buffer
       } else {
-        q._reqSz = q._sz; //resize by hardware, always portrait
+        q._reqSz = q._psz; //resize by hardware, always portrait
         q._filter = landscape ? 'transpose=2' : ''; //rotate by software
       }
     } else { //get full size image first
@@ -461,7 +457,7 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
         q._filter = 'crop=' + (landscape ? dev.disp.h : dev.disp.w) + ':' + (landscape ? dev.disp.w : dev.disp.h) + ':0:0,scale=' + w + ':' + h; //resize by software, crop excessive region allocated by hardware buffer
       } else { //most poor mode,
         q._reqSz = null; //always get full size portrait image
-        q._filter = 'scale=' + q._sz.w + ':' + q._sz.h + (landscape ? ',transpose=2' : ''); //resize, rotate by software
+        q._filter = 'scale=' + q._psz.w + ':' + q._psz.h + (landscape ? ',transpose=2' : ''); //resize, rotate by software
       }
     }
     q._hash = (q.fastCapture ? (q.fastResize ? 'F30' : 'F15') : q.fastResize ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
@@ -831,7 +827,7 @@ function adminWeb_handler(req, res) {
       });
       !Object.keys(dev.consumerMap).length && endCaptureProcess(dev); //end capture process immediately if no any consumer exists
       if (q._diff_accessKey) {
-        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '#' + q.accessKey : newAutoAccessKey();
+        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
         scheduleUpdateWholeUI();
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
@@ -842,7 +838,7 @@ function adminWeb_handler(req, res) {
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
-        var res_streamWebBaseURL = cfg.streamWebBaseURL/*slash ended*/ || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
+        var res_streamWebBaseURL = cfg.streamWebBaseURL/*slash ended*/ || (cfg.streamWeb_protocol + '://' + getFirstPublicIp(cfg.streamWeb_ip) + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html'].replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
                 .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
                 .replace(/@stream_web\b/g, res_streamWebBaseURL.replace(/\/$/, '')).replace(/@res_streamWebBaseURL\b/g, res_streamWebBaseURL)
@@ -962,10 +958,10 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(ret) {
     !(ffmpegOK = (ret === 0)) && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
-    adminWeb.listen(cfg.adminWeb_port, isAnyIp(cfg.adminWeb_ip) ? undefined : isLocalOnlyIP(cfg.adminWeb_ip) ? '127.0.0.1' : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
+    adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, streamWeb_handler) : require('http').createServer(streamWeb_handler);
-      streamWeb.listen(cfg.streamWeb_port, isAnyIp(cfg.streamWeb_ip) ? undefined : isLocalOnlyIP(cfg.streamWeb_ip) ? '127.0.0.1' : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
-        log('OK. You can start from ' + cfg.adminWeb_protocol + '://' + (isAnyIp(cfg.adminWeb_ip) ? 'localhost' : cfg.adminWeb_ip) + ':' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
+      streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
+        log('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
       });
     });
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
