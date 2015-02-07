@@ -844,12 +844,13 @@ function adminWeb_handler(req, res) {
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
         var res_streamWebBaseURL = cfg.streamWebBaseURL/*slash ended*/ || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html'].replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
-            .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
-            .replace(/@stream_web\b/g, res_streamWebBaseURL.replace(/\/$/, '')).replace(/@res_streamWebBaseURL\b/g, res_streamWebBaseURL)
-            .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
-            ['viewSize', 'viewOrient', 'streamWebBaseURL', 'videoFileFrameRate'].forEach(function (k) {
-              html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
-            });
+                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
+                .replace(/@stream_web\b/g, res_streamWebBaseURL.replace(/\/$/, '')).replace(/@res_streamWebBaseURL\b/g, res_streamWebBaseURL)
+                .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
+            ;
+        ['viewSize', 'viewOrient', 'streamWebBaseURL', 'videoFileFrameRate'].forEach(function (k) {
+          html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
+        });
         switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
           html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
         });
