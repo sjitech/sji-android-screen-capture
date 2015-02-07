@@ -5,8 +5,7 @@
   <title>LIVE: #devInfo</title>
   <link rel="stylesheet" type="text/css" href="common.css">
   <style>
-    .expandable > * {display: none}
-    #viewerContainer:hover {
+    #viewer:hover {
       border: 8px solid blue;
     }
   </style>
@@ -80,7 +79,7 @@
     <button onclick="AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey')">Enable ADB</button>
   </div>
 </div>
-<div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100; background-color: #f0f0f0">
+<div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
   <div id="lblLoading">loading</div>
   <div id="viewerContainer" style="display: inline-block">
     <img id="viewer" src="capture?device=@device&accessKey=@accessKey&size=@size&orient=@orient&fastCapture=@fastCapture&fastResize=@fastResize"/>

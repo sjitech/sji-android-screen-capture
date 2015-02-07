@@ -64,7 +64,7 @@ td ul li {list-style-position: inside}
     min-width: 16px;
     min-height: 16px;
     background-color: #A0A0A0;
-    border: 8px solid lightskyblue;
+    border: 8px solid gray;
 }
 #viewerContainer {
     -webkit-user-select: none;
