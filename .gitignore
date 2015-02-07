@@ -12,3 +12,4 @@ coverage
 src/**/std_toolchain
 bin/usb
 *trial*
+.idea
