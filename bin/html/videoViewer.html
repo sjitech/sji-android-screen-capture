@@ -11,95 +11,47 @@
 </head>
 <body>
 <div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; white-space: nowrap">
-  <div style="margin-right: 140px">
-    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
+  <div style="margin-right: 130px">
+    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
       &lt;&lt;
     </a>
-    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
+    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
       &lt;
     </a>
     <span class="fileDesc">@timestamp</span>
-    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
+    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
       &gt;
     </a>
-    <a href="videoViewer.html?_unprotect&device=@device&accessKey=@accessKey&fileindex=0">
+    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=0">
       &gt;&gt;
     </a>
     (Total:<b style="color:blue">@fileCount</b>)
   </div>
-  <div id="currentVideoType" style="font-weight: bolder; margin-right: 140px">
-    loading
-  </div>
 </div>
-<div style="position: fixed; right: 0; top: 27px; text-align: right; background-color: ghostwhite; width: 140px; z-index: 99">
+<div style="position: fixed; right: 0; top: 27px; text-align: center; width: 130px; z-index: 99">
   <div>
-    <button id="btnShow_mp4" style="display: none">Show MP4</button>
-  </div>
-  <div>
-    <button id="btnShow_webm" style="display: none">Show WebM</button>
-  </div>
-  <div style="margin-top: 16px">
     <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
   </div>
   <div style="margin-top: 8px">
-    Download:
+    <a href="getFile?@unprotect&device=@device&accessKey=@accessKey&filename=@filename&download=true" target="resultIFrame">Download</a>
   </div>
   <div>
-    <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4&download=true" target="resultIFrame">MP4</a>
-  </div>
-  <div>
-    :@fileSize_mp4
-  </div>
-  <div style="margin-top: 4px">
-    <a href="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm&download=true" target="resultIFrame">WebM</a>
-  </div>
-  <div>
-    :@fileSize_webm
+    @fileSize
   </div>
 </div>
-<div style="text-align: center; margin-top: 56px; margin-right: 140px; position: relative; z-index: 100; background-color: #f0f0f0">
+<div style="text-align: center; margin-top: 27px; margin-bottom: 24px; margin-right: 130px; position: relative; z-index: 100">
   <div id="viewerContainer" style="display: inline-block">
     <video id="viewer" autoplay controls>
-      <source id="viewerSrc_mp4" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.mp4" type="video/mp4">
-      <source id="viewerSrc_webm" src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@src.webm" type="video/webm">
-      <p>Your browser does not support H.264/MP4 or WebM in &lt;video&gt; tag</p>
+      <source src="getFile?@unprotect&device=@device&accessKey=@accessKey&filename=@filename" type="video/mp4">
+      <p>Your browser does not support H.264/MP4 in &lt;video&gt; tag. For firefox, please install latest version which will install H264 plugin by default so you can play.</p>
     </video>
   </div>
 </div>
+<div style="position: fixed; right: 0; bottom: 0; width: 130px; text-align: center">
+  <div style="font-weight: bold">Device Info</div>
+  <div style="border: 1px solid black; max-height: 176px; overflow: auto">#devInfo</div>
+</div>
 <script src="jquery.js" type="text/javascript"></script>
 <script src="common.js" type="text/javascript"></script>
-<script>
-  (function () {
-    var htmlMap = {}, statusTimer;
-    htmlMap.mp4 = document.getElementById('viewerContainer').outerHTML.replace(/<source .*\bwebm\b.*>/g, '');
-    htmlMap.webm = document.getElementById('viewerContainer').outerHTML.replace(/<source .*\bmp4\b.*>/g, '');
-    ['mp4', 'webm'].forEach(function (type) {
-      $('#btnShow_' + type).on('click', function () {
-        document.getElementById('viewerContainer').outerHTML = htmlMap[type];
-        setSrcStatus();
-      });
-    });
-    function setSrcStatus() {
-      var currentSrc, viewerSrc_mp4 = document.getElementById('viewerSrc_mp4'), viewerSrc_webm = document.getElementById('viewerSrc_webm');
-      if (viewerSrc_mp4 && viewerSrc_webm) {
-        currentSrc = document.getElementById('viewer').currentSrc;
-        if (!currentSrc) {
-          clearTimeout(statusTimer);
-          statusTimer = setTimeout(setSrcStatus, 100);
-        }
-      } else {
-        currentSrc = (viewerSrc_mp4 || viewerSrc_webm).src;
-        clearTimeout(statusTimer);
-      }
-
-      var currentVideoType = currentSrc && (currentSrc.match(/mp4|webm/) || {})[0];
-      $('#btnShow_mp4').css('display', currentVideoType === 'mp4' ? 'none' : '');
-      $('#btnShow_webm').css('display', currentVideoType === 'webm' ? 'none' : '');
-      $('#currentVideoType').text(currentVideoType === 'mp4' ? 'Showing MP4' : currentVideoType === 'webm' ? 'Showing WebM' : 'Showing ????');
-    }
-
-    setSrcStatus();
-  })();
-</script>
 </body>
 </html>

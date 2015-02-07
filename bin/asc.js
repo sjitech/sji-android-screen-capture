@@ -10,15 +10,15 @@ process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack, {stderr: true});
   throw err;
 });
-var devMgr = {/*deviceSN:*/}, status = { consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/},
+var devMgr = {/*deviceSN:*/}, status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/},
     adminWeb, streamWeb, ffmpegOK, httpSeq = 0;
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
-var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)\.ajpg)(?:(?:\.(webm|mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
+var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var dynamicConfKeyList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'useFastCapture', 'alsoRecordAsWebM'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, range: 0, orientation: 0, action: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, err: 0, x: 0, y: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, alsoRecordAsWebM: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, touch: {}, maxProcesses: 0, recordingFileTimestampSet: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0});
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'fastCapture'];
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, maxProcesses: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -117,9 +117,6 @@ function chk(name, value /*, next parameters: candidateArray | candidateValue | 
   }
   return true;
 }
-function no_q(querystring_value) {
-  return querystring_value === undefined || querystring_value === '';
-}
 
 function write(res, buf) {
   return !res.__isEnded && !res.__isClosed && res.write(buf);
@@ -207,13 +204,10 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, accessKey: newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/true), subOutputDir: '', recordingFileTimestampSet: {}});
+  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: '', recordingFileTimestampSet: {}});
 }
-function newAutoAccessKeyIfStreamWebPublic(firstTime) {
-  return isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (firstTime ? '-----------' : '') + '_auto_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex');
-}
-function isMasterMode(dev) {
-  return dev.accessKey && dev.accessKey.length > 11 && dev.accessKey.slice(11, 17) !== '_auto_';
+function newAutoAccessKey() {
+  return !cfg.adminKey && isLocalOnlyIP(cfg.streamWeb_ip) ? '' : (getTimestamp().slice(4, 14) + '$' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
 }
 
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
@@ -260,9 +254,9 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDevic
 }
 
 var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
-  'echo', '===;', 'getevent' , '-pS;', //get touch device info
+  'echo', '===;', 'getevent', '-pS;', //get touch device info
   'echo', '===;', 'cd', cfg.androidWorkDir, '&&', 'cat', 'version', '||', 'exit;'];
-var cmd_getExtraInfo = [ 'echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
+var cmd_getExtraInfo = ['echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
   'echo', '===;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
   'echo', '===;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
   'echo', '===;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
@@ -420,78 +414,73 @@ function turnOnScreen(dev) {
 }
 
 function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
-  if (dev) {
-    if (dev.status !== 'OK' && (chk.err = 'error: device not ready')
-        || !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])) {
-      return false;
-    }
-    q.__explicit = (no_q(q.scale) && no_q(q.rotate) && no_q(q.useFastCapture) && no_q(q.fastResize)) ? 0 : 1;
-  }
-  if ((!dev || q.__explicit) && !chk('scale', q.scale)) { //scale must input
-    return false;
-  }
-  no_q(q.scale) && (q.scale = cfg.scale);
-  no_q(q.rotate) && (q.rotate = cfg.rotate);
-  if (!(q._sz = q.scale.match(re_size)) && !((q._scaleFactor = Number(q.scale)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`scale`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600')
-      || !chk('rotate', (q.rotate = Number(q.rotate)), [0, 270])) {
+  q.fastResize === undefined && (q.fastResize = q['useFastResize']); //for compatibility
+  q.fastCapture === undefined && (q.fastCapture = q['useFastCapture']); //for compatibility
+  q.size === undefined && (q.size = q['scale']); //for compatibility
+  q._old = {size: q.size, orient: q.orient, fastCapture: q.fastCapture, fastResize: q.fastResize};
+  q._priority = (q.size || q.orient || q.fastCapture || q.fastResize) ? 1 : 0;
+  if (dev && dev.status !== 'OK' && (chk.err = 'error: device not ready')
+      || dev && !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
+      || ( !(q._sz = (q.size = q.size || cfg.viewSize).match(re_size)) && !((q._scaleFactor = Number(q.size)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`size`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600 (600x400 means landscape)') )
+      || !chk('orient', (q.orient = q.orient || cfg.viewOrient), ['portrait', 'landscape'])
+      || !chk('fastResize', (q.fastResize = q.fastResize || String(cfg.fastResize)), ['true', 'false'])
+      || !chk('fastCapture', (q.fastCapture = q.fastCapture || String(cfg.fastCapture)), ['true', 'false'])) {
     return false;
   }
   var w = q._sz ? Number(q._sz[1] || q._sz[3]) : 0, h = q._sz ? Number(q._sz[2] || q._sz[4]) : 0;
-  if (w && h) {
-    w > h ? (q.rotate = 270) : (w === h) ? (h = w + 2) && (q.scale = w + 'x' + h) : ''; //if w > h then treat as rotate
-    w < h && q.rotate && (q.scale = h + 'x' + w); //adjust display string for scale when in landscape mode
-  }
+  (w && h) && (q.orient = (w > h) ? 'landscape' : 'portrait'); //adjust orientation if w > h
 
   if (dev) {
     //set q._sz = normalized portrait size. (keep q._sz.w < q._sz.h)  Note: dev.disp.w always < dev.disp.h
     q._sz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
     q._sz = {w: Math.min(dev.disp.w, Math.ceil((q._sz.w || q._sz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._sz.h || q._sz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
 
-    q.useFastCapture = (no_q(q.useFastCapture) ? cfg.useFastCapture : (q.useFastCapture === 'true')) && !!dev.fastLibPath;
-    q.fastResize = (no_q(q.fastResize) ? cfg.fastResize : (q.fastResize === 'true')) && (q.useFastCapture || dev.libPath >= './sc-400');
+    q.fastResize = q.fastResize === 'true' && (!!dev.fastLibPath || dev.libPath >= './sc-400');
+    q.fastCapture = q.fastCapture === 'true' && !!dev.fastLibPath;
     if (q.fastResize) { //resize image by hardware. Adjust q._sz to be n/8
       var r = Math.max(q._sz.w * 8 / dev.disp.w, q._sz.h * 8 / dev.disp.h);
       q._sz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
       q.fastResize = !(q._sz.w === dev.disp.w && q._sz.h === dev.disp.h);
     }
-    w = !q.rotate ? q._sz.w : q._sz.h; //adjust visibly requested w  (maybe > h)
-    h = !q.rotate ? q._sz.h : q._sz.w; //adjust visibly requested h  (maybe < w)
-    q.scale = w + 'x' + h; //adjust display string for scale again
+    var landscape = (q.orient === 'landscape');
+    w = landscape ? q._sz.h : q._sz.w; //adjust visibly requested w  (maybe > h)
+    h = landscape ? q._sz.w : q._sz.h; //adjust visibly requested h  (maybe < w)
+    q.size = w + 'x' + h; //adjust display string for size again
 
     if (q.fastResize) { //resize image by hardware
-      if (q.useFastCapture) {
+      if (q.fastCapture) {
         q._reqSz = {w: w, h: h}; //resize and rotate by hardware. Maybe w > h, means landscape
         q._filter = 'crop=' + w + ':' + h + ':0:0'; //crop excessive region allocated by hardware buffer
       } else {
         q._reqSz = q._sz; //resize by hardware, always portrait
-        q._filter = q.rotate ? 'transpose=2' : ''; //rotate by software
+        q._filter = landscape ? 'transpose=2' : ''; //rotate by software
       }
     } else { //get full size image first
-      if (q.useFastCapture) {
-        q._reqSz = q.rotate ? {w: dev.disp.h, h: dev.disp.w} : null; //w > h means rotate by hardware
-        q._filter = 'crop=' + (!q.rotate ? dev.disp.w : dev.disp.h) + ':' + (!q.rotate ? dev.disp.h : dev.disp.w) + ':0:0,scale=' + w + ':' + h; //resize by software, crop excessive region allocated by hardware buffer
+      if (q.fastCapture) {
+        q._reqSz = landscape ? {w: dev.disp.h, h: dev.disp.w} : null; //w > h means rotate by hardware
+        q._filter = 'crop=' + (landscape ? dev.disp.h : dev.disp.w) + ':' + (landscape ? dev.disp.w : dev.disp.h) + ':0:0,scale=' + w + ':' + h; //resize by software, crop excessive region allocated by hardware buffer
       } else { //most poor mode,
         q._reqSz = null; //always get full size portrait image
-        q._filter = 'scale=' + q._sz.w + ':' + q._sz.h + (q.rotate ? ',transpose=2' : ''); //resize, rotate by software
+        q._filter = 'scale=' + q._sz.w + ':' + q._sz.h + (landscape ? ',transpose=2' : ''); //resize, rotate by software
       }
     }
-    q._FpsScaleRotate = (q.useFastCapture ? 'F30' : q.fastResize ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
+    q._hash = (q.fastCapture ? (q.fastResize ? 'F30' : 'F15') : q.fastResize ? 'f10' : 'f4') + (q._reqSz ? 'W' : 'w') + w + (q._reqSz ? 'H' : 'h') + h;
     q.timestamp = getTimestamp();
-    q._FpsScaleRotateDisp = (q.useFastCapture ? 'F30' : q.fastResize ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
+    q._disp = (q.fastCapture ? (q.fastResize ? 'F30' : 'F15') : q.fastResize ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
 
-    if (dev.capture && q._FpsScaleRotate !== dev.capture.q._FpsScaleRotate && q.__explicit >= dev.capture.q.__explicit && !isMasterMode(dev) && !forRecording)
+    if (dev.capture && q._hash !== dev.capture.q._hash && q._priority >= dev.capture.q._priority && !dev.masterMode && !forRecording)
       endCaptureProcess(dev); //stop incompatible capture process immediately if necessary
   }
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._FpsScaleRotate + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
-      '{', 'date', '>&2', '&&', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? ['&&', 'export', 'ASC_LOG_ALL=1'] : []), '&&',
-      './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.useFastCapture && dev.fastLibPath || dev.libPath,
-      (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/, ';',
-      '}', '2>', cfg.androidLogPath).join(' ')
+  var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._hash + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
+          '{', 'date', '>&2', '&&', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? ['&&', 'export', 'ASC_LOG_ALL=1'] : []), '&&',
+          './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+          '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
+          (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f', 'mjpeg', '-q:v', '1', '-'/*output to stdout*/, ';',
+          '}', '2>', cfg.androidLogPath).join(' ')
   ), function/*on_close*/() {
     capture === dev.capture && endCaptureProcess(dev);
   }, {noLogStdout: true, noMergeStdout: true, log: true});
@@ -514,7 +503,7 @@ function _startNewCaptureProcess(dev, q) {
   });
   turnOnScreen(dev);
   scheduleUpdateLiveUI();
-  q.useFastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
+  q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
     capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(dev.consumerMap, function (res) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.oldImageIndex = capture.image.i));
@@ -540,7 +529,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.__childProc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
-  q.useFastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
+  q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
   q.type === 'jpg' && dev.capture.image && endCaptureConsumer(res, dev.capture.image.buf);
   q.type === 'jpg' && dev.capture.image && dev.capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
 }
@@ -568,17 +557,14 @@ function endCaptureProcess(dev) {
   scheduleUpdateLiveUI();
 }
 function doRecord(dev, q/*same as capture*/) {
-  q.webm = (no_q(q.webm) ? cfg.alsoRecordAsWebM : (q.webm === 'true'));
-  var src = querystring.escape(q.device) + '~rec_' + (dev.capture && dev.capture.q || q)._FpsScaleRotate + '_' + q.timestamp + '.ajpg', outPathNoExt = cfg.outputDir + '/' + dev.subOutputDir + '/' + src;
+  var filename = querystring.escape(q.device) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + dev.subOutputDir + '/' + filename;
   dev.recordingFileTimestampSet[q.timestamp] = true;
-  var childProc = spawn('[REC ' + q.device + ' ' + (dev.capture && dev.capture.q || q)._FpsScaleRotate + ']', cfg.ffmpeg, [].concat(
+  var childProc = spawn('[REC ' + q.device + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
-      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPathNoExt + '.mp4',
-      (q.webm ? ['-b:v', '1M', '-crf', '5', '-qmin', '0', '-qmax', 50, outPathNoExt + '.webm'] : [])
+      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
   ), function/*on_close*/() {
-    dev.subOutputDir && fs.link(outPathNoExt + '.mp4', cfg.outputDir + '/' + src + '.mp4', log.nonEmpty);
-    dev.subOutputDir && q.webm && fs.link(outPathNoExt + '.webm', cfg.outputDir + '/' + src + '.webm', log.nonEmpty);
+    dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + filename, log.nonEmpty);
     delete dev.recordingFileTimestampSet[q.timestamp];
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
   childProc.stdin.__feedConvertTimer = setInterval(function () {
@@ -587,7 +573,7 @@ function doRecord(dev, q/*same as capture*/) {
   childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
   childProc.stdin.__tag = REC_TAG;
   doCapture(dev, childProc.stdin, q);
-  return 'OK: ' + src + '.mp4' + (q.webm ? ' ' + src + '.webm' : '');
+  return 'OK: ' + filename;
 }
 
 function scheduleUpdateLiveUI() {
@@ -601,7 +587,7 @@ function scheduleUpdateLiveUI() {
           var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
           sd['liveViewCount_' + id] = liveViewCount ? '(' + liveViewCount + ')' : '';
           sd['recordingCount_' + id] = dev.consumerMap[REC_TAG] ? '(1)' : '';
-          sd['captureParameter_' + id] = dev.capture ? dev.capture.q._FpsScaleRotateDisp : '';
+          sd['captureParameter_' + id] = dev.capture ? dev.capture.q._disp : '';
         }
       });
       if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
@@ -651,14 +637,11 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
 }
 function replaceComVar(html, dev) {
   return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, htmlIdEncode(dev.device))
-      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey)).replace(/#accessKey\b/g, htmlEncode(dev.accessKey)).replace(/#devInfo\b/g, dev.info_disp);
+      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_disp)
 }
 String.prototype.replaceShowIf = function (placeHolder, show) {
   return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
 };
-function isAccessKeyDiff(dev, accessKey) {
-  return accessKey !== dev.accessKey && accessKey !== dev.accessKey.slice(11);
-}
 
 function streamWeb_handler(req, res) {
   if (req.url.length > 4096 || req.method !== 'GET' || req.url === '/favicon.ico') {
@@ -666,11 +649,11 @@ function streamWeb_handler(req, res) {
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
   res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
-  res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : ''));
+  res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
-  if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && isAccessKeyDiff(dev, q.accessKey) && (chk.err = 'access denied')) {
+  if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
   setDefaultHttpHeaderAndInitCloseHandler(res);
@@ -689,21 +672,20 @@ function streamWeb_handler(req, res) {
           !cfg.enableGetOutputFile && !(cfg.adminKey && q.adminKey === cfg.adminKey) && (chk.err = 'access denied')) {
         return end(res, chk.err);
       }
-      q.filename = querystring.escape(q.device) + '~live_' + dev.capture.q._FpsScaleRotate + '_' + dev.capture.q.timestamp + '.ajpg~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
+      q.filename = querystring.escape(q.device) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
       fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.image.buf, function (err) {
         err ? log(err) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, log.nonEmpty));
       });
       return end(res, 'OK: ' + q.filename);
     case '/liveViewer.html':  //-------------------------show live capture (Just as a sample) ------------------------
-      q.__old = {scale: q.scale, rotate: q.rotate, useFastCapture: q.useFastCapture, fastResize: q.fastResize};
       if (!chkCaptureParameter(dev, q, /*force_ajpg:*/true)) {
         return end(res, chk.err);
       }
-      return end(res, replaceComVar(htmlCache[urlPath], dev)
-          .replace(/@scale\b/g, (dev.capture && dev.capture.q || q).scale).replace(/@rotate\b/g, (dev.capture && dev.capture.q || q).rotate).replace(new RegExp('_selectedIf_rotate_' + ((dev.capture && dev.capture.q || q).rotate), 'g'), 'selected').replace(/@orient\b/g, (dev.capture && dev.capture.q || q).rotate === 270 ? 'Landscape' : 'Portrait')
-          .replace(/@fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize).replace(/@useFastCapture\b/g, (dev.capture && dev.capture.q || q).useFastCapture)
-          .replaceShowIf('masterMode', isMasterMode(dev))
-          .replace(/@old_scale\b/g, q.__old.scale || '').replace(/@old_rotate\b/g, q.__old.rotate || '').replace(/@old_fastResize\b/g, q.__old.fastResize || '').replace(/@old_useFastCapture\b/g, q.__old.useFastCapture || '')
+      return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
+              .replace(/@size\b/g, q._old.size || '').replace(/@orient\b/g, q._old.orient || '').replace(/@fastResize\b/g, q._old.fastResize || '').replace(/@fastCapture\b/g, q._old.fastCapture || '')
+              .replace(/@res_size\b/g, (dev.capture && dev.capture.q || q).size).replace(/@res_orient\b/g, (dev.capture && dev.capture.q || q).orient).replace(/@res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture).replace(/@res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize)
+              .replace(/checkedIf_res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture ? 'checked' : '').replace(/checkedIf_res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize ? 'checked' : '')
+              .replace(/enabledIf_can_fastCapture\b/g, dev.fastLibPath ? '' : 'disabled').replace(/enabledIf_can_fastResize\b/g, !!dev.fastLibPath || dev.libPath >= './sc-400' ? '' : 'disabled')
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
     case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------
@@ -725,18 +707,17 @@ function streamWeb_handler(req, res) {
             return end(res, sortedKeys.length ? '`fileindex`: file not found' : 'error: file not found');
           }
           return end(res, replaceComVar(htmlCache[urlPath], dev)
-              .replace(/@fileindex\b/g, q.fileindex).replace(/@src\b/g, querystring.escape(q.filename.src))
-              .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
-              .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, sortedKeys.length - 1)
-              .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, Math.max(q.fileindex - 1, 0))
-              .replace(/@fileSize_mp4\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.mp4').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
-              .replace(/@fileSize_webm\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename.src + '.webm').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
-              .replace(/_unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
+                  .replace(/@fileindex\b/g, q.fileindex).replace(/@filename\b/g, querystring.escape(q.filename))
+                  .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
+                  .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, String(sortedKeys.length - 1))
+                  .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, String(Math.max(q.fileindex - 1, 0)))
+                  .replace(/@fileSize\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
+                  .replace(/@unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               , 'text/html');
         } else {
           return end(res, replaceComVar(htmlCache[urlPath], dev)
               .replace(/@count\b/g, sortedKeys.length)
-              .replace(/_unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
+              .replace(/@unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
                 return sortedKeys.reduce(function (joinedStr, key) {
                   return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
@@ -761,9 +742,9 @@ function streamWeb_handler(req, res) {
         res.statusCode = 206/*Partial Content*/;
       }
       q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + q.filename);
-      res.setHeader('Content-Type', q.filename.type === 'mp4' ? 'video/mp4' : q.filename.type === 'webm' ? 'video/webm' : q.filename.type === 'jpg' ? 'image/jpeg' : '');
+      res.setHeader('Content-Type', q.filename.type === 'mp4' ? 'video/mp4' : q.filename.type === 'jpg' ? 'image/jpeg' : '');
       return fs.createReadStream(cfg.outputDir + '/' + q.filename, q._range)
-          .on('error',function (err) {
+          .on('error', function (err) {
             end(res, stringifyError(err));
           }).pipe(res);
     case '/touch':
@@ -783,13 +764,19 @@ function streamWeb_handler(req, res) {
       if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112]) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
         return end(res, chk.err);
       }
-      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {
+        timeout: cfg.adbSendKeyTimeout * 1000,
+        log: cfg.logAllAdbCommands
+      });
       return end(res, 'OK');
     case '/sendText':
       if (!chk('text', q.text) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
         return end(res, chk.err);
       }
-      spawn('[sendText ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+      spawn('[sendText ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
+        timeout: cfg.adbSendKeyTimeout * 1000,
+        log: cfg.logAllAdbCommands
+      });
       return end(res, 'OK');
     case '/turnOnScreen':
       if (Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
@@ -837,14 +824,14 @@ function adminWeb_handler(req, res) {
         return end(res, stringifyError(err));
       }
       q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
-      q.accessKey = (q.accessKey === undefined ? dev.accessKey : (q.accessKey || newAutoAccessKeyIfStreamWebPublic(/*firstTime:*/false)));
+      q._diff_accessKey = q.accessKey !== undefined && q.accessKey !== dev.accessKey && q.accessKey !== dev.accessKey.slice(11);
       forEachValueIn(dev.consumerMap, function (res) {
-        (q.action === 'stopRecording' && res.__tag === REC_TAG || q.action === 'startRecording' && res.__tag === REC_TAG || q.action === 'stopLiveView' && res.__tag !== REC_TAG || isAccessKeyDiff(dev, q.accessKey))
+        (q._diff_accessKey || (q.action === 'stopRecording' && res.__tag === REC_TAG) || (q.action === 'startRecording' && res.__tag === REC_TAG) || (q.action === 'stopLiveView' && res.__tag !== REC_TAG))
         && endCaptureConsumer(res);
       });
       !Object.keys(dev.consumerMap).length && endCaptureProcess(dev); //end capture process immediately if no any consumer exists
-      if (isAccessKeyDiff(dev, q.accessKey)) {
-        dev.accessKey = q.accessKey ? getTimestamp().slice(4, 14) + '.' + q.accessKey : '';
+      if (q._diff_accessKey) {
+        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '#' + q.accessKey : newAutoAccessKey();
         scheduleUpdateWholeUI();
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
@@ -855,30 +842,28 @@ function adminWeb_handler(req, res) {
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
-        var result_streamWebBaseURL = cfg.streamWebBaseURL || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
-        var html = htmlCache['/home.html']
-                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '').replaceShowIf('adminUrlSuffix', cfg.adminUrlSuffix)
-                .replace(new RegExp('_selectedIf_rotate_' + cfg.rotate, 'g'), 'selected')
-                .replace(/@stream_web\b/g, result_streamWebBaseURL.replace(/\/$/, '')).replace(/@result_streamWebBaseURL\b/g, result_streamWebBaseURL)
-                .replace(/_checkedIf_autoChooseStreamWebBaseURL\b/g, cfg.streamWebBaseURL ? '' : 'checked').replaceShowIf('autoChooseStreamWebBaseURL', !cfg.streamWebBaseURL)
-                .replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
-                .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
-            ;
-        ['streamWebBaseURL', 'videoFileFrameRate', 'scale', 'rotate'].forEach(function (k) {
-          html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
-        });
-        dynamicConfKeyList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
-          html = html.replace(new RegExp('@' + k + '_negVal', 'g'), !cfg[k]).replace(new RegExp('_' + k + '_checked', 'g'), cfg[k] ? 'checked' : '').replace(new RegExp('@' + k, 'g'), cfg[k]);
+        var res_streamWebBaseURL = cfg.streamWebBaseURL/*slash ended*/ || (cfg.streamWeb_protocol + '://' + (isAnyIp(cfg.streamWeb_ip) && getFirstPublicIp() || 'localhost') + ':' + cfg.streamWeb_port + '/');
+        var html = htmlCache['/home.html'].replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
+            .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
+            .replace(/@stream_web\b/g, res_streamWebBaseURL.replace(/\/$/, '')).replace(/@res_streamWebBaseURL\b/g, res_streamWebBaseURL)
+            .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
+            ['viewSize', 'viewOrient', 'streamWebBaseURL', 'videoFileFrameRate'].forEach(function (k) {
+              html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
+            });
+        switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
+          html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
         });
         cfg.adminKey && res.setHeader('Set-Cookie', 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-          return Object.keys(devMgr).sort(function (sn1, sn2) {
-            return devMgr[sn1].info_disp.localeCompare(devMgr[sn2].info_disp);
-          }).reduce(function (joinedStr, device) {
-                return realDeviceList.indexOf(device) < 0 && !cfg.showDisconnectedDevices ? joinedStr
-                    : joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
-                    .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
-                    .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+          return (cfg.showDisconnectedDevices ? Object.keys(devMgr) : Object.keys(devMgr).filter(function (sn) {
+            return realDeviceList.indexOf(sn) >= 0;
+          })).sort(function (sn1, sn2) {
+                return devMgr[sn1].info_disp.localeCompare(devMgr[sn2].info_disp);
+              }).reduce(function (joinedStr, device, i) {
+                return joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
+                        .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
+                        .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+                        .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
               }, ''/*initial joinedStr*/);
         }), 'text/html');
       });
@@ -894,33 +879,28 @@ function adminWeb_handler(req, res) {
       reloadResource();
       return end(res, 'OK');
     case '/set':
-      if (q[q._confKey = 'streamWebBaseURL'] !== undefined) {
+      if (q.streamWebBaseURL !== undefined) {
         if (q.streamWebBaseURL && ((parsedUrl = Url.parse(q.streamWebBaseURL)).protocol !== 'https:' && parsedUrl.protocol !== 'http:' || !parsedUrl.hostname || parsedUrl.search || parsedUrl.hash)) {
-          return end(res, '`streamWebBaseURL`: must be an valid http or https URL, and must not contains querystring or #anchor');
+          return end(res, 'streamWebBaseURL: must be an valid http or https URL, and must not contains query string or #anchor');
         }
-        q.streamWebBaseURL && (q.streamWebBaseURL = parsedUrl.format()); //always contains tail slash
-      } else if (q[q._confKey = 'videoFileFrameRate'] !== undefined) {
+        cfg.streamWebBaseURL = q.streamWebBaseURL && parsedUrl.format(); //'' or slash ended url
+      } else if (q.videoFileFrameRate !== undefined) {
         if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
           return end(res, chk.err);
         }
-      } else if (q[q._confKey = 'scale'] !== undefined) {
+        cfg.videoFileFrameRate = q.videoFileFrameRate;
+      } else if (q.size !== undefined || q.orient !== undefined) {
         if (!chkCaptureParameter(null, q)) {
           return end(res, chk.err);
         }
-        if (q.rotate !== undefined && q.rotate !== cfg.rotate) {
-          cfg.rotate = q.rotate;
-          scheduleUpdateWholeUI();
-        }
+        cfg.viewSize = q.size;
+        cfg.viewOrient = q.orient;
       } else { //-------------------------------------------------Set some internal bool var--------------------------
-        q._confKey = forEachValueIn(dynamicConfKeyList, function (k) {
-          q[k] !== undefined && (q._confKey = k) && (q[k] = (q[k] === 'true'));
-          return (q[k] !== undefined) && 'break';
-        }) ? q._confKey : '';
+        forEachValueIn(switchList, function (k) {
+          q[k] !== undefined && (cfg[k] = (q[k] === 'true'));
+        });
       }
-      if (q._confKey && cfg[q._confKey] !== q[q._confKey]) {
-        cfg[q._confKey] = q[q._confKey];
-        scheduleUpdateWholeUI();
-      }
+      scheduleUpdateWholeUI();
       return end(res, 'OK');
     case '/status':  //-----------------------------------push live capture status to browser-------------------------
       res.__previousVer = q.ver;
@@ -945,10 +925,12 @@ function adminWeb_handler(req, res) {
           i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
         });
       }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(q.device));
-      return fs.createReadStream(q._logFilePath, {start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0, end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1) })
-          .on('error',function (err) {
-            end(res, stringifyError(err));
-          }).pipe(res);
+      return fs.createReadStream(q._logFilePath, {
+        start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
+        end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
+      }).on('error', function (err) {
+        end(res, stringifyError(err));
+      }).pipe(res);
     case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
       scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
@@ -977,7 +959,7 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(ret) {
-    !(ffmpegOK = (ret === 0)) && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 or WebM format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
+    !(ffmpegOK = (ret === 0)) && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
     adminWeb.listen(cfg.adminWeb_port, isAnyIp(cfg.adminWeb_ip) ? undefined : isLocalOnlyIP(cfg.adminWeb_ip) ? '127.0.0.1' : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, streamWeb_handler) : require('http').createServer(streamWeb_handler);

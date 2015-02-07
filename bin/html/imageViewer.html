@@ -13,12 +13,16 @@
   <span style="white-space: nowrap">Saved Images (<b style="color: blue">@count</b>)</span>
   <button style="float: right" onclick="$('.imgContainer').each(function(){AscUtil.rotateChildLocally(this)})">Rotate All</button>
 </div>
-<div style="text-align: left; width: 100%; margin-top: 28px; background-color: #f0f0f0">
+<div style="text-align: left; width: 100%; margin-top: 28px; margin-bottom: 24px; background-color: #f0f0f0">
   <!--repeatBegin-->
   <div class="imgContainer" onclick="AscUtil.rotateChildLocally(this)">
-    <img src="getFile?_unprotect&device=@device&accessKey=@accessKey&filename=@filename"/>
+    <img src="getFile?@unprotect&device=@device&accessKey=@accessKey&filename=@filename"/>
   </div>
   <!--repeatEnd-->
+</div>
+<div style="position: fixed; right: 0; bottom: 0; width: 130px; text-align: center">
+  <div style="font-weight: bold">Device Info</div>
+  <div style="border: 1px solid black; max-height: 176px; overflow: auto">#devInfo</div>
 </div>
 <script src="jquery.js" type="text/javascript"></script>
 <script src="common.js" type="text/javascript"></script>

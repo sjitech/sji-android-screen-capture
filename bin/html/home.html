@@ -15,36 +15,24 @@
   <link rel="stylesheet" type="text/css" href="common.css">
 </head>
 <body onunload="">
-<div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; height: 56px">
-  <form action="set" target="resultIFrame" style="white-space: nowrap; height: 27px; margin-right: 50px">
-    <input type="hidden" name="adminKey" value="#adminKey"/>
-    <button type="submit" title="Set default value">Set</button>
-    <label class="infoWithTip" title="Set default scale. Example: 0.5, 400x600, 400x, x600">
-      Default Scale<input type="text" name="scale" value="@scale" size="10"/>
-    </label>
-    <label>
-      <select name="rotate">
-        <option value="0" _selectedIf_rotate_0>Portrait</option>
-        <option value="270" title="landscape" _selectedIf_rotate_270>Landscape</option>
-      </select>
-    </label>
-  </form>
-  <iframe name="resultIFrame"></iframe>
+<div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; height: 29px">
+  <iframe name="resultIFrame" style="color: red"></iframe>
 </div>
-<div style="margin-top: 56px; text-align: center">
-  <div style="@hideIf_ffmpegOK; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 and WebM format</div>
+<div style="margin-top: 29px; text-align: center">
+  <div style="@hideIf_ffmpegOK; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 format</div>
   <table id="device_tbl" style="max-width:100%; border-collapse: collapse; display: inline-block">
     <!--repeatBegin-->
     <tr id="row1_$device" class="@devStatusClass">
-      <td style="text-align: left; vertical-align: top">
+      <td style="width: 5px; border-right: 1px solid gray">@rowNum</td>
+      <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap" class="deviceSN">#device</span>
-        <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure to set/clear protect key? All running live view and recording will be stopped.')" style="display: inline-block; white-space: nowrap; float: right">
+        <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure to set/clear protect key?' + ($('#recordingCount_$device').text() || !$('#liveViewCount_$device').text() ? 'All running live view or recording will be stopped.' : ''))" style="display: inline-block; white-space: nowrap; float: right">
           <input type="hidden" name="adminKey" value="#adminKey"/>
           <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
           <!--<button type="submit" class="internal">Set</button>-->
           <label title="Access Key. Set a key to protect access to live view page, and disable resize from live view page">
-            &nbsp;<input type="text" name="accessKey" value="#accessKey" style="width: 40px; margin: 0; vertical-align: top" />
+            &nbsp;<input type="text" name="accessKey" value="#accessKey_disp" style="width: 40px; margin: 0; vertical-align: top" class="masterMode_@masterMode" />
           </label>
         </form>
         <span>#devErr</span>
@@ -54,7 +42,8 @@
       </td>
     </tr>
     <tr id="row2_$device" class="@devStatusClass" style="border-bottom: 1px solid #000000">
-      <td style="text-align: left; vertical-align: top">
+      <td style="border-right: 1px solid gray"></td>
+      <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap">
           <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
             View
@@ -122,18 +111,6 @@
         </label>
       </div>
     </form>
-    <form action="set" target="resultIFrame" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
-      Stream Web: <span style="border: 1px solid #000000; padding: 2px;">@result_streamWebBaseURL</span>
-      <br>
-      <button type="submit">Set</button>
-      <label>
-        <input type="checkbox" _checkedIf_autoChooseStreamWebBaseURL onclick="if ($.prop(this, 'checked')) {$('#txt_streamWebBaseURL').val('').hide();} else {$('#txt_streamWebBaseURL').val('@result_streamWebBaseURL').show();}"/>Auto
-      </label>
-      <label>
-        <input type="text" name="streamWebBaseURL" id="txt_streamWebBaseURL" value="@streamWebBaseURL" style="@hideIf_autoChooseStreamWebBaseURL; width: 170px" />
-      </label>
-    </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <a class="button" href="prepareAllDevices?adminKey=@adminKey&mode=checkPrepare" target="resultIFrame" title="prepare all device files">
         Prepare
@@ -151,61 +128,71 @@
     </div>
     <div>
       <a class="button @logFpsStatistic" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
-        <input type="checkbox" _logFpsStatistic_checked/>Log FPS Statistic
+        <input type="checkbox" checkedIf_logFpsStatistic/>Log FPS Statistic
       </a>
     </div>
     <div>
       <a class="button @logAllAdbCommands" href="set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
-        <input type="checkbox" _logAllAdbCommands_checked/>Log All ADB Commands
+        <input type="checkbox" checkedIf_logAllAdbCommands/>Log All ADB Commands
       </a>
     </div>
     <div>
       <a class="button @logHttpReqDetail" href="set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
-        <input type="checkbox" _logHttpReqDetail_checked/>Log HTTP Request Detail
+        <input type="checkbox" checkedIf_logHttpReqDetail/>Log HTTP Request Detail
       </a>
     </div>
     <div>
       <a class="button @logFfmpegDebugInfo" href="set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
-        <input type="checkbox" _logFfmpegDebugInfo_checked/>Log FFMPEG Debug Info
+        <input type="checkbox" checkedIf_logFfmpegDebugInfo/>Log FFMPEG Debug Info
       </a>
     </div>
     <div>
       <a class="button @logAllHttpReqRes" href="set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
-        <input type="checkbox" _logAllHttpReqRes_checked/>Log All Http Req/Res
+        <input type="checkbox" checkedIf_logAllHttpReqRes/>Log All Http Req/Res
       </a>
     </div>
     <div>
       <a class="button @showDisconnectedDevices" href="set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
-        <input type="checkbox" _showDisconnectedDevices_checked/>Show Disconnected Devices
+        <input type="checkbox" checkedIf_showDisconnectedDevices/>Show Disconnected Devices
       </a>
     </div>
     <div>
-      <a class="button @fastResize" href="set?adminKey=@adminKey&fastResize=@fastResize_negVal" target="resultIFrame" title="Fast Resize Image but the result size maybe different with requested">
-        <input type="checkbox" _fastResize_checked/>Fast Resize Image
+      <a class="button @fastResize" href="set?adminKey=@adminKey&fastResize=@fastResize_negVal" target="resultIFrame" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
+        <input type="checkbox" checkedIf_fastResize/>Fast Resize Image
       </a>
     </div>
     <div>
-      <a class="button @useFastCapture" href="set?adminKey=@adminKey&useFastCapture=@useFastCapture_negVal" target="resultIFrame">
-        <input type="checkbox" _useFastCapture_checked/>Fast Capture
+      <a class="button @fastCapture" href="set?adminKey=@adminKey&fastCapture=@fastCapture_negVal" target="resultIFrame" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
+        <input type="checkbox" checkedIf_fastCapture/>Fast Capture
       </a>
     </div>
-    <div>
-      <a class="button @alsoRecordAsWebM" href="set?adminKey=@adminKey&alsoRecordAsWebM=@alsoRecordAsWebM_negVal" target="resultIFrame">
-        <input type="checkbox" _alsoRecordAsWebM_checked/>WebM Recording
-      </a>
-    </div>
+    <div style="border-top: 1px solid lightgray"></div>
+    <form action="set" target="resultIFrame" style="border: 1px solid black; margin-top: 4px; margin-bottom: 4px; margin-left: 2px; margin-right: 2px; padding: 2px 2px 2px 2px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <div>Stream Web URL Base:</div>
+      <div style="text-align: center">@res_streamWebBaseURL</div>
+      <button type="submit">Set</button>
+      <label>
+        <input type="text" name="streamWebBaseURL" id="txt_streamWebBaseURL" value="@streamWebBaseURL" style="width: 170px" title="clear me means use default" />
+      </label>
+    </form>
+    <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit">Set</button>
+      <label title="Default view size and orientation. Example: 0.5, 400x600, 400x, x600, 600x400 means landscape. Note: this size maybe adjusted to 8/n of original when in fastResize mode">
+        View Size:
+        <input type="text" name="size" value="@viewSize" size="10" id="viewSize"/>
+      </label>
+      <label title="View as landscape or portrait">
+        <input type="hidden" name="orient" value="@viewOrient" id="viewOrient" />
+        <input type="button" class="orient_sample @viewOrient"/>
+      </label>
+    </form>
     <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <label>Record Rate:
         <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />
-      </label>
-    </form>
-    <form style="border-top: 1px solid lightgray; margin-top: 4px; @showIf_adminUrlSuffix;">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
-      <button type="submit">AdvKey</button>
-      <label>:
-        <input type="text" name="adminUrlSuffix" value="" style="width: 50px" />
       </label>
     </form>
     <div style="border-top: 1px solid lightgray; margin-top: 4px">
@@ -283,21 +270,25 @@
     this.parentNode.click();
   });
 
-  var $rotate = $('select[name="rotate"]'), $scale = $('input[name="scale"]');
-  $rotate.on('change', function () {
-    $scale.val($scale.val().replace(/^([^x]*)x([^x]*)$/i, '$2x$1'));
-  });
-  $scale.on('change', function () {
-    var match = $scale.val().match(/^([^x]*)x([^x]*)$/i);
+  var $size = $('#viewSize'), $orient = $('#viewOrient');
+  $size.on('change', function () {
+    var match = $size.val().match(/^([^x]*)x([^x]*)$/i);
     if (match) {
       var w = Number(match[1]), h = Number(match[2]);
       if (w && h) {
-        if (w > h && $rotate.val() === '0')
-          $rotate.val("270");
-        else if (w < h && $rotate.val() === '270')
-          $rotate.val("0");
+        var orient = (w > h ? 'landscape' : 'portrait');
+        if ($orient.val() !== orient) {
+          $orient.val(orient);
+          $orient.next().attr('class', orient);
+        }
       }
     }
+  });
+  $orient.next().on('click', function () {
+    var orient = ($orient.val() === 'landscape' ? 'portrait' : 'landscape');
+    $orient.val(orient);
+    $orient.next().attr('class', orient);
+    $size.val($size.val().replace(/^([^x]*)x([^x]*)$/i, '$2x$1'));
   });
 </script>
 </body>
