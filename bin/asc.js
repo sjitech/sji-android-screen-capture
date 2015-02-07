@@ -436,7 +436,10 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
     if (q.fastResize) { //resize image by hardware. Adjust q._psz to be n/8
       var r = Math.max(q._psz.w * 8 / dev.disp.w, q._psz.h * 8 / dev.disp.h);
       q._psz = r <= 1 ? dev.disp[1] : r <= 2 ? dev.disp[2] : r <= 4 ? dev.disp[4] : r <= 5 ? dev.disp[5] : r <= 6 ? dev.disp[6] : r <= 7 ? dev.disp[7] : dev.disp;
-      q.fastResize = !(q._psz.w === dev.disp.w && q._psz.h === dev.disp.h);
+      q.fastResize = q._psz.w !== dev.disp.w || q._psz.h !== dev.disp.h;
+    } else {
+      var rr = Math.max(q._psz.w / dev.disp.w, q._psz.h / dev.disp.h);
+      q._psz = {w: Math.min(dev.disp.w, Math.ceil((rr * dev.disp.w) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((rr * dev.disp.h) / 2) * 2)};
     }
     var landscape = (q.orient === 'landscape');
     w = landscape ? q._psz.h : q._psz.w; //adjust visibly requested w  (maybe > h)
