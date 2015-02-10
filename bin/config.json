@@ -2,7 +2,7 @@
 //digital unit of time and interval is second.
 //current directory will be the dir of asc.js
 {
-  "streamWeb_port": 33333, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege.
+  "streamWeb_port": 0, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege. 0 means need not open port.
   "streamWeb_ip": "localhost", //IP or hostname to which stream web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
   "streamWeb_protocol": "http", //or "https", when use https, you need prepare specify certificate file by "streamWeb_cert"
   "streamWeb_cert": "./ssl/streamWeb.pfx", //https only: the server certificate (PKCS12 file), must contains private key, must no password
@@ -40,7 +40,6 @@
   "showDisconnectedDevices": false,
   "viewSize": "400xAuto", //set default size. Example: 0.5, 400x600, 400x, x600, 600x400 means landscape
   "viewOrient": "portrait", //"portrait" or "landscape"
-  "streamWebBaseURL": "", //All live view concerned links will use this URL as base. Empty means auto. You can speficy it like http://user:pwd@www.abc.com:8888/virtualPath1/
 
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
@@ -49,7 +48,6 @@
   "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
   "androidLogPath": "/data/local/tmp/sji-asc.log",
-  "maxProcesses": 128,
   "adbGetDeviceListTimeout": 60,
   "adbEchoTimeout": 10,
   "adbCheckDeviceTimeout": 300,

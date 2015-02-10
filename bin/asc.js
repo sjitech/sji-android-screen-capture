@@ -1,7 +1,7 @@
 'use strict';
 var old_work_dir = process.cwd();
 process.chdir(__dirname); //set dir of current file as working dir
-var child_process = require('child_process'), fs = require('fs'), os = require('os'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'),
+var child_process = require('child_process'), fs = require('fs'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'),
     jsonFile = require('./node_modules/jsonFile.js'), logger = require('./node_modules/logger.js'),
     cfg = util._extend(jsonFile.parse('./config.json'), process.argv[2/*first param*/] && jsonFile.parse(Path.resolve(old_work_dir, process.argv[2]))), //combine user provided configuration file with base file
     log = logger.create(cfg && cfg.log_filePath, cfg && cfg.log_keepOldFileDays);
@@ -10,15 +10,14 @@ process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack, {stderr: true});
   throw err;
 });
-var devMgr = {/*deviceSN:*/}, status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/},
-    adminWeb, streamWeb, ffmpegOK, httpSeq = 0;
+var adminWeb, streamWeb, ffmpegOK, httpSeq = 0, devMgr = {/*deviceSN:*/}, status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/};
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'fastCapture'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, maxProcesses: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0, __end: 0});
+true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0, viewUrlBase: 0, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -135,17 +134,6 @@ function end(res, textContent/*optional*/, type) {
     res.__log && log(res.__tag + ' END' + (textContent && !type ? ': ' + textContent : ''));
     res.end(textContent);
   }
-}
-
-function getFirstPublicIp(ip) {
-  if (ip && ip !== '*' && ip !== '0.0.0.0' && ip !== '::')
-    return ip;
-  var type = (ip === '::' ? 'IPv6' : 'IPv4'), firstIp = '', niMap = os.networkInterfaces();
-  return Object.keys(niMap).some(function (name) {
-    return niMap[name].some(function (addr) {
-      return !addr['internal'] && addr['family'] === type && (firstIp = addr.address);
-    });
-  }) ? firstIp : 'localhost';
 }
 
 function getFileSizeSync(filePath) {
@@ -643,7 +631,7 @@ String.prototype.replaceShowIf = function (placeHolder, show) {
 };
 
 function streamWeb_handler(req, res) {
-  if (req.url.length > 4096 || req.method !== 'GET' || req.url === '/favicon.ico') {
+  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico') {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
@@ -652,12 +640,13 @@ function streamWeb_handler(req, res) {
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
+  setDefaultHttpHeaderAndInitCloseHandler(res);
+  _streamWeb_handler(req, res, q, urlPath, dev);
+}
+function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
   if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
-  setDefaultHttpHeaderAndInitCloseHandler(res);
-  !q.adminKey && req.headers.cookie && (q.adminKey = req.headers.cookie.match(re_adminKey_cookie))
-  && (q.adminKey = querystring.unescape(q.adminKey[1]));
 
   switch (urlPath) {
     case '/capture': //---------------------------send capture result to browser & optionally save to file------------
@@ -668,7 +657,7 @@ function streamWeb_handler(req, res) {
       return doCapture(dev, res, q);
     case '/saveImage': //------------------------------Save Current Image From Live View------------------------------
       if ((!dev.capture || !dev.capture.image) && (chk.err = 'error: no live image') ||
-          !cfg.enableGetOutputFile && !(cfg.adminKey && q.adminKey === cfg.adminKey) && (chk.err = 'access denied')) {
+          !cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')) {
         return end(res, chk.err);
       }
       q.filename = querystring.escape(q.device) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
@@ -688,7 +677,7 @@ function streamWeb_handler(req, res) {
           , 'text/html');
     case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
     case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------
-      if (!cfg.enableGetOutputFile && !(cfg.adminKey && q.adminKey === cfg.adminKey)) {
+      if (!cfg.enableGetOutputFile && !fromAdminWeb) {
         return end(res, 'access denied');
       }
       return fs.readdir(cfg.outputDir, function (err, filenameAry) {
@@ -725,7 +714,7 @@ function streamWeb_handler(req, res) {
         }
       });
     case '/getFile': //---------------------------get video/image file------------------------------------------------
-      if (!cfg.enableGetOutputFile && !(cfg.adminKey && q.adminKey === cfg.adminKey) && (chk.err = 'access denied')
+      if (!cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')
           || !(q.filename = new FilenameInfo(q.filename, q.device)).isValid && (chk.err = '`filename`: invalid name')) {
         return end(res, chk.err);
       }
@@ -760,7 +749,7 @@ function streamWeb_handler(req, res) {
         return end(res, JSON.stringify('OK'), 'text/json');
       }
     case '/sendKey':
-      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112]) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
         return end(res, chk.err);
       }
       spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {
@@ -769,7 +758,7 @@ function streamWeb_handler(req, res) {
       });
       return end(res, 'OK');
     case '/sendText':
-      if (!chk('text', q.text) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+      if (!chk('text', q.text)) {
         return end(res, chk.err);
       }
       spawn('[sendText ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
@@ -778,13 +767,10 @@ function streamWeb_handler(req, res) {
       });
       return end(res, 'OK');
     case '/turnOnScreen':
-      if (Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
-        return end(res, chk.err);
-      }
       turnOnScreen(dev);
       return end(res, 'OK');
     case '/setOrientation':
-      if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free']) || Object.keys(childProcMap).length >= cfg.maxProcesses && (chk.err = 'too many process running')) {
+      if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
         return end(res, chk.err);
       }
       setDeviceOrientation(dev, q.orientation);
@@ -795,19 +781,20 @@ function streamWeb_handler(req, res) {
 } //end of streamWeb_handler(req, res)
 
 function adminWeb_handler(req, res) {
-  if (req.url.length > 4096 || req.method !== 'GET' || req.url === '/favicon.ico') {
+  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico') {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
-  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/' || urlPath === '/status' || urlPath === '/getServerLog' + cfg.adminUrlSuffix || urlPath === '/cmd' + cfg.adminUrlSuffix);
-  res.__log && log((res.__tag = '[' + cfg.adminWeb_protocol.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : ''));
+  res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp) || urlPath === '/' || urlPath === '/status' || urlPath === '/getServerLog' + cfg.adminUrlSuffix || urlPath === '/cmd' + cfg.adminUrlSuffix);
+  res.__log && log((res.__tag = '[' + cfg.adminWeb_protocol.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
+  setDefaultHttpHeaderAndInitCloseHandler(res);
+  cfg.adminKey && !q.adminKey && req.headers.cookie && (q.adminKey = req.headers.cookie.match(re_adminKey_cookie)) && (q.adminKey = querystring.unescape(q.adminKey[1]));
   if (cfg.adminKey && q.adminKey !== cfg.adminKey) {
     return end(res, htmlCache['/login.html'], 'text/html');
   }
-  setDefaultHttpHeaderAndInitCloseHandler(res);
 
   switch (urlPath) {
     case '/deviceControl': //--------------------------startRecording, stopRecording, stopLiveView', setAccessKey-------
@@ -840,14 +827,14 @@ function adminWeb_handler(req, res) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
+      q.viewUrlBase && (q.viewUrlBase = (parsedUrl = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase)).format());
       return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
-        var res_streamWebBaseURL = cfg.streamWebBaseURL/*slash ended*/ || (cfg.streamWeb_protocol + '://' + getFirstPublicIp(cfg.streamWeb_ip) + ':' + cfg.streamWeb_port + '/');
         var html = htmlCache['/home.html'].replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
                 .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
-                .replace(/@stream_web\b/g, res_streamWebBaseURL.replace(/\/$/, '')).replace(/@res_streamWebBaseURL\b/g, res_streamWebBaseURL)
+                .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
                 .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
             ;
-        ['viewSize', 'viewOrient', 'streamWebBaseURL', 'videoFileFrameRate'].forEach(function (k) {
+        ['viewSize', 'viewOrient', 'videoFileFrameRate'].forEach(function (k) {
           html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
         });
         switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
@@ -870,7 +857,7 @@ function adminWeb_handler(req, res) {
     case '/stopServer':  //------------------------------------stop server management---------------------------------
       end(res, 'OK');
       adminWeb.close();
-      streamWeb.close();
+      streamWeb && streamWeb.close();
       Object.keys(childProcMap).forEach(function (pid) {
         childProcMap[pid].kill('SIGKILL');
       });
@@ -879,22 +866,17 @@ function adminWeb_handler(req, res) {
       reloadResource();
       return end(res, 'OK');
     case '/set':
-      if (q.streamWebBaseURL !== undefined) {
-        if (q.streamWebBaseURL && ((parsedUrl = Url.parse(q.streamWebBaseURL)).protocol !== 'https:' && parsedUrl.protocol !== 'http:' || !parsedUrl.hostname || parsedUrl.search || parsedUrl.hash)) {
-          return end(res, 'streamWebBaseURL: must be an valid http or https URL, and must not contains query string or #anchor');
-        }
-        cfg.streamWebBaseURL = q.streamWebBaseURL && parsedUrl.format(); //'' or slash ended url
-      } else if (q.videoFileFrameRate !== undefined) {
-        if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
-          return end(res, chk.err);
-        }
-        cfg.videoFileFrameRate = q.videoFileFrameRate;
-      } else if (q.size !== undefined || q.orient !== undefined) {
+      if (q.size !== undefined || q.orient !== undefined) {
         if (!chkCaptureParameter(null, q)) {
           return end(res, chk.err);
         }
         cfg.viewSize = q.size;
         cfg.viewOrient = q.orient;
+      } else if (q.videoFileFrameRate !== undefined) {
+        if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
+          return end(res, chk.err);
+        }
+        cfg.videoFileFrameRate = q.videoFileFrameRate;
       } else { //-------------------------------------------------Set some internal bool var--------------------------
         forEachValueIn(switchList, function (k) {
           q[k] !== undefined && (cfg[k] = (q[k] === 'true'));
@@ -935,7 +917,7 @@ function adminWeb_handler(req, res) {
       scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
     default:
-      return end(res, 'bad request');
+      return _streamWeb_handler(req, res, q, urlPath, dev, /*fromAdminWeb:*/true);
   }
 } //end of adminWeb_handler
 
@@ -962,10 +944,14 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
     !(ffmpegOK = (ret === 0)) && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
-      streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, streamWeb_handler) : require('http').createServer(streamWeb_handler);
-      streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
+      if (cfg.streamWeb_port) {
+        streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, streamWeb_handler) : require('http').createServer(streamWeb_handler);
+        streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
+          log('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
+        });
+      } else {
         log('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
-      });
+      }
     });
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
   }, {timeout: 10 * 1000, log: true});

@@ -41,12 +41,12 @@
       <td style="border-right: 1px solid gray"></td>
       <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap">
-          <a href="@stream_web/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
+          <a href="@viewUrlBase/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
           <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop all live view?')" title="Stop All Live View" style="display: none">
-            x
+            X
           </a>
         </span>
         <span style="@showIf_ffmpegOK; white-space: nowrap">
@@ -56,14 +56,14 @@
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
           <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop recording?')" title="Stop Recording" style="display: none">
-            x
+            X
           </a>
         </span>
         <span style="background-color: darkgray">&nbsp;</span>
-        <a class="internal" href="@stream_web/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device" title="Recorded Videos">
+        <a class="internal" href="@viewUrlBase/videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0" target="videos_$device" title="Recorded Videos">
           Vids
         </a>
-        <a class="internal" href="@stream_web/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device" title="Saved Images">
+        <a class="internal" href="@viewUrlBase/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device" title="Saved Images">
           Imgs
         </a>
         <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
@@ -162,16 +162,6 @@
         <input type="checkbox" checkedIf_fastCapture/>Fast Capture
       </a>
     </div>
-    <div style="border-top: 1px solid lightgray"></div>
-    <form action="set" target="resultIFrame" style="border: 1px solid black; margin-top: 4px; margin-bottom: 4px; margin-left: 2px; margin-right: 2px; padding: 2px 2px 2px 2px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
-      <div>Stream Web URL Base:</div>
-      <div style="text-align: center">@res_streamWebBaseURL</div>
-      <button type="submit">Set</button>
-      <label>
-        <input type="text" name="streamWebBaseURL" id="txt_streamWebBaseURL" value="@streamWebBaseURL" style="width: 170px" title="clear me means use default" />
-      </label>
-    </form>
     <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
@@ -190,6 +180,18 @@
       <label>Record Rate:
         <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />
       </label>
+    </form>
+    <form style="border-top: 1px solid lightgray; margin-top: 4px; @showIf_isStreamWebSeparated">
+      <input type="hidden" name="adminKey" value="#adminKey"/>
+      <button type="submit">Set</button>
+      <div style="display: inline-block">
+        View URL Base:
+        <div>
+          <label>
+            <input type="text" name="viewUrlBase" value="#viewUrlBase" style="width: 170px" title="Example: &quot;localhost:33333&quot;. Empty means use admin web itself" />
+          </label>
+        </div>
+      </div>
     </form>
     <div style="border-top: 1px solid lightgray; margin-top: 4px">
       <a class="button" href="stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
