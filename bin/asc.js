@@ -819,6 +819,7 @@ function adminWeb_handler(req, res) {
       if (q._diff_accessKey) {
         dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
         scheduleUpdateWholeUI();
+        q.accessKey && res.setHeader('Set-Cookie', 'HOST=' + req.headers['host'] + '; HttpOnly'); //for load blance
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
       return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
