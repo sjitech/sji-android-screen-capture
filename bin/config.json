@@ -1,18 +1,21 @@
 //Be careful !!!
 //digital unit of time and interval is second.
-//current directory will be the dir of asc.js
+//in runtime, current directory will be the dir of asc.js, so you'd better specify full path of file or dir
 {
-  "streamWeb_port": 0, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege. 0 means need not open port.
-  "streamWeb_ip": "localhost", //IP or hostname to which stream web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
-  "streamWeb_protocol": "http", //or "https", when use https, you need prepare specify certificate file by "streamWeb_cert"
-  "streamWeb_cert": "./ssl/streamWeb.pfx", //https only: the server certificate (PKCS12 file), must contains private key, must no password
-
   "adminWeb_port": 3000, //Admin Web public port (must < 65536). For port < 1024, your need to have root privilege.
   "adminWeb_ip": "localhost", //IP or hostname to which admin web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
   "adminWeb_protocol": "http", //or "https", when use https, you need prepare specify certificate file by "adminWeb_cert"
   "adminWeb_cert": "./ssl/adminWeb.pfx", //https only: the server certificate (PKCS12 file), must contains private key, must no password
   "adminKey": "", //access key of admin web server and it is also used as source of auto-generated access key for device. If not but use https, then this will be auto generated.
   "adminUrlSuffix": "", //protect some url such as for get server log, get device log, and execute any adb command.
+
+  //0 means need not open port
+  "streamWeb_port": 0, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege
+
+  //only when streamWeb_port !=0, following streamWeb settings will be used:
+  "streamWeb_ip": "localhost", //IP or hostname to which stream web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
+  "streamWeb_protocol": "http", //or "https", when use https, you need prepare specify certificate file by "streamWeb_cert"
+  "streamWeb_cert": "./ssl/streamWeb.pfx", //https only: the server certificate (PKCS12 file), must contains private key, must no password
 
   "outputDir": "../out", //dir to store recorded file
   "maxRecordTime": 7200, //max recorded time
