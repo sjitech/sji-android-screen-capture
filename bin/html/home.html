@@ -120,7 +120,7 @@
       <a class="button" href="reloadResource?adminKey=@adminKey" target="resultIFrame">
         Reload
       </a>
-      Internal Files
+      Internal Resources
     </div>
     <div>
       <a class="button @logFpsStatistic" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
@@ -166,7 +166,7 @@
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <label title="Default view size and orientation. Example: 0.5, 400x600, 400x, x600, 600x400 means landscape. Note: this size maybe adjusted to 8/n of original when in fastResize mode">
-        View Size:
+        Live View Size:
         <input type="text" name="size" value="@viewSize" size="10" id="viewSize"/>
       </label>
       <label title="View as landscape or portrait">
@@ -185,7 +185,7 @@
       <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <div style="display: inline-block">
-        View URL Base:
+        Live View URL Base:
         <div>
           <label>
             <input type="text" name="viewUrlBase" value="#viewUrlBase" style="width: 170px" title="Example: &quot;localhost:33333&quot;. Empty means use admin web itself" />
