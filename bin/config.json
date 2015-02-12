@@ -10,7 +10,7 @@
   "adminUrlSuffix": "", //protect some url such as for get server log, get device log, and execute any adb command.
 
   //0 means need not open port
-  "streamWeb_port": 0, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege
+  "streamWeb_port": 33333, //Stream Web public port (must < 65536). For port < 1024, your need to have root privilege
 
   //only when streamWeb_port !=0, following streamWeb settings will be used:
   "streamWeb_ip": "localhost", //IP or hostname to which stream web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
