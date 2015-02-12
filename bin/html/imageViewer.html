@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-<div style="text-align: center; width: 100%; position: fixed; top: 0; background-color: ghostwhite">
+<div style="text-align: center; width: 100%; position: fixed; top: 0; background-color: ghostwhite; @showIf_devInfo">
   <span style="white-space: nowrap">Saved Images (<b style="color: blue">@count</b>)</span>
   <button style="float: right" onclick="$('.imgContainer').each(function(){AscUtil.rotateChildLocally(this)})">Rotate All</button>
 </div>

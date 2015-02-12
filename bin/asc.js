@@ -15,7 +15,7 @@ var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: i
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
-    re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = /adminKey=([^;]+)/, re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
+    re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'fastCapture'];
 true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0, viewUrlBase: 0, __end: 0});
 
@@ -71,7 +71,7 @@ function htmlEncode(text) {
     return match === '&' ? '&amp;' : match === '<' ? '&lt;' : match === '>' ? '&gt;' : match === '"' ? '&quot;' : ('&#' + match.charCodeAt(0) + ';');
   });
 }
-function htmlIdEncode(text) {
+function makeId(text) {
   return text.replace(/[^0-9a-zA-Z]/g, function (match) {
     return ('_' + match.charCodeAt(0).toString(16) + '_');
   });
@@ -188,7 +188,7 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 //****************************************************************************************
 function getOrCreateDevCtx(device/*device serial number*/) {
   !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: '', recordingFileTimestampSet: {}});
+  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: '', re_lastViewId_cookie: new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'viewId_' + makeId(device) + '=([^;]+)')});
 }
 function newAutoAccessKey() {
   return !cfg.adminKey ? '' : (getTimestamp().slice(4, 14) + '_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
@@ -397,7 +397,7 @@ function turnOnScreen(dev) {
   dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
-function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
+function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   q.fastResize === undefined && (q.fastResize = q['useFastResize']); //for compatibility
   q.fastCapture === undefined && (q.fastCapture = q['useFastCapture']); //for compatibility
   q.size === undefined && (q.size = q['scale']); //for compatibility
@@ -457,12 +457,17 @@ function chkCaptureParameter(dev, q, force_ajpg, forRecording) {
 
     if (dev.capture && q._hash !== dev.capture.q._hash && q._priority >= dev.capture.q._priority && !dev.masterMode && !forRecording)
       endCaptureProcess(dev); //stop incompatible capture process immediately if necessary
+
+    !forRecording && req.headers.cookie && (q._lastViewId = req.headers.cookie.match(dev.re_lastViewId_cookie)) && (q._lastViewId = q._lastViewId[1])
+    && forEachValueIn(dev.consumerMap, function (res) {
+      (res.q.timestamp === q._lastViewId) && endCaptureConsumer(res);
+    });
   }
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.__childProc = spawn('[CAP ' + q.device + ' ' + q._hash + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
+  var childProc = capture.proc = spawn('[CAP ' + q.device + ' ' + q._hash + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
           '{', 'date', '>&2', '&&', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? ['&&', 'export', 'ASC_LOG_ALL=1'] : []), '&&',
           './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
           '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
@@ -511,9 +516,10 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     endCaptureConsumer(res);
   });
   res.setHeader && res.setHeader('Content-Type', q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
+  res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'viewId_' + makeId(dev.device) + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
-    (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.__childProc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
+    (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.proc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
   q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
@@ -539,20 +545,18 @@ function endCaptureProcess(dev) {
   clearTimeout(dev.capture.delayKillTimer);
   clearInterval(dev.capture.timer_resentImageForSafari);
   clearInterval(dev.capture.timer_resentUnchangedImage);
-  childProcMap[dev.capture.__childProc.pid] && dev.capture.__childProc.kill('SIGKILL');
+  childProcMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
   dev.capture = null;
   scheduleUpdateLiveUI();
 }
 function doRecord(dev, q/*same as capture*/) {
-  var filename = querystring.escape(q.device) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + dev.subOutputDir + '/' + filename;
-  dev.recordingFileTimestampSet[q.timestamp] = true;
+  var filename = querystring.escape(q.device) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
   var childProc = spawn('[REC ' + q.device + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
       '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
   ), function/*on_close*/() {
-    dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + filename, log.nonEmpty);
-    delete dev.recordingFileTimestampSet[q.timestamp];
+    dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + dev.subOutputDir + '/' + filename, log.nonEmpty);
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
   childProc.stdin.__feedConvertTimer = setInterval(function () {
     dev.capture.image && write(childProc.stdin, dev.capture.image.buf);
@@ -570,7 +574,7 @@ function scheduleUpdateLiveUI() {
       var sd = {}, json;
       forEachValueIn(devMgr, function (dev) {
         if (dev.status !== ERR_DEV_NOT_FOUND || cfg.showDisconnectedDevices) {
-          var id = htmlIdEncode(dev.device);
+          var id = makeId(dev.device);
           var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
           sd['liveViewCount_' + id] = liveViewCount ? '(' + liveViewCount + ')' : '';
           sd['recordingCount_' + id] = dev.consumerMap[REC_TAG] ? '(1)' : '';
@@ -623,8 +627,8 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
   });
 }
 function replaceComVar(html, dev) {
-  return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, htmlIdEncode(dev.device))
-      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_disp)
+  return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, makeId(dev.device))
+      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_disp).replaceShowIf('devInfo', dev.info_disp)
 }
 String.prototype.replaceShowIf = function (placeHolder, show) {
   return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
@@ -650,7 +654,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
 
   switch (urlPath) {
     case '/capture': //---------------------------send capture result to browser & optionally save to file------------
-      if (!chkCaptureParameter(dev, q, /*force_ajpg:*/false)) {
+      if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/false)) {
         return end(res, chk.err);
       }
       q._isSafari = /Safari/i.test(req.headers['user-agent']) && !/Chrome/i.test(req.headers['user-agent']);
@@ -666,7 +670,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       });
       return end(res, 'OK: ' + q.filename);
     case '/liveViewer.html':  //-------------------------show live capture (Just as a sample) ------------------------
-      if (!chkCaptureParameter(dev, q, /*force_ajpg:*/true)) {
+      if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
         return end(res, chk.err);
       }
       return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
@@ -686,8 +690,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
         }
         var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html');
         filenameAry.forEach(function (f) {
-          (f = new FilenameInfo(f, q.device)).isValid && isImage === (f.type === 'jpg') && (isImage || !dev.recordingFileTimestampSet[f.timestamp])
-          && (filenameMap[f.timestamp + (f.i || '')] = f);
+          (f = new FilenameInfo(f, q.device)).isValid && isImage === (f.type === 'jpg') && (filenameMap[f.timestamp + (f.i || '')] = f);
         });
         var sortedKeys = Object.keys(filenameMap).sort().reverse();
         if (!isImage) { //videoViewer
@@ -800,7 +803,7 @@ function adminWeb_handler(req, res) {
     case '/deviceControl': //--------------------------startRecording, stopRecording, stopLiveView', setAccessKey-------
       if (!dev && (chk.err = '`device`: unknown device')
           || !chk('action', q.action, ['startRecording', 'stopRecording', 'stopLiveView', 'setAccessKey'])
-          || q.action === 'startRecording' && !chkCaptureParameter(dev, q, /*force_ajpg:*/true, /*forRecording*/true)
+          || q.action === 'startRecording' && !chkCaptureParameter(dev, req, q, /*force_ajpg:*/true, /*forRecording*/true)
           || q.orientation && !chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
         return end(res, chk.err);
       }
@@ -819,7 +822,7 @@ function adminWeb_handler(req, res) {
       if (q._diff_accessKey) {
         dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
         scheduleUpdateWholeUI();
-        q.accessKey && res.setHeader('Set-Cookie', 'HOST=' + req.headers['host'] + '; HttpOnly'); //for load blance
+        q.accessKey && res.setHeader('Set-Cookie', 'HOST=' + querystring.escape(req.headers['host']) + '; HttpOnly'); //for load balance
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
       return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
@@ -841,7 +844,7 @@ function adminWeb_handler(req, res) {
         switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
           html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
         });
-        cfg.adminKey && res.setHeader('Set-Cookie', 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
+        cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
         return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
           return (cfg.showDisconnectedDevices ? Object.keys(devMgr) : Object.keys(devMgr).filter(function (sn) {
             return realDeviceList.indexOf(sn) >= 0;
@@ -868,7 +871,7 @@ function adminWeb_handler(req, res) {
       return end(res, 'OK');
     case '/set':
       if (q.size !== undefined || q.orient !== undefined) {
-        if (!chkCaptureParameter(null, q)) {
+        if (!chkCaptureParameter(null, null, q)) {
           return end(res, chk.err);
         }
         cfg.viewSize = q.size;
