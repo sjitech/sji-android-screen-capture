@@ -12,17 +12,17 @@
 <body>
 <div class="toolbar" style="text-align: center; width: 100%; position: fixed; top:0; white-space: nowrap">
   <div style="margin-right: 130px">
-    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
+    <a href="videoViewer.html?device=@device&accessKey=@accessKey&fileindex=@maxFileindex">
       &lt;&lt;
     </a>
-    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
+    <a href="videoViewer.html?device=@device&accessKey=@accessKey&fileindex=@olderFileindex">
       &lt;
     </a>
     <span class="fileDesc">@timestamp</span>
-    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
+    <a href="videoViewer.html?device=@device&accessKey=@accessKey&fileindex=@newerFileindex">
       &gt;
     </a>
-    <a href="videoViewer.html?@unprotect&device=@device&accessKey=@accessKey&fileindex=0">
+    <a href="videoViewer.html?device=@device&accessKey=@accessKey&fileindex=0">
       &gt;&gt;
     </a>
     (Total:<b style="color:blue">@fileCount</b>)
@@ -33,7 +33,7 @@
     <button onclick="AscUtil.rotateChildLocally(document.getElementById('viewerContainer'))">Rotate Locally</button>
   </div>
   <div style="margin-top: 8px">
-    <a href="getFile?@unprotect&device=@device&accessKey=@accessKey&filename=@filename&download=true" target="resultIFrame">Download</a>
+    <a href="getFile?device=@device&accessKey=@accessKey&filename=@filename&download=true" target="resultIFrame">Download</a>
   </div>
   <div>
     @fileSize
@@ -42,7 +42,7 @@
 <div style="text-align: center; margin-top: 27px; margin-bottom: 24px; margin-right: 130px; position: relative; z-index: 100">
   <div id="viewerContainer" style="display: inline-block">
     <video id="viewer" autoplay controls>
-      <source src="getFile?@unprotect&device=@device&accessKey=@accessKey&filename=@filename" type="video/mp4">
+      <source src="getFile?device=@device&accessKey=@accessKey&filename=@filename" type="video/mp4">
       <p>Your browser does not support H.264/MP4 in &lt;video&gt; tag. For firefox, please install latest version which will install H264 plugin by default so you can play.</p>
     </video>
   </div>

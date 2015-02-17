@@ -46,7 +46,7 @@
 
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
-  "adbOption": [], //such as ["-H", "172.21.137.5"],
+  "adbHosts": [""], //Example: ["172.21.137.5", "172.21.137.6:5037", ":50370"]
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
   "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
@@ -61,6 +61,8 @@
   "adbTurnScreenOnTimeout": 30,
   "adbSetOrientationTimeout": 30,
   "adbCmdTimeout": 30,
+  "adbScanPerHostDelay": 2,
+  "ajaxAllowOrigin": "*",
 
   "__end": 0
 }

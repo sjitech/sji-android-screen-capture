@@ -10,14 +10,14 @@ process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack, {stderr: true});
   throw err;
 });
-var adminWeb, streamWeb, ffmpegOK, httpSeq = 0, devMgr = {/*deviceSN:*/}, status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, childProcMap = {/*pid:*/};
+var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, httpSeq = 0;
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'fastResize', 'fastCapture'];
-true === false && log({log_filePath: 0, log_keepOldFileDays: 0, adb: 0, adbOption: 0, ffmpeg: 0, binDir: 0, androidWorkDir: 0, androidLogPath: 0, streamWeb_ip: 0, streamWeb_port: 0, streamWeb_protocol: 0, streamWeb_cert: 0, adminWeb_ip: 0, adminWeb_port: 0, adminWeb_protocol: 0, adminWeb_cert: 0, outputDir: 0, enableGetOutputFile: 0, maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllAdbCommands: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: 0, viewUrlBase: 0, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -27,14 +27,14 @@ function spawn(tag, _path, args, _on_close, _opt) {
   childProc = child_process.spawn(_path, args, opt);
   childProc.__tag = tag = tag + (childProc.pid ? '[pid_' + childProc.pid + ']' : '');
   opt.log && log(tag + (childProc.pid ? ' spawned' : ' not spawned'));
-  childProc.pid && (childProcMap[childProc.pid] = childProc);
+  childProc.pid && (procMap[childProc.pid] = childProc);
 
   childProc.stdout && (on_close && !opt.noMergeStdout || opt.log && !opt.noLogStdout) && childProc.stdout.on('data', function (buf) {
     stdoutBufAry.push(buf);
   });
   childProc.stderr && childProc.stderr.on('data', function (buf) {
     on_close && !opt.noMergeStderr && stderrBufAry.push(buf);
-    log(buf, {noNewLine: true, head: (logHead2 = logHead2 || tag + '2>')});
+    !opt.noLogStderr && log(buf, {noNewLine: true, head: (logHead2 = logHead2 || tag + '2>')});
   });
   opt.timeout && (childProc.__timeoutTimer = setTimeout(function () {
     childProc.__err = 'error: timeout';
@@ -46,7 +46,7 @@ function spawn(tag, _path, args, _on_close, _opt) {
     (childProc.__err = stringifyError(err)) === 'Error: spawn OK' ? (childProc.__err = '') : (opt.log && log(tag + ' ' + childProc.__err));
   });
   childProc.on('close', function (ret, signal) { //exited or failed to spawn
-    childProc.pid && delete childProcMap[childProc.pid];
+    childProc.pid && delete procMap[childProc.pid];
     clearTimeout(childProc.__timeoutTimer);
     !childProc.__err && signal && (childProc.__err = 'error: killed by ' + signal);
     var stderr = childProc.__err || Buffer.concat(stderrBufAry).toString(), stdout = Buffer.concat(stdoutBufAry).toString();
@@ -65,21 +65,15 @@ function stringifyError(err) {
   return !err ? '' : err.code === 'ENOENT' ? 'error: ENOENT(not found)' : err.code === 'EACCES' ? 'error: EACCES(access denied)' : err.code === 'EADDRINUSE' ? 'error: EADDRINUSE(IP or port already in use)'
       : (!(err = err.toString().trim().split(/\r*\n/)[0].trim()) ? '' : /error/i.test(err) ? err : 'error: ' + err);
 }
-
 function htmlEncode(text) {
   return text.replace(/[^0-9a-zA-Z]/g, function (match) {
     return match === '&' ? '&amp;' : match === '<' ? '&lt;' : match === '>' ? '&gt;' : match === '"' ? '&quot;' : ('&#' + match.charCodeAt(0) + ';');
   });
 }
-function makeId(text) {
-  return text.replace(/[^0-9a-zA-Z]/g, function (match) {
-    return ('_' + match.charCodeAt(0).toString(16) + '_');
-  });
-}
 
-function forEachValueIn(mapOrArray, callback) {
-  return Object.keys(mapOrArray).some(function (k) {
-    return callback(mapOrArray[k], k, mapOrArray) === 'break';
+function forEachValueIn(map, callback) {
+  return Object.keys(map).forEach(function (k) {
+    return callback(map[k], k, map);
   });
 }
 
@@ -146,8 +140,8 @@ function getFileSizeSync(filePath) {
   }
 }
 
-function FilenameInfo(f, device) {
-  (this.name = f) && (f = f.match(re_filename)) && (this.device = querystring.unescape(f[2])) && (!device || this.device === device) && (this.src = f[1]) && (this.timestamp = f[3]) && (this.type = f[4] || f[6]) && (f[4]/*isVideo*/ || (this.i = f[5]) !== '') && (this.isValid = true);
+function FilenameInfo(f, sn) {
+  (this.name = f) && (f = f.match(re_filename)) && (this.sn = querystring.unescape(f[2])) && (!sn || this.sn === sn) && (this.src = f[1]) && (this.timestamp = f[3]) && (this.type = f[4] || f[6]) && (f[4]/*isVideo*/ || (this.i = f[5]) !== '') && (this.isValid = true);
 }
 FilenameInfo.prototype.toString = function () {
   return this.name /*in fact is original name*/;
@@ -186,58 +180,71 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 }
 
 //****************************************************************************************
-function getOrCreateDevCtx(device/*device serial number*/) {
-  !devMgr[device] && scheduleUpdateWholeUI();
-  return devMgr[device] || (devMgr[device] = {device: device, info: [], info_disp: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: '', re_lastViewId_cookie: new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'viewId_' + makeId(device) + '=([^;]+)')});
+function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port*/, host) {
+  var foundDev = null, devGrp = devGrpMap[conId] || (devGrpMap[conId] = []);
+  return (!host ? devGrp[0] : devGrp.some(function (dev) {
+        return (dev.host ? (dev.host === host) : ((dev.host = host) && (dev.args = host.args.concat('-s', conId)))) && (foundDev = dev);
+      }) && foundDev) || initDeviceEx((devAry[devAry.length] = {host: host, conId: conId, sn: conId, args: host ? host.args.concat('-s', conId) : undefined, info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''}));
+}
+function initDeviceEx(dev) {
+  scheduleUpdateWholeUI();
+  var devGrp = devGrpMap[dev.sn] || (devGrpMap[dev.sn] = []);
+  dev.id = dev.sn + (devGrp.length === 0 ? '' : '(' + (devGrp.length + 1) + ')');
+  dev.var = dev.sn.replace(/[^0-9a-zA-Z]/g, function (match) {
+    return ('_' + match.charCodeAt(0).toString(16) + '_');
+  }) + (devGrp.length === 0 ? '' : '_' + (devGrp.length + 1));
+  dev.re_lastViewId_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'viewId_' + dev.var + '=([^;]+)');
+  return (devGrp[devGrp.length] = dev);
+}
+function getDev(id) {
+  var sn = id.replace(/\(\d+\)$/, ''), seq = sn.length < id.length && id.slice(sn.length + 1, -1), devGrp = devGrpMap[sn], foundDev = null;
+  return !devGrp ? null : seq ? devGrp[Number(seq) - 1] : devGrp.some(function (dev) {
+    return dev.host && dev.status !== ERR_DEV_NOT_FOUND && (foundDev = dev);
+  }) ? foundDev : devGrp[0];
 }
 function newAutoAccessKey() {
   return !cfg.adminKey ? '' : (getTimestamp().slice(4, 14) + '_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
 }
 
-function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', 'doNotRepairDeviceFile', undefined means repeatScanInBackground */, on_gotAllRealDev) {
-  if (scanAllDevices.waiters) {
-    return on_gotAllRealDev && scanAllDevices.waiters.push(on_gotAllRealDev);
-  }
-  scanAllDevices.waiters = on_gotAllRealDev ? [on_gotAllRealDev] : [];
-  return spawn('[GetAllDevices]', cfg.adb, cfg.adbOption.concat('devices'), function/*on_close*/(ret, stdout) {
-    var deviceList = [], parts;
-    if (ret === 0) {
-      stdout.split('\n').slice(1/*from second line*/).forEach(function (lineStr) {
-        if ((parts = lineStr.split('\t')).length > 1) {
-          var device = parts[0], _status = parts[1];
-          if (/[^?]/.test(device) && deviceList.indexOf(device) < 0) { //exclude SN such as ??????
-            deviceList.push(device);
-            var dev = getOrCreateDevCtx(device);
-            (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + device);
+function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means repeatScanInBackground */) {
+  !cfg.adbHosts.inited && (cfg.adbHosts.inited = true) && cfg.adbHosts.forEach(function (host, i) {
+    var _host = host && String(host).replace(/:[^:]*$/, '') || '', _port = host && (String(host).match(/:(\d+)$/) || [])[1] || '';
+    cfg.adbHosts[i] = {host: _host, port: _port, args: (_host ? ['-H', _host] : []).concat(_port ? ['-P', _port] : [])};
+  });
+  cfg.adbHosts.forEach(function (host, i) {
+    !host.scanning && (host.scanning = true) && setTimeout(function () {
+      spawn('[GetAllDevices]', cfg.adb, host.args.concat('devices'), function/*on_close*/(ret, stdout) {
+        var devList = [];
+        ret === 0 && stdout.split('\n').slice(1/*from second line*/).forEach(function (desc) {
+          if ((desc = desc.split('\t')).length > 1 && desc[0] !== '????????????') {
+            var conId = desc[0], _status = desc[1], dev = devList[devList.length] = getOrCreateDevCtx(conId, host);
+            (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + dev.id);
             dev.status === ERR_DEV_NOT_FOUND && scheduleUpdateWholeUI();
             dev.status === ERR_DEV_NOT_FOUND && (dev.status = dev.touchStatus = '');
             (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status || dev.isOsStartingUp) && prepareDeviceFile(dev, mode === 'forcePrepare');
             dev._status = _status;
           }
-        }
-      });
-    }
-    forEachValueIn(devMgr, function (dev) {
-      if (deviceList.indexOf(dev.device) < 0 && dev.status !== ERR_DEV_NOT_FOUND) {
-        dev.status && log('[GetAllDevices] device disconnected: ' + dev.device);
-        dev.status = ERR_DEV_NOT_FOUND;
-        scheduleUpdateWholeUI();
-      }
-    });
-    scanAllDevices.waiters.forEach(function (callback) {
-      callback(deviceList);
-    });
-    scanAllDevices.waiters = null;
-    !mode && deviceList.forEach(function (device) {
-      if (devMgr[device].status === 'OK' && Date.now() - (devMgr[device].lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
-        devMgr[device].lastKeepAliveDateMs = Date.now();
-        spawn('[KeepAlive]', cfg.adb, cfg.adbOption.concat('-s', device, 'shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
-      }
-    });
-  }, {timeout: cfg.adbGetDeviceListTimeout * 1000, log: cfg.logAllAdbCommands}); //end of GetAllDevices
+        });
+        devAry.forEach(function (dev) {
+          if (dev.host === host && devList.indexOf(dev) < 0 && dev.status !== ERR_DEV_NOT_FOUND) {
+            dev.status && log('[GetAllDevices] device disconnected: ' + dev.id);
+            dev.status = ERR_DEV_NOT_FOUND;
+            scheduleUpdateWholeUI();
+          }
+        });
+        !mode && devList.forEach(function (dev) {
+          if (dev.status === 'OK' && Date.now() - (dev.lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
+            dev.lastKeepAliveDateMs = Date.now();
+            spawn('[KeepAlive]', cfg.adb, dev.args.concat('shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
+          }
+        });
+        host.scanning = false;
+      }, {timeout: cfg.adbGetDeviceListTimeout * 1000, log: cfg.logAllAdbCommands, noLogStderr: !cfg.logAllAdbCommands}); //end of GetAllDevices
+    }, cfg.adbScanPerHostDelay * 1000 * i / cfg.adbHosts.length); //end of setTimeout
+  });
 }
 
-var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;',
+var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;', 'getprop', 'ro.serialno;',
   'echo', '===;', 'getevent', '-pS;', //get touch device info
   'echo', '===;', 'cd', cfg.androidWorkDir, '&&', 'cat', 'version', '||', 'exit;'];
 var cmd_getExtraInfo = ['echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
@@ -248,13 +255,13 @@ var cmd_getExtraInfo = ['echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_P
   'echo', '===;', './dlopen', './fsc-???', '||', './dlopen.pie', './fsc-???;', '}', '2>', cfg.androidLogPath, ';'];
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
-    log('[PrepareDeviceFile for ' + dev.device + '] begin');
+    log('[PrepareDeviceFile for ' + dev.id + '] begin');
     dev.status !== 'preparing' && (dev.status = 'preparing') && scheduleUpdateWholeUI();
     var on_complete = function (status) {
-      log('[PrepareFileToDevice ' + dev.device + '] ' + status);
+      log('[PrepareFileToDevice ' + dev.id + '] ' + status);
       dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
-    spawn('[CheckDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+    spawn('[CheckDevice ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
@@ -268,15 +275,17 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
       dev.info[3] = (dev.info[3] = dev.info[3].replace(/^armeabi-|^arm64-/, '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[1]);
-      dev.info_disp = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
+      var sn = dev.info.pop();
+      dev.conId.match(/^.+:\d+$/)/*wifi ip:port*/ && sn && (dev.sn = sn) && initDeviceEx(dev);
+      dev.info_htm = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
       if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
         return on_complete('OK');
       }
-      return spawn('[PushFileToDevice ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'push', cfg.binDir, cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
+      return spawn('[PushFileToDevice ' + dev.id + ']', cfg.adb, dev.args.concat('push', cfg.binDir, cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
@@ -304,7 +313,7 @@ function getMoreInfo(dev, ary/*result of cmd_getExtraInfo*/) {
   (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
   dev.libPath = ary[4].split(/\r*\n/).sort().pop();
   dev.fastLibPath = ary[5].split(/\r*\n/).sort().pop();
-  dev.info_disp = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
+  dev.info_htm = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
   return dev.libPath && dev.disp;
 }
 function getTouchDeviceInfo(dev, stdout) {
@@ -317,7 +326,7 @@ function getTouchDeviceInfo(dev, stdout) {
         dev.touch.w = Math.floor((Number(match['0035'][1]) + 1) / 2) * 2;
         dev.touch.h = Math.floor((Number(match['0036'][1]) + 1) / 2) * 2;
         if (!dev.touch.w || !dev.touch.h) {
-          log('[GetTouchDevInfo ' + dev.device + ']' + ' strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
+          log('[GetTouchDevInfo ' + dev.id + ']' + ' strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
         } else {
           match['0030'] = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/) || {1: 32}; //ABS_MT_TOUCH_MAJOR
           match['0039'] = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/) || {1: 1}; //ABS_MT_TRACKING_ID
@@ -334,7 +343,7 @@ function getTouchDeviceInfo(dev, stdout) {
     }
     return false;
   });
-  log('[GetTouchDevInfo ' + dev.device + ']' + ' ' + dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
+  log('[GetTouchDevInfo ' + dev.id + ']' + ' ' + dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
 }
 function sendTouchEvent(dev, q) {
   var x = (q.x * dev.touch.w).toFixed(), y = (q.y * dev.touch.h).toFixed(), cmd = '';
@@ -378,10 +387,10 @@ function sendTouchEvent(dev, q) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell'), function/*on_close*/() {
+    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.id + ']', cfg.adb, dev.args.concat('shell'), function/*on_close*/() {
       dev.touchShell = null;
     }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
-    cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.device + ']' + ' exec: '});
+    cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.id + ']' + ' exec: '});
     cmd && dev.touchShell.stdin.write(cmd + '\n');
 
     if (q.type === 'd' || q.type === 'm') { //down, move
@@ -391,10 +400,10 @@ function sendTouchEvent(dev, q) {
   }
 }
 function setDeviceOrientation(dev, orientation) {
-  spawn('[SetOrientation ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
+  spawn('[SetOrientation ' + dev.id + ']', cfg.adb, dev.args.concat('shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.device + ']', cfg.adb, cfg.adbOption.concat('-s', dev.device, 'shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
@@ -467,7 +476,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.proc = spawn('[CAP ' + q.device + ' ' + q._hash + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat(
+  var childProc = capture.proc = spawn('[CAP ' + dev.id + ' ' + q._hash + ']', cfg.adb, dev.args.concat('shell', [].concat(
           '{', 'date', '>&2', '&&', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? ['&&', 'export', 'ASC_LOG_ALL=1'] : []), '&&',
           './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
           '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
@@ -516,7 +525,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     endCaptureConsumer(res);
   });
   res.setHeader && res.setHeader('Content-Type', q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
-  res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'viewId_' + makeId(dev.device) + '=' + q.timestamp + '; HttpOnly');
+  res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
     (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.proc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
@@ -527,7 +536,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   q.type === 'jpg' && dev.capture.image && dev.capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
 }
 function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/) {
-  var dev = devMgr[res.q.device];
+  var dev = getDev(res.q.devId);
   if (dev.consumerMap[res.__tag] === res) {
     delete dev.consumerMap[res.__tag];
     scheduleUpdateLiveUI();
@@ -545,13 +554,13 @@ function endCaptureProcess(dev) {
   clearTimeout(dev.capture.delayKillTimer);
   clearInterval(dev.capture.timer_resentImageForSafari);
   clearInterval(dev.capture.timer_resentUnchangedImage);
-  childProcMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
+  procMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
   dev.capture = null;
   scheduleUpdateLiveUI();
 }
 function doRecord(dev, q/*same as capture*/) {
-  var filename = querystring.escape(q.device) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
-  var childProc = spawn('[REC ' + q.device + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
+  var filename = querystring.escape(dev.sn) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
+  var childProc = spawn('[REC ' + dev.id + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
       '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
@@ -572,13 +581,12 @@ function scheduleUpdateLiveUI() {
     clearTimeout(status.updateLiveUITimer);
     status.updateLiveUITimer = setTimeout(function () {
       var sd = {}, json;
-      forEachValueIn(devMgr, function (dev) {
-        if (dev.status !== ERR_DEV_NOT_FOUND || cfg.showDisconnectedDevices) {
-          var id = makeId(dev.device);
+      devAry.forEach(function (dev) {
+        if (dev.host && dev.status !== ERR_DEV_NOT_FOUND || cfg.showDisconnectedDevices) {
           var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
-          sd['liveViewCount_' + id] = liveViewCount ? '(' + liveViewCount + ')' : '';
-          sd['recordingCount_' + id] = dev.consumerMap[REC_TAG] ? '(1)' : '';
-          sd['captureParameter_' + id] = dev.capture ? dev.capture.q._disp : '';
+          sd['liveViewCount_' + dev.var] = liveViewCount ? '(' + liveViewCount + ')' : '';
+          sd['recordingCount_' + dev.var] = dev.consumerMap[REC_TAG] ? '(1)' : '';
+          sd['captureParameter_' + dev.var] = dev.capture ? dev.capture.q._disp : '';
         }
       });
       if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
@@ -613,7 +621,7 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
   res.setHeader('Expires', 0); // Proxies.
   res.setHeader('Vary', '*'); // Proxies.
   res.setHeader('Content-Type', 'text/plain');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', cfg.ajaxAllowOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.on('close', function () { //closed by http peer
@@ -627,18 +635,19 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
   });
 }
 function replaceComVar(html, dev) {
-  return html.replace(/@device\b/g, querystring.escape(dev.device)).replace(/#device\b/g, htmlEncode(dev.device)).replace(/\$device\b/g, makeId(dev.device))
-      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_disp).replaceShowIf('devInfo', dev.info_disp)
+  return html.replace(/@device\b/g, querystring.escape(dev.id)).replace(/#device\b/g, htmlEncode(dev.id)).replace(/\$device\b/g, dev.var).replace(/#host\b/g, htmlEncode(JSON.stringify(dev.args || '')))
+      .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_htm).replaceShowIf('devInfo', dev.info_htm)
 }
 String.prototype.replaceShowIf = function (placeHolder, show) {
   return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
 };
 
 function streamWeb_handler(req, res) {
-  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico') {
+  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico' || req.url.slice(0, 6) === '/apple') {
     return end(res);
   }
-  var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
+  var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && getDev(q.device);
+  dev && (q.devId = dev.id);
   res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
   res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
@@ -651,7 +660,6 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
   if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
-
   switch (urlPath) {
     case '/capture': //---------------------------send capture result to browser & optionally save to file------------
       if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/false)) {
@@ -664,7 +672,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
           !cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')) {
         return end(res, chk.err);
       }
-      q.filename = querystring.escape(q.device) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
+      q.filename = querystring.escape(dev.sn) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
       fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.image.buf, function (err) {
         err ? log(err) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, log.nonEmpty));
       });
@@ -690,7 +698,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
         }
         var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html');
         filenameAry.forEach(function (f) {
-          (f = new FilenameInfo(f, q.device)).isValid && isImage === (f.type === 'jpg') && (filenameMap[f.timestamp + (f.i || '')] = f);
+          (f = new FilenameInfo(f, dev.sn)).isValid && isImage === (f.type === 'jpg') && (filenameMap[f.timestamp + (f.i || '')] = f);
         });
         var sortedKeys = Object.keys(filenameMap).sort().reverse();
         if (!isImage) { //videoViewer
@@ -703,12 +711,10 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
                   .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, String(sortedKeys.length - 1))
                   .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, String(Math.max(q.fileindex - 1, 0)))
                   .replace(/@fileSize\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
-                  .replace(/@unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               , 'text/html');
         } else {
           return end(res, replaceComVar(htmlCache[urlPath], dev)
               .replace(/@count\b/g, sortedKeys.length)
-              .replace(/@unprotect&/g, q.adminKey ? 'adminKey=' + querystring.escape(q.adminKey) + '&' : '')
               .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
                 return sortedKeys.reduce(function (joinedStr, key) {
                   return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
@@ -718,7 +724,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       });
     case '/getFile': //---------------------------get video/image file------------------------------------------------
       if (!cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')
-          || !(q.filename = new FilenameInfo(q.filename, q.device)).isValid && (chk.err = '`filename`: invalid name')) {
+          || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
         return end(res, chk.err);
       }
       if ((q._range = (req.headers.range || '').match(re_httpRange))) {
@@ -755,7 +761,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
         return end(res, chk.err);
       }
-      spawn('[SendKey ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', 'input', 'keyevent', q.keyCode), {
+      spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.args.concat('shell', 'input', 'keyevent', q.keyCode), {
         timeout: cfg.adbSendKeyTimeout * 1000,
         log: cfg.logAllAdbCommands
       });
@@ -764,7 +770,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       if (!chk('text', q.text)) {
         return end(res, chk.err);
       }
-      spawn('[sendText ' + q.device + ']', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
+      spawn('[sendText ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
         timeout: cfg.adbSendKeyTimeout * 1000,
         log: cfg.logAllAdbCommands
       });
@@ -784,10 +790,11 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
 } //end of streamWeb_handler(req, res)
 
 function adminWeb_handler(req, res) {
-  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico') {
+  if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico' || req.url.slice(0, 6) === '/apple') {
     return end(res);
   }
-  var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && devMgr[q.device];
+  var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && getDev(q.device);
+  dev && (q.devId = dev.id);
   res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp) || urlPath === '/' || urlPath === '/status' || urlPath === '/getServerLog' + cfg.adminUrlSuffix || urlPath === '/cmd' + cfg.adminUrlSuffix);
   res.__log && log((res.__tag = '[' + cfg.adminWeb_protocol.toUpperCase() + '_' + (res.seq = ++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
@@ -798,7 +805,6 @@ function adminWeb_handler(req, res) {
   if (cfg.adminKey && q.adminKey !== cfg.adminKey) {
     return end(res, htmlCache['/login.html'], 'text/html');
   }
-
   switch (urlPath) {
     case '/deviceControl': //--------------------------startRecording, stopRecording, stopLiveView', setAccessKey-------
       if (!dev && (chk.err = '`device`: unknown device')
@@ -820,50 +826,46 @@ function adminWeb_handler(req, res) {
       });
       !Object.keys(dev.consumerMap).length && endCaptureProcess(dev); //end capture process immediately if no any consumer exists
       if (q._diff_accessKey) {
-        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
         scheduleUpdateWholeUI();
-        q.accessKey && res.setHeader('Set-Cookie', 'HOST=' + querystring.escape(req.headers['host']) + '; HttpOnly'); //for load balance
+        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
       }
       q.orientation && setDeviceOrientation(dev, q.orientation);
       return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
     case '/cmd' + cfg.adminUrlSuffix:
-      return spawn('[cmd]', cfg.adb, cfg.adbOption.concat('-s', q.device, 'shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
+      return (!dev || !dev.host) ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.args.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
       q.viewUrlBase && (q.viewUrlBase = (parsedUrl = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase)).format());
-      return scanAllDevices(/*mode:*/'doNotRepairDeviceFile', function/*on_gotAllRealDev*/(realDeviceList) {
-        var html = htmlCache['/home.html'].replaceShowIf('ffmpegOK', ffmpegOK).replace(/@appVer\b/g, status.appVer)
-                .replace(/@adminKey\b/g, querystring.escape(cfg.adminKey)).replace(/#adminKey\b/g, htmlEncode(cfg.adminKey)).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
-                .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
-                .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
-            ;
-        ['viewSize', 'viewOrient', 'videoFileFrameRate'].forEach(function (k) {
-          html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
-        });
-        switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
-          html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
-        });
-        cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
-        return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-          return (cfg.showDisconnectedDevices ? Object.keys(devMgr) : Object.keys(devMgr).filter(function (sn) {
-            return realDeviceList.indexOf(sn) >= 0;
-          })).sort(function (sn1, sn2) {
-                return devMgr[sn1].info_disp.localeCompare(devMgr[sn2].info_disp);
-              }).reduce(function (joinedStr, device, i) {
-                return joinedStr + replaceComVar(htmlBlock, (dev = devMgr[device]))
-                        .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
-                        .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
-                        .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
-              }, ''/*initial joinedStr*/);
-        }), 'text/html');
+      var html = htmlCache['/home.html'].replace(/@appVer\b/g, status.appVer).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
+              .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
+              .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
+          ;
+      ['viewSize', 'viewOrient', 'videoFileFrameRate'].forEach(function (k) {
+        html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
       });
+      switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
+        html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
+      });
+      cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
+      return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
+        return (cfg.showDisconnectedDevices ? devAry : devAry.filter(function (dev) {
+          return dev.host && dev.status !== ERR_DEV_NOT_FOUND;
+        })).sort(function (dev1, dev2) {
+              return dev1.info_htm.localeCompare(dev2.info_htm);
+            }).reduce(function (joinedStr, dev, i) {
+              return joinedStr + replaceComVar(htmlBlock, dev)
+                      .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
+                      .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+                      .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
+            }, ''/*initial joinedStr*/);
+      }), 'text/html');
     case '/stopServer':  //------------------------------------stop server management---------------------------------
       end(res, 'OK');
       adminWeb.close();
       streamWeb && streamWeb.close();
-      Object.keys(childProcMap).forEach(function (pid) {
-        childProcMap[pid].kill('SIGKILL');
+      forEachValueIn(procMap, function (proc) {
+        proc.kill('SIGKILL');
       });
       return process.exit(0);
     case '/reloadResource':  //-----------------------------reload resource file to cache-----------------------------
@@ -882,7 +884,7 @@ function adminWeb_handler(req, res) {
         }
         cfg.videoFileFrameRate = q.videoFileFrameRate;
       } else { //-------------------------------------------------Set some internal bool var--------------------------
-        forEachValueIn(switchList, function (k) {
+        switchList.forEach(function (k) {
           q[k] !== undefined && (cfg[k] = (q[k] === 'true'));
         });
       }
@@ -905,12 +907,12 @@ function adminWeb_handler(req, res) {
         return end(res, chk.err);
       }
       q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
-      q.device && (res.__oldWrite = res.write) && (res.write = function (buf) {
-        forEachValueIn(Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/), function (s, i, lineAry) {
-          (buf = (s.indexOf(q.device) >= 0 || s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
+      dev && (res.__oldWrite = res.write) && (res.write = function (buf) {
+        Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
+          (buf = (s.indexOf(dev.sn) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
           i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
         });
-      }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(q.device));
+      }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(dev.sn)) === dev.sn && (q.qdevice = '');
       return fs.createReadStream(q._logFilePath, {
         start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
         end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
@@ -920,6 +922,10 @@ function adminWeb_handler(req, res) {
     case '/prepareAllDevices':  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
       scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
+    case '/getWebHost':
+      return end(res, JSON.stringify({adminHost: req.headers['host'], streamHost: (req.headers['host'] || '').replace(/:\d+$/, ':' + cfg.streamWeb_port)}), 'text/json');
+    case '/getAdbHost':
+      return end(res, JSON.stringify(dev ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.args} : '`device`: unknown device'), 'text/json');
     default:
       return _streamWeb_handler(req, res, q, urlPath, dev, /*fromAdminWeb:*/true);
   }
@@ -931,7 +937,7 @@ function reloadResource() {
     htmlCache['/' + filename] = fs.readFileSync('./html/' + filename).toString();
   });
   fs.readdirSync(cfg.outputDir).forEach(function (filename) {
-    (filename = new FilenameInfo(filename)).isValid && getOrCreateDevCtx(filename.device);
+    (filename = new FilenameInfo(filename)).isValid && getOrCreateDevCtx(filename.sn);
   });
   prepareDeviceFile.ver = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
     return hash.update(filename.match(/^\./) ? '' : fs.readFileSync(cfg.binDir + '/' + filename));
@@ -939,13 +945,13 @@ function reloadResource() {
 }
 
 reloadResource();
-spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], function/*on_close*/(ret) {
+spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
   if (ret !== 0) {
     log('Failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file', {stderr: true});
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(ret) {
-    !(ffmpegOK = (ret === 0)) && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
+    ret !== 0 && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       if (cfg.streamWeb_port) {
@@ -957,6 +963,7 @@ spawn('[CheckAdb]', cfg.adb, cfg.adbOption.length ? ['version'] : ['devices'], f
         log('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : ''), {stderr: true});
       }
     });
+    scanAllDevices();
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
   }, {timeout: 10 * 1000, log: true});
 }, {timeout: 30 * 1000, log: true});

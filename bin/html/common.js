@@ -90,7 +90,7 @@ var AscUtil = {showEventsOnly: false, debug: false};
           })
           .on('keypress.live_input', function (e) {
             if (!AscUtil.url_sendText) return; //do nothing if mouse is not inside some live image
-            if (e.which < 0x20 || e.which > 0x7f) return;
+            if (e.metaKey || e.which < 0x20 || e.which > 0x7f) return;
             var c = e.which === 0x20 ? '%s' : String.fromCharCode(e.which);
             AscUtil.textQueue.push(c) && AscUtil.textQueue.length === 1 && sendText();
             e.preventDefault();

@@ -15,15 +15,13 @@
   <iframe name="resultIFrame"></iframe>
 </div>
 <div style="margin-top: 29px; text-align: center">
-  <div style="@hideIf_ffmpegOK; background-color: blue; color: white"><b>Failed</b> to check local FFMPEG utility, so can <b>NOT</b> record in H.264/MP4 format</div>
   <table id="device_tbl" style="max-width:100%; border-collapse: collapse; display: inline-block">
     <!--repeatBegin-->
     <tr id="row1_$device" class="@devStatusClass">
       <td style="width: 5px; border-right: 1px solid gray">@rowNum</td>
       <td style="text-align: left; vertical-align: top; padding-left: 4px">
-        <span style="white-space: nowrap" class="deviceSN">#device</span>
+        <span style="white-space: nowrap" class="deviceSN" title="#host">#device</span>
         <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure to set/clear protect key?' + ($('#recordingCount_$device').text() || !$('#liveViewCount_$device').text() ? 'All running live view or recording will be stopped.' : ''))" style="display: inline-block; white-space: nowrap; float: right">
-          <input type="hidden" name="adminKey" value="#adminKey"/>
           <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
           <!--<button type="submit" class="internal">Set</button>-->
@@ -45,17 +43,17 @@
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
-          <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop all live view?')" title="Stop All Live View" style="display: none">
+          <a id="stopLiveView_$device" class="button" href="deviceControl?action=stopLiveView&device=@device" target="resultIFrame" onclick="return confirm('Sure to stop all live view?')" title="Stop All Live View" style="display: none">
             X
           </a>
         </span>
-        <span style="@showIf_ffmpegOK; white-space: nowrap">
+        <span style="white-space: nowrap">
           <span style="background-color: darkgray">&nbsp;</span>
-          <a class="button" href="deviceControl?action=startRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure to stop current recording and start a new recording?')" title="Record">
+          <a class="button" href="deviceControl?action=startRecording&device=@device" target="resultIFrame" onclick="return !$('#recordingCount_$device').text() || confirm('Sure to stop current recording and start a new recording?')" title="Record">
             Rec
           </a>
           <span class="captureIndicator" id="recordingCount_$device"></span>
-          <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device&adminKey=@adminKey" target="resultIFrame" onclick="return confirm('Sure to stop recording?')" title="Stop Recording" style="display: none">
+          <a id="stopRecording_$device" class="button" href="deviceControl?action=stopRecording&device=@device" target="resultIFrame" onclick="return confirm('Sure to stop recording?')" title="Stop Recording" style="display: none">
             X
           </a>
         </span>
@@ -66,13 +64,13 @@
         <a class="internal" href="@viewUrlBase/imageViewer.html?device=@device&accessKey=@accessKey" target="images_$device" title="Saved Images">
           Imgs
         </a>
-        <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&adminKey=@adminKey&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
+        <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
           Log
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&adminKey=@adminKey&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
           L
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&adminKey=@adminKey&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
           T
         </a>
         &nbsp;<span class="captureIndicator" id="captureParameter_$device" style="float: right"></span>
@@ -85,7 +83,6 @@
   <div>Admin</div>
   <div>
     <form action="getServerLog@adminUrlSuffix" target="asc_log" style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Get Server Log</button>
       <label>
         <input type="checkbox" name="download" value="true"/>Download
@@ -108,62 +105,61 @@
       </div>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="prepareAllDevices?adminKey=@adminKey&mode=checkPrepare" target="resultIFrame" title="prepare all device files">
+      <a class="button" href="prepareAllDevices?mode=checkPrepare" target="resultIFrame" title="prepare all device files">
         Prepare
       </a>
       All Devices
-      <a class="button" href="prepareAllDevices?adminKey=@adminKey&mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
+      <a class="button" href="prepareAllDevices?mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
         forcibly
       </a>
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="reloadResource?adminKey=@adminKey" target="resultIFrame">
+      <a class="button" href="reloadResource" target="resultIFrame">
         Reload
       </a>
       Internal Resources
     </div>
     <div>
-      <a class="button @logFpsStatistic" href="set?adminKey=@adminKey&logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
+      <a class="button @logFpsStatistic" href="set?logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logFpsStatistic/>Log FPS Statistic
       </a>
     </div>
     <div>
-      <a class="button @logAllAdbCommands" href="set?adminKey=@adminKey&logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
+      <a class="button @logAllAdbCommands" href="set?logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logAllAdbCommands/>Log All ADB Commands
       </a>
     </div>
     <div>
-      <a class="button @logHttpReqDetail" href="set?adminKey=@adminKey&logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
+      <a class="button @logHttpReqDetail" href="set?logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logHttpReqDetail/>Log HTTP Request Detail
       </a>
     </div>
     <div>
-      <a class="button @logFfmpegDebugInfo" href="set?adminKey=@adminKey&logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
+      <a class="button @logFfmpegDebugInfo" href="set?logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logFfmpegDebugInfo/>Log FFMPEG Debug Info
       </a>
     </div>
     <div>
-      <a class="button @logAllHttpReqRes" href="set?adminKey=@adminKey&logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
+      <a class="button @logAllHttpReqRes" href="set?logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logAllHttpReqRes/>Log All Http Req/Res
       </a>
     </div>
     <div>
-      <a class="button @showDisconnectedDevices" href="set?adminKey=@adminKey&showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
+      <a class="button @showDisconnectedDevices" href="set?showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_showDisconnectedDevices/>Show Disconnected Devices
       </a>
     </div>
     <div>
-      <a class="button @fastResize" href="set?adminKey=@adminKey&fastResize=@fastResize_negVal" target="resultIFrame" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
+      <a class="button @fastResize" href="set?fastResize=@fastResize_negVal" target="resultIFrame" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
         <input type="checkbox" checkedIf_fastResize/>Fast Resize Image
       </a>
     </div>
     <div>
-      <a class="button @fastCapture" href="set?adminKey=@adminKey&fastCapture=@fastCapture_negVal" target="resultIFrame" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
+      <a class="button @fastCapture" href="set?fastCapture=@fastCapture_negVal" target="resultIFrame" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
         <input type="checkbox" checkedIf_fastCapture/>Fast Capture
       </a>
     </div>
     <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <label title="Default view size and orientation. Example: 0.5, 400x600, 400x, x600, 600x400 means landscape. Note: this size maybe adjusted to 8/n of original when in fastResize mode">
         Live View Size:
@@ -175,14 +171,12 @@
       </label>
     </form>
     <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <label>Record Rate:
         <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />
       </label>
     </form>
     <form style="border-top: 1px solid lightgray; margin-top: 4px; @showIf_isStreamWebSeparated">
-      <input type="hidden" name="adminKey" value="#adminKey"/>
       <button type="submit">Set</button>
       <div style="display: inline-block">
         Live View URL Base:
@@ -194,7 +188,7 @@
       </div>
     </form>
     <div style="border-top: 1px solid lightgray; margin-top: 4px">
-      <a class="button" href="stopServer?adminKey=@adminKey" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
+      <a class="button" href="stopServer" target="resultIFrame" style="color: red" onclick="return confirm('Sure?')">
         Stop Server
       </a>
     </div>
@@ -207,7 +201,7 @@
   var appVer = '@appVer', ver = '';
   (function queryStatus() {
     $('#darkMask').hide();
-    $.ajax('status?adminKey=@adminKey&ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
+    $.ajax('status?ver=' + ver + '&appVer=' + appVer, {timeout: 60 * 1000})
       .done(function (status) {
         if (status.appVer !== appVer) {
           document.location.reload(true);
@@ -235,17 +229,16 @@
       });
   })();
 
-  var _devAry = $('.deviceSN').toArray().reduce(function (resAry, el) {
+  var devAry = $('.deviceSN').toArray().reduce(function (resAry, el) {
     return resAry.push($(el).text()) && resAry;
   }, []);
-  console.log(JSON.stringify(_devAry));
+  console.log(JSON.stringify(devAry));
 
   function adb(cmd, timeout, device) {
-    var devAry = Array.isArray(device) ? device : device ? [device] : _devAry;
-    devAry.forEach(function (device) {
-      $.ajax('cmd@adminUrlSuffix?adminKey=@adminKey&' + encodeURI('device=' + device + '&cmd=' + cmd + (timeout ? '&timeout=' + timeout : '')))
+    (Array.isArray(device) ? device : device ? [device] : devAry).forEach(function (device) {
+      $.ajax('cmd@adminUrlSuffix?device=' + encodeURIComponent(device) + '&cmd=' + encodeURIComponent(cmd) + (timeout ? '&timeout=' + encodeURIComponent(timeout) : ''))
         .done(function (res) {
-          console.log(device + ': ' + res);
+          console.log('-------------------Begin device: "' + device + '"-------------------\n' + res + '-------------------End   device: "' + device + '"-------------------\n');
         })
         .fail(function (jqXHR, textStatus) {
           console.log(device + ': ' + textStatus);
