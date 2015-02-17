@@ -91,6 +91,7 @@ td ul li {list-style-position: inside}
 .captureIndicator {background-color: blue; color: white}
 .devErr {background-color: darkgray}
 .devPrep {background-color: #f4f4f4}
+.devFileOnly {background-color: lightgray}
 .masterMode_true {background-color: greenyellow}
 
 .orient_sample {

@@ -856,7 +856,7 @@ function adminWeb_handler(req, res) {
             }).reduce(function (joinedStr, dev, i) {
               return joinedStr + replaceComVar(htmlBlock, dev)
                       .replace(/#devErr\b/g, htmlEncode(!dev.status ? '' : dev.status === 'preparing' ? '' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus + '.') : dev.status + '.'))
-                      .replace(/@devStatusClass\b/g, !dev.status ? '' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+                      .replace(/@devStatusClass\b/g, !dev.status ? 'devFileOnly' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
                       .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
             }, ''/*initial joinedStr*/);
       }), 'text/html');
