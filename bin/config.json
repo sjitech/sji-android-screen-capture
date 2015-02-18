@@ -46,7 +46,7 @@
 
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
-  "adbHosts": [""], //Example: ["172.21.137.5", "172.21.137.6:5037", ":50370"]
+  "adbHosts": [""], //"" just means default local adb daemon, also = ":5037". Other example: ["172.21.137.5", "172.21.137.6:5037", ":50370"].
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
   "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
