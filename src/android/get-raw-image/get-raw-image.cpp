@@ -104,7 +104,7 @@ extern "C" void asc_capture(ASC* asc) {
 
     if (isFirstTime) {
         #if MAKE_TRIAL==1
-            if (time(NULL) >= 1425127531) ABORT("!"); //Sat Feb 28 2015 21:45:31 GMT+0900 (JST)
+            if (time(NULL) >= 1425538778) ABORT("!"); //Thu Mar 05 2015 15:59:38 GMT+0900 (JST)
             chkDev();
             asc->width = asc->height = 0;
         #endif
