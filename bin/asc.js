@@ -183,8 +183,8 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port*/, host) {
   var foundDev = null, devGrp = devGrpMap[conId] || (devGrpMap[conId] = []);
   return (!host ? devGrp[0] : devGrp.some(function (dev) {
-        return (dev.host ? (dev.host === host) : ((dev.host = host) && (dev.args = host.args.concat('-s', conId)))) && (foundDev = dev);
-      }) && foundDev) || initDeviceEx((devAry[devAry.length] = {host: host, conId: conId, sn: conId, args: host ? host.args.concat('-s', conId) : undefined, info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''}));
+        return (dev.host ? (dev.host === host) : ((dev.host = host) && (dev.adbArgs = host.adbArgs.concat('-s', conId)))) && (foundDev = dev);
+      }) && foundDev) || initDeviceEx((devAry[devAry.length] = {host: host, conId: conId, sn: conId, adbArgs: (host ? host.adbArgs : []).concat('-s', conId), info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''}));
 }
 function initDeviceEx(dev) {
   scheduleUpdateWholeUI();
@@ -209,11 +209,11 @@ function newAutoAccessKey() {
 function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means repeatScanInBackground */) {
   !cfg.adbHosts.inited && (cfg.adbHosts.inited = true) && cfg.adbHosts.forEach(function (host, i) {
     var _host = host && String(host).replace(/:[^:]*$/, '') || '', _port = host && (String(host).match(/:(\d+)$/) || [])[1] || '';
-    cfg.adbHosts[i] = {host: _host, port: _port, args: (_host ? ['-H', _host] : []).concat(_port ? ['-P', _port] : [])};
+    cfg.adbHosts[i] = {host: _host, port: _port, adbArgs: (_host ? ['-H', _host] : []).concat(_port ? ['-P', _port] : [])};
   });
   cfg.adbHosts.forEach(function (host, i) {
     !host.scanning && (host.scanning = true) && setTimeout(function () {
-      spawn('[GetAllDevices]', cfg.adb, host.args.concat('devices'), function/*on_close*/(ret, stdout) {
+      spawn('[GetAllDevices]', cfg.adb, host.adbArgs.concat('devices'), function/*on_close*/(ret, stdout) {
         var devList = [];
         ret === 0 && stdout.split('\n').slice(1/*from second line*/).forEach(function (desc) {
           if ((desc = desc.split('\t')).length > 1 && desc[0] !== '????????????') {
@@ -235,7 +235,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
         !mode && devList.forEach(function (dev) {
           if (dev.status === 'OK' && Date.now() - (dev.lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
             dev.lastKeepAliveDateMs = Date.now();
-            spawn('[KeepAlive]', cfg.adb, dev.args.concat('shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
+            spawn('[KeepAlive]', cfg.adb, dev.adbArgs.concat('shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
           }
         });
         host.scanning = false;
@@ -261,7 +261,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       log('[PrepareFileToDevice ' + dev.id + '] ' + status);
       dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
-    spawn('[CheckDevice ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+    spawn('[CheckDevice ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
@@ -281,11 +281,11 @@ function prepareDeviceFile(dev, force/*optional*/) {
       if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
         return on_complete('OK');
       }
-      return spawn('[PushFileToDevice ' + dev.id + ']', cfg.adb, dev.args.concat('push', cfg.binDir, cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
+      return spawn('[PushFileToDevice ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('push', cfg.binDir, cfg.androidWorkDir), function/*on_close*/(ret, stdout, stderr) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return spawn('[FinishPrepareFile ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
@@ -387,7 +387,7 @@ function sendTouchEvent(dev, q) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.id + ']', cfg.adb, dev.args.concat('shell'), function/*on_close*/() {
+    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
       dev.touchShell = null;
     }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
     cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.id + ']' + ' exec: '});
@@ -400,10 +400,10 @@ function sendTouchEvent(dev, q) {
   }
 }
 function setDeviceOrientation(dev, orientation) {
-  spawn('[SetOrientation ' + dev.id + ']', cfg.adb, dev.args.concat('shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
+  spawn('[SetOrientation ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 
 function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
@@ -476,7 +476,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.proc = spawn('[CAP ' + dev.id + ' ' + q._hash + ']', cfg.adb, dev.args.concat('shell', [].concat(
+  var childProc = capture.proc = spawn('[CAP ' + dev.id + ' ' + q._hash + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat(
           '{', 'date', '>&2', '&&', 'cd', cfg.androidWorkDir, '&&', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? ['&&', 'export', 'ASC_LOG_ALL=1'] : []), '&&',
           './ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
           '-f', 'androidgrab', '-probesize', 32/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
@@ -635,7 +635,7 @@ function setDefaultHttpHeaderAndInitCloseHandler(res) {
   });
 }
 function replaceComVar(html, dev) {
-  return html.replace(/@device\b/g, querystring.escape(dev.id)).replace(/#device\b/g, htmlEncode(dev.id)).replace(/\$device\b/g, dev.var).replace(/#host\b/g, htmlEncode(JSON.stringify(dev.args || '')))
+  return html.replace(/@device\b/g, querystring.escape(dev.id)).replace(/#device\b/g, htmlEncode(dev.id)).replace(/\$device\b/g, dev.var).replace(/#host\b/g, htmlEncode(JSON.stringify(dev.adbArgs || '')))
       .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_htm).replaceShowIf('devInfo', dev.info_htm)
 }
 String.prototype.replaceShowIf = function (placeHolder, show) {
@@ -761,7 +761,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
         return end(res, chk.err);
       }
-      spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.args.concat('shell', 'input', 'keyevent', q.keyCode), {
+      spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
         timeout: cfg.adbSendKeyTimeout * 1000,
         log: cfg.logAllAdbCommands
       });
@@ -770,7 +770,7 @@ function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
       if (!chk('text', q.text)) {
         return end(res, chk.err);
       }
-      spawn('[sendText ' + dev.id + ']', cfg.adb, dev.args.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
+      spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
         timeout: cfg.adbSendKeyTimeout * 1000,
         log: cfg.logAllAdbCommands
       });
@@ -832,7 +832,7 @@ function adminWeb_handler(req, res) {
       q.orientation && setDeviceOrientation(dev, q.orientation);
       return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
     case '/cmd' + cfg.adminUrlSuffix:
-      return (!dev || !dev.host) ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.args.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
+      return !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
         end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
       }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
     case '/': //---------------------------------------show menu of all devices---------------------------------------
@@ -925,7 +925,7 @@ function adminWeb_handler(req, res) {
     case '/getWebHost':
       return end(res, JSON.stringify({adminHost: req.headers['host'], streamHost: (req.headers['host'] || '').replace(/:\d+$/, ':' + cfg.streamWeb_port)}), 'text/json');
     case '/getAdbHost':
-      return end(res, JSON.stringify(dev ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.args} : '`device`: unknown device'), 'text/json');
+      return end(res, JSON.stringify(dev ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
     default:
       return _streamWeb_handler(req, res, q, urlPath, dev, /*fromAdminWeb:*/true);
   }
