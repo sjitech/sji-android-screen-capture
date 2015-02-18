@@ -923,7 +923,7 @@ function adminWeb_handler(req, res) {
       scanAllDevices(/*mode:*/q.mode);
       return end(res, 'OK');
     case '/getWebHost':
-      return end(res, JSON.stringify({adminHost: req.headers['host'], streamHost: (req.headers['host'] || '').replace(/:\d+$/, ':' + cfg.streamWeb_port)}), 'text/json');
+      return end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
     case '/getAdbHost':
       return end(res, JSON.stringify(dev ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
     default:
