@@ -925,7 +925,7 @@ function adminWeb_handler(req, res) {
     case '/getWebHost':
       return end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
     case '/getAdbHost':
-      return end(res, JSON.stringify(dev ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
+      return end(res, JSON.stringify((dev && dev.host) ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
     default:
       return _streamWeb_handler(req, res, q, urlPath, dev, /*fromAdminWeb:*/true);
   }
