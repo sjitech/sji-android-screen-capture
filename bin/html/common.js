@@ -238,12 +238,16 @@ var AscUtil = {showEventsOnly: false, debug: false};
     }, 1000 / 4);
   };
 
-  var CHROME_EXTENSION_ID = 'nejeldogfcfcfinihepdibgemcegoidm';
+  var CHROME_EXTENSION_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
 
   function getOrCreateAdbDevice(websocket_url, callback, isCreate) {
-    if (!websocket_url.match(/^ws:\/\//) && !websocket_url.match(/^wss:\/\//)) {
-      callback('invalid parameter(websocket_url must start with ws:// or ws://');
-      return;
+    if (websocket_url.match(/:/)) {
+      if (!websocket_url.match(/^ws:\/\//) && !websocket_url.match(/^wss:\/\//)) {
+        callback('invalid parameter(websocket_url must start with ws:// or ws://');
+        return;
+      }
+    } else {
+      websocket_url = (websocket_url.URL && websocket_url.URL[4] === 's' ? 'wss://' : 'ws://') + websocket_url;
     }
 
     try {
@@ -264,10 +268,13 @@ var AscUtil = {showEventsOnly: false, debug: false};
   }
 
   AscUtil.createAdbDevice = function (websocket_url, callback) {
-    getOrCreateAdbDevice(websocket_url, callback, true);
+    getOrCreateAdbDevice(websocket_url, callback || empty, true);
   };
 
   AscUtil.getAdbDevice = function (websocket_url, callback) {
-    getOrCreateAdbDevice(websocket_url, callback, false);
+    getOrCreateAdbDevice(websocket_url, callback || empty, false);
   };
+
+  function empty() {
+  }
 })($/*jQuery*/);

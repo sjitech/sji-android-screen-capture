@@ -18,6 +18,6 @@
     }
   },
   "externally_connectable": {
-    "matches": ["https://www.sumatium.com/*", "http://127.0.0.1:33333/*"]
+    "matches": ["https://www.sumatium.com/*", "*://localhost.local:*/*"]
   }
 }

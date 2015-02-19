@@ -76,7 +76,7 @@
     </div>
   </div>
   <div style="margin-top: 12px">
-    <button onclick="AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey')">Enable ADB</button>
+    <button onclick="AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey', function(err, conStr, connected){console.log(err||(conStr+' ' + (connected?'(registed to local adb daemon)':'(not registed to local adb daemon, but will retry in background)')))})">Enable ADB</button>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
