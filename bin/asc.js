@@ -10,7 +10,7 @@ process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack, {stderr: true});
   throw err;
 });
-var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, httpSeq = 0;
+var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0;
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
@@ -665,140 +665,150 @@ function streamWeb_handler(req, res) {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
   setDefaultHttpHeaderAndInitCloseHandler(res);
-  _streamWeb_handler(req, res, q, urlPath, dev);
+  return _streamWeb_handler(dev, q, urlPath, req, res);
 }
-function _streamWeb_handler(req, res, q, urlPath, dev, fromAdminWeb) {
-  if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
+function _streamWeb_handler(dev, q, urlPath, req, res) {
+  var handler = streamWeb_handlerMap[urlPath];
+  if (handler) {
+    if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
+      return end(res, chk.err);
+    }
+    return handler(dev, q, urlPath, req, res);
+  } else {
+    return end(res, 'bad request');
+  }
+}
+streamWeb_handlerMap['/capture'] = function (dev, q, urlPath, req, res) {
+  if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/false)) {
     return end(res, chk.err);
   }
-  switch (urlPath) {
-    case '/capture': //---------------------------send capture result to browser & optionally save to file------------
-      if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/false)) {
-        return end(res, chk.err);
-      }
-      q._isSafari = /Safari/i.test(req.headers['user-agent']) && !/Chrome/i.test(req.headers['user-agent']);
-      return doCapture(dev, res, q);
-    case '/saveImage': //------------------------------Save Current Image From Live View------------------------------
-      if ((!dev.capture || !dev.capture.image) && (chk.err = 'error: no live image') ||
-          !cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')) {
-        return end(res, chk.err);
-      }
-      q.filename = querystring.escape(dev.sn) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
-      fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.image.buf, function (err) {
-        err ? log(err) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, log.nonEmpty));
-      });
-      return end(res, 'OK: ' + q.filename);
-    case '/liveViewer.html':  //-------------------------show live capture (Just as a sample) ------------------------
-      if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
-        return end(res, chk.err);
-      }
-      return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
-              .replace(/@size\b/g, q._old.size || '').replace(/@orient\b/g, q._old.orient || '').replace(/@fastResize\b/g, q._old.fastResize || '').replace(/@fastCapture\b/g, q._old.fastCapture || '')
-              .replace(/@res_size\b/g, (dev.capture && dev.capture.q || q).size).replace(/@res_orient\b/g, (dev.capture && dev.capture.q || q).orient).replace(/@res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture).replace(/@res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize)
-              .replace(/checkedIf_res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture ? 'checked' : '').replace(/checkedIf_res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize ? 'checked' : '')
-              .replace(/enabledIf_can_fastCapture\b/g, dev.fastLibPath ? '' : 'disabled').replace(/enabledIf_can_fastResize\b/g, !!dev.fastLibPath || dev.libPath >= './sc-400' ? '' : 'disabled')
-          , 'text/html');
-    case '/videoViewer.html': //--------------------show video file  (Just as a sample)-------------------------------
-    case '/imageViewer.html': //--------------------show image file  (Just as a sample)-------------------------------
-      if (!cfg.enableGetOutputFile && !fromAdminWeb) {
-        return end(res, 'access denied');
-      }
-      return fs.readdir(cfg.outputDir, function (err, filenameAry) {
-        if (err) {
-          return end(res, stringifyError(err));
-        }
-        var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html');
-        filenameAry.forEach(function (f) {
-          (f = new FilenameInfo(f, dev.sn)).isValid && isImage === (f.type === 'jpg') && (filenameMap[f.timestamp + (f.i || '')] = f);
-        });
-        var sortedKeys = Object.keys(filenameMap).sort().reverse();
-        if (!isImage) { //videoViewer
-          if (!(q.filename = filenameMap[sortedKeys[q.fileindex = Number(q.fileindex) || 0]])) {
-            return end(res, sortedKeys.length ? '`fileindex`: file not found' : 'error: file not found');
-          }
-          return end(res, replaceComVar(htmlCache[urlPath], dev)
-                  .replace(/@fileindex\b/g, q.fileindex).replace(/@filename\b/g, querystring.escape(q.filename))
-                  .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
-                  .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, String(sortedKeys.length - 1))
-                  .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, String(Math.max(q.fileindex - 1, 0)))
-                  .replace(/@fileSize\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
-              , 'text/html');
-        } else {
-          return end(res, replaceComVar(htmlCache[urlPath], dev)
-              .replace(/@count\b/g, sortedKeys.length)
-              .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-                return sortedKeys.reduce(function (joinedStr, key) {
-                  return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
-                }, ''/*initial joinedStr*/);
-              }), 'text/html');
-        }
-      });
-    case '/getFile': //---------------------------get video/image file------------------------------------------------
-      if (!cfg.enableGetOutputFile && !fromAdminWeb && (chk.err = 'access denied')
-          || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
-        return end(res, chk.err);
-      }
-      if ((q._range = (req.headers.range || '').match(re_httpRange))) {
-        if (!(q._fileSize = getFileSizeSync(cfg.outputDir + '/' + q.filename))) {
-          return end(res, chk.err);
-        }
-        res.setHeader('Accept-Ranges', 'bytes');
-        q._range.start = q._range[1] && Math.min(q._range[1], q._fileSize - 1) || 0;
-        q._range.end = q._range[2] && Math.min(Math.max(q._range[2], q._range.start), q._fileSize - 1) || (q._fileSize - 1);
-        res.setHeader('Content-Range', 'bytes ' + q._range.start + '-' + q._range.end + '/' + q._fileSize);
-        res.setHeader('Content-Length', q._range.end - q._range.start + 1);
-        res.statusCode = 206/*Partial Content*/;
-      }
-      q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + q.filename);
-      res.setHeader('Content-Type', q.filename.type === 'mp4' ? 'video/mp4' : q.filename.type === 'jpg' ? 'image/jpeg' : '');
-      return fs.createReadStream(cfg.outputDir + '/' + q.filename, q._range)
-          .on('error', function (err) {
-            end(res, stringifyError(err));
-          }).pipe(res);
-    case '/touch':
-      if (!chk('type', q.type, ['d', 'u', 'o', 'm']) || !chk('x', q.x = Number(q.x), 0, 1) || !chk('x', q.y = Number(q.y), 0, 1)) {
-        return end(res, JSON.stringify(chk.err), 'text/json');
-      }
-      if (!dev.capture || !dev.capture.image) {
-        return end(res, JSON.stringify('device is not being live viewed'), 'text/json');
-      }
-      if (dev.touchStatus !== 'OK') {
-        return end(res, JSON.stringify(dev.touchStatus || 'not prepared'), 'text/json');
-      } else {
-        sendTouchEvent(dev, q);
-        return end(res, JSON.stringify('OK'), 'text/json');
-      }
-    case '/sendKey':
-      if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
-        return end(res, chk.err);
-      }
-      spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
-        timeout: cfg.adbSendKeyTimeout * 1000,
-        log: cfg.logAllAdbCommands
-      });
-      return end(res, 'OK');
-    case '/sendText':
-      if (!chk('text', q.text)) {
-        return end(res, chk.err);
-      }
-      spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
-        timeout: cfg.adbSendKeyTimeout * 1000,
-        log: cfg.logAllAdbCommands
-      });
-      return end(res, 'OK');
-    case '/turnOnScreen':
-      turnOnScreen(dev);
-      return end(res, 'OK');
-    case '/setOrientation':
-      if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
-        return end(res, chk.err);
-      }
-      setDeviceOrientation(dev, q.orientation);
-      return end(res, 'OK');
-    default:
-      return end(res, 'bad request');
+  q._isSafari = /Safari/i.test(req.headers['user-agent']) && !/Chrome/i.test(req.headers['user-agent']);
+  return doCapture(dev, res, q);
+};
+streamWeb_handlerMap['/saveImage'] = function (dev, q, urlPath, req, res) {
+  if ((!dev.capture || !dev.capture.image) && (chk.err = 'error: no live image')) {
+    return end(res, chk.err);
   }
-} //end of streamWeb_handler(req, res)
+  q.filename = querystring.escape(dev.sn) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
+  fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.image.buf, function (err) {
+    err ? log(err) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, log.nonEmpty));
+  });
+  return end(res, 'OK: ' + q.filename);
+};
+streamWeb_handlerMap['/liveViewer.html'] = function (dev, q, urlPath, req, res) {
+  if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
+    return end(res, chk.err);
+  }
+  return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
+          .replace(/@size\b/g, q._old.size || '').replace(/@orient\b/g, q._old.orient || '').replace(/@fastResize\b/g, q._old.fastResize || '').replace(/@fastCapture\b/g, q._old.fastCapture || '')
+          .replace(/@res_size\b/g, (dev.capture && dev.capture.q || q).size).replace(/@res_orient\b/g, (dev.capture && dev.capture.q || q).orient).replace(/@res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture).replace(/@res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize)
+          .replace(/checkedIf_res_fastCapture\b/g, (dev.capture && dev.capture.q || q).fastCapture ? 'checked' : '').replace(/checkedIf_res_fastResize\b/g, (dev.capture && dev.capture.q || q).fastResize ? 'checked' : '')
+          .replace(/enabledIf_can_fastCapture\b/g, dev.fastLibPath ? '' : 'disabled').replace(/enabledIf_can_fastResize\b/g, !!dev.fastLibPath || dev.libPath >= './sc-400' ? '' : 'disabled')
+      , 'text/html');
+};
+streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.html'] = function (dev, q, urlPath, req, res) {
+  if (!cfg.enableGetOutputFile && cfg.adminKey && q.adminKey !== cfg.adminKey) {
+    return end(res, 'forbidden');
+  }
+  return fs.readdir(cfg.outputDir, function (err, filenameAry) {
+    if (err) {
+      return end(res, stringifyError(err));
+    }
+    var filenameMap = {/*sortKey:*/}, isImage = (urlPath === '/imageViewer.html');
+    filenameAry.forEach(function (f) {
+      (f = new FilenameInfo(f, dev.sn)).isValid && isImage === (f.type === 'jpg') && (filenameMap[f.timestamp + (f.i || '')] = f);
+    });
+    var sortedKeys = Object.keys(filenameMap).sort().reverse();
+    if (!isImage) { //videoViewer
+      if (!(q.filename = filenameMap[sortedKeys[q.fileindex = Number(q.fileindex) || 0]])) {
+        return end(res, sortedKeys.length ? '`fileindex`: file not found' : 'error: file not found');
+      }
+      return end(res, replaceComVar(htmlCache[urlPath], dev)
+              .replace(/@fileindex\b/g, q.fileindex).replace(/@filename\b/g, querystring.escape(q.filename))
+              .replace(/@timestamp\b/g, stringifyTimestampShort(q.filename.timestamp))
+              .replace(/@fileCount\b/g, sortedKeys.length).replace(/@maxFileindex\b/g, String(sortedKeys.length - 1))
+              .replace(/@olderFileindex\b/g, Math.min(q.fileindex + 1, sortedKeys.length - 1)).replace(/@newerFileindex\b/g, String(Math.max(q.fileindex - 1, 0)))
+              .replace(/@fileSize\b/g, getFileSizeSync(cfg.outputDir + '/' + q.filename).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','))
+          , 'text/html');
+    } else {
+      return end(res, replaceComVar(htmlCache[urlPath], dev)
+          .replace(/@count\b/g, sortedKeys.length)
+          .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
+            return sortedKeys.reduce(function (joinedStr, key) {
+              return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
+            }, ''/*initial joinedStr*/);
+          }), 'text/html');
+    }
+  });
+};
+streamWeb_handlerMap['/getFile'] = function (dev, q, urlPath, req, res) {
+  if (!cfg.enableGetOutputFile && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'forbidden')
+      || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
+    return end(res, chk.err);
+  }
+  if ((q._range = (req.headers.range || '').match(re_httpRange))) {
+    if (!(q._fileSize = getFileSizeSync(cfg.outputDir + '/' + q.filename))) {
+      return end(res, chk.err);
+    }
+    res.setHeader('Accept-Ranges', 'bytes');
+    q._range.start = q._range[1] && Math.min(q._range[1], q._fileSize - 1) || 0;
+    q._range.end = q._range[2] && Math.min(Math.max(q._range[2], q._range.start), q._fileSize - 1) || (q._fileSize - 1);
+    res.setHeader('Content-Range', 'bytes ' + q._range.start + '-' + q._range.end + '/' + q._fileSize);
+    res.setHeader('Content-Length', q._range.end - q._range.start + 1);
+    res.statusCode = 206/*Partial Content*/;
+  }
+  q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + q.filename);
+  res.setHeader('Content-Type', q.filename.type === 'mp4' ? 'video/mp4' : q.filename.type === 'jpg' ? 'image/jpeg' : '');
+  return fs.createReadStream(cfg.outputDir + '/' + q.filename, q._range)
+      .on('error', function (err) {
+        end(res, stringifyError(err));
+      }).pipe(res);
+};
+streamWeb_handlerMap['/touch'] = function (dev, q, urlPath, req, res) {
+  if (!chk('type', q.type, ['d', 'u', 'o', 'm']) || !chk('x', q.x = Number(q.x), 0, 1) || !chk('x', q.y = Number(q.y), 0, 1)) {
+    return end(res, JSON.stringify(chk.err), 'text/json');
+  }
+  if (!dev.capture || !dev.capture.image) {
+    return end(res, JSON.stringify('device is not being live viewed'), 'text/json');
+  }
+  if (dev.touchStatus !== 'OK') {
+    return end(res, JSON.stringify(dev.touchStatus || 'not prepared'), 'text/json');
+  } else {
+    sendTouchEvent(dev, q);
+    return end(res, JSON.stringify('OK'), 'text/json');
+  }
+};
+streamWeb_handlerMap['/sendKey'] = function (dev, q, urlPath, req, res) {
+  if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
+    return end(res, chk.err);
+  }
+  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
+    timeout: cfg.adbSendKeyTimeout * 1000,
+    log: cfg.logAllAdbCommands
+  });
+  return end(res, 'OK');
+};
+streamWeb_handlerMap['/sendText'] = function (dev, q, urlPath, req, res) {
+  if (!chk('text', q.text)) {
+    return end(res, chk.err);
+  }
+  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
+    timeout: cfg.adbSendKeyTimeout * 1000,
+    log: cfg.logAllAdbCommands
+  });
+  return end(res, 'OK');
+};
+streamWeb_handlerMap['/turnOnScreen'] = function (dev, q, urlPath, req, res) {
+  turnOnScreen(dev);
+  return end(res, 'OK');
+};
+streamWeb_handlerMap['/setOrientation'] = function (dev, q, urlPath, req, res) {
+  if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
+    return end(res, chk.err);
+  }
+  setDeviceOrientation(dev, q.orientation);
+  return end(res, 'OK');
+};
 
 function adminWeb_handler(req, res) {
   if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico' || req.url.slice(0, 6) === '/apple') {
@@ -813,134 +823,148 @@ function adminWeb_handler(req, res) {
   }
   setDefaultHttpHeaderAndInitCloseHandler(res);
   cfg.adminKey && !q.adminKey && req.headers.cookie && (q.adminKey = req.headers.cookie.match(re_adminKey_cookie)) && (q.adminKey = querystring.unescape(q.adminKey[1]));
-  if (cfg.adminKey && q.adminKey !== cfg.adminKey) {
-    return end(res, htmlCache['/login.html'], 'text/html');
+  var handler = adminWeb_handlerMap[urlPath];
+  if (handler) {
+    if (cfg.adminKey && q.adminKey !== cfg.adminKey) {
+      return end(res, htmlCache['/login.html'], 'text/html');
+    }
+    return handler(dev, q, urlPath, req, res);
+  } else {
+    return _streamWeb_handler(dev, q, urlPath, req, res);
   }
-  switch (urlPath) {
-    case '/deviceControl': //--------------------------startRecording, stopRecording, stopLiveView', setAccessKey-------
-      if (!dev && (chk.err = '`device`: unknown device')
-          || !chk('action', q.action, ['startRecording', 'stopRecording', 'stopLiveView', 'setAccessKey'])
-          || q.action === 'startRecording' && !chkCaptureParameter(dev, req, q, /*force_ajpg:*/true, /*forRecording*/true)
-          || q.orientation && !chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
-        return end(res, chk.err);
-      }
-      try {
-        q.action === 'setAccessKey' && q.subOutputDir && !fs.existsSync(cfg.outputDir + '/' + q.subOutputDir) && fs.mkdirSync(cfg.outputDir + '/' + q.subOutputDir);
-      } catch (err) {
-        return end(res, stringifyError(err));
-      }
-      q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
-      q._diff_accessKey = q.accessKey !== undefined && q.accessKey !== dev.accessKey && q.accessKey !== dev.accessKey.slice(11);
-      forEachValueIn(dev.consumerMap, function (res) {
-        (q._diff_accessKey || (q.action === 'stopRecording' && res.__tag === REC_TAG) || (q.action === 'startRecording' && res.__tag === REC_TAG) || (q.action === 'stopLiveView' && res.__tag !== REC_TAG))
-        && endCaptureConsumer(res);
-      });
-      !Object.keys(dev.consumerMap).length && endCaptureProcess(dev); //end capture process immediately if no any consumer exists
-      if (q._diff_accessKey) {
-        scheduleUpdateWholeUI();
-        dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
-      }
-      q.orientation && setDeviceOrientation(dev, q.orientation);
-      return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
-    case '/cmd' + cfg.adminUrlSuffix:
-      return !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
-        end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
-      }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
-    case '/': //---------------------------------------show menu of all devices---------------------------------------
-      q.viewUrlBase && (q.viewUrlBase = (parsedUrl = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase)).format());
-      var html = htmlCache['/home.html'].replace(/@appVer\b/g, status.appVer).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
-              .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
-              .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
-          ;
-      ['viewSize', 'viewOrient', 'videoFileFrameRate'].forEach(function (k) {
-        html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
-      });
-      switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
-        html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
-      });
-      cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
-      return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-        return (cfg.showDisconnectedDevices ? devAry : devAry.filter(function (dev) {
-          return dev.host && dev.status !== ERR_DEV_NOT_FOUND;
-        })).sort(function (dev1, dev2) {
-              return dev1.info_htm.localeCompare(dev2.info_htm);
-            }).reduce(function (joinedStr, dev, i) {
-              return joinedStr + replaceComVar(htmlBlock, dev)
-                      .replace(/#devErr\b/g, htmlEncode(!dev.status ? 'no device' : dev.status === 'preparing' ? 'preparing' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus) : dev.status))
-                      .replace(/@devStatusClass\b/g, !dev.status ? 'devFileOnly' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
-                      .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
-            }, ''/*initial joinedStr*/);
-      }), 'text/html');
-    case '/stopServer' + cfg.adminUrlSuffix:  //------------------------------------stop server management---------------------------------
-      end(res, 'OK');
-      adminWeb.close();
-      streamWeb && streamWeb.close();
-      forEachValueIn(procMap, function (proc) {
-        proc.kill('SIGKILL');
-      });
-      return process.exit(0);
-    case '/reloadResource' + cfg.adminUrlSuffix:  //-----------------------------reload resource file to cache-----------------------------
-      reloadResource();
-      return end(res, 'OK');
-    case '/set' + cfg.adminUrlSuffix:
-      if (q.size !== undefined || q.orient !== undefined) {
-        if (!chkCaptureParameter(null, null, q)) {
-          return end(res, chk.err);
-        }
-        cfg.viewSize = q.size;
-        cfg.viewOrient = q.orient;
-      } else if (q.videoFileFrameRate !== undefined) {
-        if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
-          return end(res, chk.err);
-        }
-        cfg.videoFileFrameRate = q.videoFileFrameRate;
-      } else { //-------------------------------------------------Set some internal bool var--------------------------
-        switchList.forEach(function (k) {
-          q[k] !== undefined && (cfg[k] = (q[k] === 'true'));
-        });
-      }
-      scheduleUpdateWholeUI();
-      return end(res, 'OK');
-    case '/status':  //-----------------------------------push live capture status to browser-------------------------
-      res.__previousVer = q.ver;
-      res.__previousAppVer = q.appVer;
-      status.consumerMap[res.__tag || (res.__tag = getTimestamp())] = res;
-      res.on('close', function () { //closed by http peer
-        delete status.consumerMap[res.__tag];
-      });
-      return scheduleUpdateLiveUI();
-    case '/getServerLog' + cfg.adminUrlSuffix:  //------------------------------get server log---------------------------------------------
-      q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
-      if (!(q._fileSize = getFileSizeSync(q._logFilePath))) {
-        return end(res, chk.err);
-      }
-      if (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)) {
-        return end(res, chk.err);
-      }
-      q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
-      dev && (res.__oldWrite = res.write) && (res.write = function (buf) {
-        Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
-          (buf = (s.indexOf(dev.sn) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
-          i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
-        });
-      }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(dev.sn)) === dev.sn && (q.qdevice = '');
-      return fs.createReadStream(q._logFilePath, {
-        start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
-        end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
-      }).on('error', function (err) {
-        end(res, stringifyError(err));
-      }).pipe(res);
-    case '/prepareAllDevices' + cfg.adminUrlSuffix:  //-----------------------prepare device file/touchInfo/apk forcibly ------------------
-      scanAllDevices(/*mode:*/q.mode);
-      return end(res, 'OK');
-    case '/getWebHost':
-      return end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
-    case '/getAdbHost':
-      return end(res, JSON.stringify((dev && dev.host) ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
-    default:
-      return _streamWeb_handler(req, res, q, urlPath, dev, /*fromAdminWeb:*/true);
+}
+adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
+  if (!dev && (chk.err = '`device`: unknown device')
+      || !chk('action', q.action, ['startRecording', 'stopRecording', 'stopLiveView', 'setAccessKey'])
+      || q.action === 'startRecording' && !chkCaptureParameter(dev, req, q, /*force_ajpg:*/true, /*forRecording*/true)
+      || q.orientation && !chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
+    return end(res, chk.err);
   }
-} //end of adminWeb_handler
+  try {
+    q.action === 'setAccessKey' && q.subOutputDir && !fs.existsSync(cfg.outputDir + '/' + q.subOutputDir) && fs.mkdirSync(cfg.outputDir + '/' + q.subOutputDir);
+  } catch (err) {
+    return end(res, stringifyError(err));
+  }
+  q.action === 'setAccessKey' && (dev.subOutputDir = q.subOutputDir || '');
+  q._diff_accessKey = q.accessKey !== undefined && q.accessKey !== dev.accessKey && q.accessKey !== dev.accessKey.slice(11);
+  forEachValueIn(dev.consumerMap, function (res) {
+    (q._diff_accessKey || (q.action === 'stopRecording' && res.__tag === REC_TAG) || (q.action === 'startRecording' && res.__tag === REC_TAG) || (q.action === 'stopLiveView' && res.__tag !== REC_TAG))
+    && endCaptureConsumer(res);
+  });
+  !Object.keys(dev.consumerMap).length && endCaptureProcess(dev); //end capture process immediately if no any consumer exists
+  if (q._diff_accessKey) {
+    scheduleUpdateWholeUI();
+    dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
+  }
+  q.orientation && setDeviceOrientation(dev, q.orientation);
+  return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
+};
+adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  return !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
+    end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
+  }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
+};
+adminWeb_handlerMap['/'] = function (dev, q, urlPath, req, res) {
+  q.viewUrlBase && (q.viewUrlBase = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase).format());
+  var html = htmlCache['/home.html'].replace(/@appVer\b/g, status.appVer).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
+          .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
+          .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
+      ;
+  ['viewSize', 'viewOrient', 'videoFileFrameRate'].forEach(function (k) {
+    html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]);
+  });
+  switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
+    html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
+  });
+  cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
+  return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
+    return (cfg.showDisconnectedDevices ? devAry : devAry.filter(function (dev) {
+      return dev.host && dev.status !== ERR_DEV_NOT_FOUND;
+    })).sort(function (dev1, dev2) {
+          return dev1.info_htm.localeCompare(dev2.info_htm);
+        }).reduce(function (joinedStr, dev, i) {
+          return joinedStr + replaceComVar(htmlBlock, dev)
+                  .replace(/#devErr\b/g, htmlEncode(!dev.status ? 'no device' : dev.status === 'preparing' ? 'preparing' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? '' : dev.touchStatus) : dev.status))
+                  .replace(/@devStatusClass\b/g, !dev.status ? 'devFileOnly' : dev.status === 'preparing' ? 'devPrep' : dev.status === 'OK' ? (dev.touchStatus === 'OK' ? 'devOK' : 'devErr') : 'devErr')
+                  .replace(/#accessKey_disp\b/g, htmlEncode(dev.accessKey)).replace(/@masterMode\b/g, dev.masterMode).replace(/@rowNum\b/g, String(i + 1))
+        }, ''/*initial joinedStr*/);
+  }), 'text/html');
+};
+adminWeb_handlerMap['/stopServer' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  end(res, 'OK');
+  adminWeb.close();
+  streamWeb && streamWeb.close();
+  forEachValueIn(procMap, function (proc) {
+    proc.kill('SIGKILL');
+  });
+  return process.exit(0);
+};
+adminWeb_handlerMap['/reloadResource' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  reloadResource();
+  return end(res, 'OK');
+};
+adminWeb_handlerMap['/set' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  if (q.size !== undefined || q.orient !== undefined) {
+    if (!chkCaptureParameter(null, null, q)) {
+      return end(res, chk.err);
+    }
+    cfg.viewSize = q.size;
+    cfg.viewOrient = q.orient;
+  } else if (q.videoFileFrameRate !== undefined) {
+    if (!chk('videoFileFrameRate', (q.videoFileFrameRate = Number(q.videoFileFrameRate)), 0.1, 30)) {
+      return end(res, chk.err);
+    }
+    cfg.videoFileFrameRate = q.videoFileFrameRate;
+  } else { //-------------------------------------------------Set some internal bool var--------------------------
+    switchList.forEach(function (k) {
+      q[k] !== undefined && (cfg[k] = (q[k] === 'true'));
+    });
+  }
+  scheduleUpdateWholeUI();
+  return end(res, 'OK');
+
+};
+adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
+  res.__previousVer = q.ver;
+  res.__previousAppVer = q.appVer;
+  status.consumerMap[res.__tag || (res.__tag = getTimestamp())] = res;
+  res.on('close', function () { //closed by http peer
+    delete status.consumerMap[res.__tag];
+  });
+  return scheduleUpdateLiveUI();
+};
+adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
+  if (!(q._fileSize = getFileSizeSync(q._logFilePath))) {
+    return end(res, chk.err);
+  }
+  if (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)) {
+    return end(res, chk.err);
+  }
+  q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
+  dev && (res.__oldWrite = res.write) && (res.write = function (buf) {
+    Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
+      (buf = (s.indexOf(dev.sn) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
+      i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
+    });
+  }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(dev.sn)) === dev.sn && (q.qdevice = '');
+  return fs.createReadStream(q._logFilePath, {
+    start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
+    end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
+  }).on('error', function (err) {
+    end(res, stringifyError(err));
+  }).pipe(res);
+};
+adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  scanAllDevices(/*mode:*/q.mode);
+  return end(res, 'OK');
+};
+adminWeb_handlerMap['/getWebHost'] = function (dev, q, urlPath, req, res) {
+  return end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
+};
+adminWeb_handlerMap['/getAdbHost'] = function (dev, q, urlPath, req, res) {
+  return end(res, JSON.stringify((dev && dev.host) ? {host: dev.host.host, port: dev.host.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
+};
 
 function reloadResource() {
   scheduleUpdateWholeUI();
