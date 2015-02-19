@@ -1,4 +1,4 @@
-#if !defined(HFILE_libcutils) && ANDROID_VER>=400
+#if !defined(HFILE_libcutils)
 #define HFILE_libcutils
 
 #include <sys/types.h>

@@ -29,7 +29,7 @@
             &nbsp;<input type="text" name="accessKey" value="#accessKey_disp" style="width: 40px; margin: 0; vertical-align: top" class="masterMode_@masterMode" />
           </label>
         </form>
-        <span>#devErr</span>
+        <span style="background-color: pink">#devErr</span>
         <span style="float: right">
           &nbsp;<span>#devInfo</span>
         </span>
@@ -105,61 +105,66 @@
       </div>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="prepareAllDevices?mode=checkPrepare" target="resultIFrame" title="prepare all device files">
+      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=checkPrepare" target="resultIFrame" title="prepare all device files">
         Prepare
       </a>
       All Devices
-      <a class="button" href="prepareAllDevices?mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
+      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
         forcibly
       </a>
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="reloadResource" target="resultIFrame">
+      <a class="button" href="reloadResource@adminUrlSuffix" target="resultIFrame">
         Reload
       </a>
       Internal Resources
     </div>
     <div>
-      <a class="button @logFpsStatistic" href="set?logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
+      <a class="button @logFpsStatistic" href="set@adminUrlSuffix?logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logFpsStatistic/>Log FPS Statistic
       </a>
     </div>
     <div>
-      <a class="button @logAllAdbCommands" href="set?logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
+      <a class="button @logAllAdbCommands" href="set@adminUrlSuffix?logAllAdbCommands=@logAllAdbCommands_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logAllAdbCommands/>Log All ADB Commands
       </a>
     </div>
     <div>
-      <a class="button @logHttpReqDetail" href="set?logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
+      <a class="button @logHttpReqDetail" href="set@adminUrlSuffix?logHttpReqDetail=@logHttpReqDetail_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logHttpReqDetail/>Log HTTP Request Detail
       </a>
     </div>
     <div>
-      <a class="button @logFfmpegDebugInfo" href="set?logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
+      <a class="button @logFfmpegDebugInfo" href="set@adminUrlSuffix?logFfmpegDebugInfo=@logFfmpegDebugInfo_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logFfmpegDebugInfo/>Log FFMPEG Debug Info
       </a>
     </div>
     <div>
-      <a class="button @logAllHttpReqRes" href="set?logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
+      <a class="button @logAllHttpReqRes" href="set@adminUrlSuffix?logAllHttpReqRes=@logAllHttpReqRes_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logAllHttpReqRes/>Log All Http Req/Res
       </a>
     </div>
     <div>
-      <a class="button @showDisconnectedDevices" href="set?showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
+      <a class="button @showDisconnectedDevices" href="set@adminUrlSuffix?showDisconnectedDevices=@showDisconnectedDevices_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_showDisconnectedDevices/>Show Disconnected Devices
       </a>
     </div>
     <div>
-      <a class="button @fastResize" href="set?fastResize=@fastResize_negVal" target="resultIFrame" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
+      <a class="button @fastResize" href="set@adminUrlSuffix?fastResize=@fastResize_negVal" target="resultIFrame" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
         <input type="checkbox" checkedIf_fastResize/>Fast Resize Image
       </a>
     </div>
     <div>
-      <a class="button @fastCapture" href="set?fastCapture=@fastCapture_negVal" target="resultIFrame" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
+      <a class="button @fastCapture" href="set@adminUrlSuffix?fastCapture=@fastCapture_negVal" target="resultIFrame" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
         <input type="checkbox" checkedIf_fastCapture/>Fast Capture
       </a>
     </div>
-    <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
+    <div>
+      <a class="button @checkDevTimeLimit" href="set@adminUrlSuffix?checkDevTimeLimit=@checkDevTimeLimit_negVal" target="resultIFrame" title="">
+        <input type="checkbox" checkedIf_checkDevTimeLimit/>Check Device TimeLimit
+      </a>
+    </div>
+    <form action="set@adminUrlSuffix" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
       <button type="submit">Set</button>
       <label title="Default view size and orientation. Example: 0.5, 400x600, 400x, x600, 600x400 means landscape. Note: this size maybe adjusted to 8/n of original when in fastResize mode">
         Live View Size:
@@ -170,7 +175,7 @@
         <input type="button" class="orient_sample @viewOrient"/>
       </label>
     </form>
-    <form action="set" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
+    <form action="set@adminUrlSuffix" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
       <button type="submit">Set</button>
       <label>Record Rate:
         <input type="text" name="videoFileFrameRate" value="@videoFileFrameRate" style="width: 30px" />

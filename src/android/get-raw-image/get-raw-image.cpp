@@ -70,44 +70,59 @@ static bool needLog = true;
 #endif
 static char* blackscreen = NULL;
 
-#if MAKE_TRIAL==1
 static void chkDev() {
-/*
-    #if (ANDROID_VER>=400)
-        char key1[128] =  {0};
-        char key2[128] =  {0};
-        char m[256] = {0};
-        char v[256] = {0};
-        char m1[32] = {0};
-        char m2[32] = {0};
-        char v1[32] = {0};
-        char v2[32] = {0};
-        int i=0;
-        key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = '.'; key1[i++] = 'p'; key1[i++] = 'r'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'u'; key1[i++] = 'c'; key1[i++] = 't'; key1[i++] = '.'; key1[i++] = 'm'; key1[i++] = 'o'; key1[i++] = 'd'; key1[i++] = 'e'; key1[i++] = 'l';
-        i=0;
-        key2[i++] = 'r'; key2[i++] = 'o'; key2[i++] = '.'; key2[i++] = 'b'; key2[i++] = 'u'; key2[i++] = 'i'; key2[i++] = 'l'; key2[i++] = 'd'; key2[i++] = '.'; key2[i++] = 'v'; key2[i++] = 'e'; key2[i++] = 'r'; key2[i++] = 's'; key2[i++] = 'i'; key2[i++] = 'o'; key2[i++] = 'n'; key2[i++] = '.'; key2[i++] = 'r'; key2[i++] = 'e'; key2[i++] = 'l'; key2[i++] = 'e'; key2[i++] = 'a'; key2[i++] = 's'; key2[i++] = 'e';
-        i=0;
-        m1[i++] = 'V'; m1[i++] = 'a'; m1[i++] = 'n'; m1[i++] = 't'; m1[i++] = 'i'; m1[i++] = 'u'; m1[i++] = 'm';
-        i=0;
-        v1[i++] = '4'; v1[i++] = '.'; v1[i++] = '4'; v1[i++] = '.'; v1[i++] = '2';
-        property_get(key1, m, "");        LOG("[%s]", m);
-        property_get(key2, v, "");        LOG("[%s]", v);
-        if(0==strcmp(m, m1) && 0==strcmp(v, v1)) return;
-        ABORT("t m");
-    #endif
-*/
+    char k[128] = {0};
+    char sn[256] = {0};
+    char hb[4+1] = {'0','0','0','0', 0};
+    char now[6+1] = {0};
+    const char* es;
+    char* ds;
+    char* err;
+    int i=0, esLen, snLen, dsLen;
+    unsigned int ec, sc, dc;
+    struct timespec ct;
+    struct tm * st;
+
+    es=getenv("ASC_");
+    if (!es || !es[0]) ABORT("!nes");
+    esLen = strlen(es);
+    if (esLen%(2*6) != 0) ABORT("!esl");
+    dsLen = esLen/2;
+
+    k[i++] = 'r'; k[i++] = 'o'; k[i++] = '.'; k[i++] = 's'; k[i++] = 'e'; k[i++] = 'r'; k[i++] = 'i'; k[i++] = 'a'; k[i++] = 'l'; k[i++] = 'n'; k[i++] = 'o';
+    property_get(k, sn, " ");
+    snLen = strlen(sn);
+
+    if ( dsLen != (snLen+6-1)/6*6 ) ABORT("!esms %d %d %d %d", sn, snLen, (snLen+6-1)/6*6, dsLen);
+
+    ds = (char*)calloc(dsLen+1, 1);
+    for(i=0; i < dsLen; i++) {
+        //hb[0] = hb[1] = '0';
+        hb[2] = es[i*2];
+        hb[3] = es[i*2+1];
+        ec = (unsigned int)strtoul(hb, &err, 16);
+        if (err&&err[0]) ABORT("!ec", err);
+        sc = (unsigned int)(unsigned char)sn[i%snLen];
+        dc = ec ^ sc;
+        if (dc < '0' || dc > '9') ABORT("!dcd");
+        ds[i] = (char)dc;
+    }
+    for (i = 6; i < dsLen; i += 6)
+        if ( 0 != memcmp(ds, &ds[i], 6)) ABORT("!dsfd");
+
+    clock_gettime(CLOCK_REALTIME, &ct);
+    st = localtime(&ct.tv_sec);
+    sprintf(now, "%02d%02d%02d", (st->tm_year+1900-2000), st->tm_mon+1, st->tm_mday);
+
+    if (memcmp(now, ds, 6) > 0) ABORT("!to");
+    free(ds);
 }
-#endif
 
 extern "C" void asc_capture(ASC* asc) {
     int err, width, height, internal_width, bytesPerPixel, rawImageSize;
 
     if (isFirstTime) {
-        #if MAKE_TRIAL==1
-            if (time(NULL) >= 1425538778) ABORT("!"); //Thu Mar 05 2015 15:59:38 GMT+0900 (JST)
-            chkDev();
-            asc->width = asc->height = 0;
-        #endif
+        chkDev();
         #if (ANDROID_VER>=400)
             #if (ANDROID_VER>=420)
                 ProcessState::self()->startThreadPool();

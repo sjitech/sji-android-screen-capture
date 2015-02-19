@@ -16,7 +16,7 @@ CC="$CC -fno-rtti -fno-exceptions"
 mkdir bin 2>/dev/null
 rm -f *.so || exit 1
 
-for f in libgui libbinder libutils; do
+for f in libgui libbinder libutils libcutils; do
     echo ---------------make fake $f.so $v --------------------
     $CC -fPIC -shared -x c++ /dev/null -o $f.so
 done
