@@ -1,244 +1,272 @@
 'use strict';
-var tcp = chrome.sockets.tcp, tcpServer = chrome.sockets.tcpServer;
+var debug = false;
+if (false === true) var chrome = console.log({runtime: {}, onConnectExternal: {}, onDisconnect: {}, onMessage: {}, resultCode: 0, tcp: {}, tcpServer: {}, getInfo: Function, onAccept: {}, onAcceptError: {}, clientSocketId: 0, onReceive: {}, onReceiveError: {}, getUint32: Function, setUint32: Function, setUint8: Function, setPaused: Function, listen: Function, sockets: {}, addListener: Function, localPort: 0, removeListener: Function, disconnect: Function, connect: Function, bytesSent: 0, __end: 0});
 var LITTLE_ENDIAN = true;
-var xhr = new XMLHttpRequest();
-/*
- xhr.open("GET", "http://ip.jsontest.com/", true);
- xhr.onreadystatechange = function() {
- if (xhr.readyState == 4) {
- console.log('xhr res: ' + xhr.responseText);
- }
- }
- xhr.send();
- */
-var adbDevMap = {};
+var devMap = {};
 
-chrome.runtime.onConnectExternal.addListener(function (port) {
-  console.log("onConnectExternal");
+chrome.runtime.onConnectExternal.addListener(function (chromePort) {
+  console.log("external connected");
+  chromePort.postMessage('hello');
 
-  function sendResponse(dev) {
-    if (!port)
-      return;
-    console.log('postMessage to External. msg: ' + JSON.stringify(dev));
-    port.postMessage(dev);
+  function postMessageToExternal(dev) {
+    if (!chromePort) return;
+    var msg = typeof(dev) === 'string' ? dev/*err*/ : {port: dev.port, connected: dev.connected};
+    console.log('postMessage to external. msg: ' + JSON.stringify(msg));
+    chromePort.postMessage(msg);
+    chromePort.disconnect();
+    chromePort = null;
   }
 
-  port.onDisconnect.addListener(function () {
-    port = null;
+  chromePort.onDisconnect.addListener(function () {
+    console.log('external disconnected');
+    chromePort = null;
   });
 
-  port.onMessage.addListener(function (request) {
+  chromePort.onMessage.addListener(function (request) {
     console.log("external msg: " + JSON.stringify(request));
-    var adbDev = adbDevMap[request.websocket_url];
-    if (request.cmd === 'getAdbDevice') {
-      sendResponse(adbDev ? adbDev : 'device not found');
-      return;
-    }
-    //other command is treated as "createAdbDevice"
+    dev_create(request/*url*/);
+  });
 
-    if (adbDev) {
-      sendResponse(adbDev);
-      return;
+  function dev_close(dev, err) {
+    if (err) {
+      postMessageToExternal(err);
     }
+    if (devMap[dev.url]) {
+      console.log('dev_close');
+      delete devMap[dev.url];
+      dev_disconnect(dev);
+      dev.socketId && chrome.sockets.tcpServer.close(dev.socketId);
+      dev.onAccept && chrome.sockets.tcpServer.onAccept.removeListener(dev.onAccept);
+      dev.onAcceptError && chrome.sockets.tcpServer.onAcceptError.removeListener(dev.onAcceptError);
+      dev.ws && dev.ws.close();
+    }
+  }
 
-    tcpServer.create({}, function (createInfo) {
-      if (createInfo.socketId <= 0) {
-        console.error('failed to create tcp server. ' + getLastError());
-        sendResponse('failed to create tcp server');
-        return;
+  function dev_create(url) {
+    console.log('createWebSocket');
+    var dev = devMap[url];
+    if (dev) {
+      return !dev.created ? postMessageToExternal('creating') : dev.connected ? postMessageToExternal(dev) : letAdbHostConnectToDev(dev);
+    }
+    dev = devMap[url] = {url: url};
+
+    return createWebSocket(url, function (err, ws) {
+      if (err) {
+        return dev_close(dev, err);
       }
-      console.log('tcpServer created: ' + JSON.stringify(createInfo));
-
-      tcpServer.listen(createInfo.socketId, '127.0.0.1', 0 /*random port*/, 0 /*backlog:auto*/, function (resultCode) {
-        if (resultCode) {
-          console.error('failed to listen socket. ' + getLastError() + '(' + resultCode + ')');
-          tcpServer.close(createInfo.socketId);
-          sendResponse('failed to listen socket');
-          return;
-        }
-        console.log('listen ok');
-
-        tcpServer.getInfo(createInfo.socketId, function (socketInfo) {
-          console.log('adbDev.port: ' + socketInfo.localPort);
-          adbDev = adbDevMap[request.websocket_url] = {port: socketInfo.localPort, connected: false};
-          registerDevToAdbHost(adbDev, sendResponse);
-
-          var onAccept, onAcceptError;
-          tcpServer.onAccept.addListener(onAccept = function (acceptInfo) {
-            if (acceptInfo.socketId !== createInfo.socketId)
-              return;
-            console.log('[adbDevSock ]incoming connection: ' + acceptInfo.clientSocketId);
-
-            process_connection(acceptInfo.clientSocketId, request.websocket_url);
-          });
-
-          tcpServer.onAcceptError.addListener(onAcceptError = function (acceptInfo) {
-            if (acceptInfo.socketId !== createInfo.socketId)
-              return;
-            console.error('error while listening socket. ' + JSON.stringify(acceptInfo));
-            tcpServer.onAccept.removeListener(onAccept);
-            tcpServer.onAcceptError.removeListener(onAcceptError);
-            tcpServer.close(createInfo.socketId);
-          });
+      dev.ws = ws;
+      ws.addEventListener('close', function () {
+        dev_close(dev, 'WebSocket is closed, so dev is closed');
+      });
+      ws.addEventListener('message', function (e) {
+        console.log('ws got message: ' + e.data.byteLength + ' bytes');
+        dev.connected && chrome.sockets.tcp.send(dev.connectionId, e.data, function (sendInfo) {
+          if (sendInfo.resultCode)
+            console.error('failed to forward WebSocket data to adbHost. ' + getChromeLastError() + '(' + sendInfo.resultCode + ')');
+          else
+            console.log('forward WebSocket data to adbHost OK. ' + sendInfo.bytesSent + ' bytes sent');
         });
       });
-    }); //end of tcpServer.create
-  });
-});
 
-function registerDevToAdbHost(adbDev, sendResponse) {
-  !registerDevToAdbHost.doing && (registerDevToAdbHost.doing = true) &&
-  tcp.create({}, function (createInfo) {
-    tcp.connect(createInfo.socketId, '127.0.0.1', 5037, function (resultCode) {
-      if (resultCode) {
-        console.error('failed to connect to ADB host. ' + chrome.runtime.lastError.message);
-        finish(adbDev);
-        return;
-      }
-      var cmd = "host:connect:localhost:" + adbDev.port;
-      //             var cmd = "host:connect:localhost:55551";
-      cmd = ('000' + cmd.length.toString(16)).slice(-4) + cmd;
-      var buf = new ArrayBuffer(cmd.length);
-      var dv = new DataView(buf);
-      var i = 0, cnt = cmd.length;
-      for (; i < cnt; i++) {
-        dv.setUint8(i, cmd.charCodeAt(i));
-      }
-      tcp.send(createInfo.socketId, buf, function (sendInfo) {
-        if (sendInfo.resultCode) {
-          console.error('failed to send to ADB host. ' + getLastError() + '(' + sendInfo.resultCode + ')');
-          finish(adbDev);
+      console.log('tcpServer.create');
+      return chrome.sockets.tcpServer.create({}, function (createInfo) {
+        if (createInfo.socketId <= 0) {
+          return dev_close(dev, 'tcpServer.create failed. ' + getChromeLastError());
         }
-      });
-      var total_result = '';
-      var onReceive, onReceiveError;
-      tcp.onReceive.addListener(onReceive = function (recvInfo) {
-        if (recvInfo.socketId !== createInfo.socketId)
-          return;
-        var result = bufToStr(recvInfo.data);
-        console.log('[from socket_adbhost] recv: ' + result);
-        total_result += result;
-      });
-      tcp.onReceiveError.addListener(onReceiveError = function (recvInfo) {
-        if (recvInfo.socketId !== createInfo.socketId)
-          return;
-        // seems -100 means closed   (-ENETDOWN), -15 means TCP_FIN (closed by peer)
-        console.log('[from socket_adbhost] recv error: ' + getLastError() + JSON.stringify(recvInfo));
-        if (total_result.indexOf('connected')) {
-          adbDev.connected = true;
-        }
+        console.log('tcpServer created: ' + JSON.stringify(createInfo));
+        dev.socketId = createInfo.socketId;
 
-        finish(adbDev);
+        console.log('tcpServer.listen');
+        return chrome.sockets.tcpServer.listen(createInfo.socketId, '127.0.0.1', 0 /*random port*/, 0 /*backlog:auto*/, function (resultCode) {
+          if (resultCode) {
+            return dev_close(dev, 'failed to listen socket. ' + getChromeLastError() + '(' + resultCode + ')');
+          }
+          console.log('tcpServer.listen OK');
+          console.log('tcpServer.getInfo');
+          return chrome.sockets.tcpServer.getInfo(createInfo.socketId, function (socketInfo) {
+            console.log('tcpServer.getInfo OK. port: ' + socketInfo.localPort);
+            dev.port = socketInfo.localPort;
 
-        tcp.onReceive.removeListener(onReceive);
-        tcp.onReceiveError.removeListener(onReceiveError);
-        tcp.disconnect(recvInfo.socketId);
-        tcp.close(recvInfo.socketId);
-      });
-    });
-  });
+            dev.onAccept = function (acceptInfo) {
+              if (acceptInfo.socketId !== createInfo.socketId) return;
+              dev_on_connect(dev, acceptInfo.clientSocketId);
+            };
+            dev.onAcceptError = function (acceptInfo) {
+              if (acceptInfo.socketId !== createInfo.socketId) return;
+              dev_close(dev, 'error while listening socket. ' + JSON.stringify(acceptInfo));
+            };
+            chrome.sockets.tcpServer.onAccept.addListener(dev.onAccept);
+            chrome.sockets.tcpServer.onAcceptError.addListener(dev.onAcceptError);
 
-  function finish() {
-    registerDevToAdbHost.doing = false;
-    sendResponse(adbDev);
-    if (adbDev.port) {
-      if (adbDev.connected) {
-        clearTimeout(registerDevToAdbHost.timer);
-        registerDevToAdbHost.timer = null;
-      } else if (!registerDevToAdbHost.timer) {
-        registerDevToAdbHost.timer = setInterval(function () {
-          registerDevToAdbHost(adbDev, sendResponse);
-        }, 5 * 1000);
-      }
+            dev.created = true;
+
+            letAdbHostConnectToDev(dev);
+          }); //end of chrome.sockets.tcpServer.getInfo
+        }); //end of chrome.sockets.tcpServer.listen
+      }); //end of chrome.sockets.tcpServer.create
+    }); //end of createWebSocket
+  } //end of dev_create
+
+  function dev_disconnect(dev) {
+    var connectionId = dev.connectionId;
+    if (connectionId) {
+      console.log(dev.connectionLogHead + 'disconnect');
+      delete dev.connectionId;
+      chrome.sockets.tcp.onReceive.removeListener(dev.onReceive);
+      delete dev.onReceive;
+      chrome.sockets.tcp.onReceiveError.removeListener(dev.onReceiveError);
+      delete dev.onReceiveError;
+      chrome.sockets.tcp.disconnect(connectionId);
+      chrome.sockets.tcp.close(connectionId);
+      dev.connected = false;
+      postMessageToExternal(dev);
     }
   }
-}
 
-function process_connection(socketId, websocket_url) {
-  //var ws = new WebSocket(websocket_url);
-
-  var logHead = '[adbDevSock ' + socketId + ']';
-  var onReceive, onReceiveError;
-  tcp.onReceive.addListener(onReceive = function (recvInfo) {
-    if (recvInfo.socketId !== socketId)
-      return;
-    // recvInfo.data is an arrayBuffer.
-    console.log(logHead + 'recv: ' + bufToStr(recvInfo.data.slice(0, 4)));
-    if (recvInfo.data.byteLength <= 24) {
-      console.log(logHead + 'bad input');
-      tcp.close(recvInfo.socketId);
+  function dev_on_connect(dev, connectionId) {
+    if (dev.connectionId) {
+      console.log('[adbConnection ' + connectionId + ']' + 'rejected');
+      chrome.sockets.tcp.disconnect(connectionId);
+      chrome.sockets.tcp.close(connectionId);
       return;
     }
-    var dv = new DataView(recvInfo.data);
-    var cmd = dv.getUint32(0);
+    dev.connectionId = connectionId;
+    dev.connectionLogHead = '[adbConnection ' + connectionId + ']';
+    console.log(dev.connectionLogHead + 'accepted');
+    dev.onReceive = function (recvInfo) {
+      if (recvInfo.socketId !== connectionId) return;
+      dev_on_cmd(dev, recvInfo.data);
+    };
+    dev.onReceiveError = function (recvInfo) {
+      if (recvInfo.socketId !== connectionId) return;
+      console.log(dev.connectionLogHead + 'recv error: ' + getChromeLastError() + '(' + recvInfo.resultCode + ')');
+      dev_disconnect(dev);
+    };
 
-    if (cmd === 0x434e584e) {
-      on_adb_connect(socketId);
+    chrome.sockets.tcp.onReceive.addListener(dev.onReceive);
+    chrome.sockets.tcp.onReceiveError.addListener(dev.onReceiveError);
+    chrome.sockets.tcp.setPaused(connectionId, false);
+  }
+
+  function dev_on_cmd(dev, data) {
+    var cmd = bufToStr(data.slice(0, 4));
+    console.log(dev.connectionLogHead + 'cmd: ' + cmd);
+    if (cmd === 'CNXN') {
+      dev_on_cmd_CNXN(dev)
     } else {
-      // xhr.open("POST", websocket_url, true);
-      // xhr.onreadystatechange = function() {
-      //   if (xhr.readyState == 4) {
-      //     console.log('xhr res: ' + xhr.responseText);
-      //   }
-      // }
-      // xhr.send(recvInfo.data);
+      console.log(dev.connectionLogHead + 'forward data to WebSocket');
+      dev.ws.send(data);
     }
-    // } else if (cmd === 0x4e45504f) {
-    //   on_adb_open_stream(socketId);
-    // } else if (cmd === 0x45545257) {
-    //   on_adb_got_stream(socketId);
-    // } else if (cmd === 0x45534c43) {
-    //   on_adb_close_stream(socketId);
-    // } else if (cmd === 0x434e5953) {
-    //   on_adb_sync(socketId);
-    // }
-  });
-
-  tcp.onReceiveError.addListener(onReceiveError = function (recvInfo) {
-    if (recvInfo.socketId !== socketId)
-      return;
-    // seems -100 means closed   (-ENETDOWN)
-    console.log(logHead + 'recv error: ' + getLastError() + '(' + recvInfo.resultCode + ')');
-
-    tcp.onReceive.removeListener(onReceive);
-    tcp.onReceiveError.removeListener(onReceiveError);
-    tcp.disconnect(recvInfo.socketId);
-    tcp.close(recvInfo.socketId);
-  });
-
-  tcp.setPaused(socketId, false);
-}
-
-function on_adb_connect(socketId) {
-  var logHead = '[adbDevSock ' + socketId + ']';
-  var t = 'device::ro.product.name=sumatium;ro.product.model=sumatium;ro.product.device=sumatium;';
-  var buf = new ArrayBuffer(24 + t.length + 1);
-  var dv = new DataView(buf);
-  dv.setUint32(0, 0x434e584e); //command
-  dv.setUint32(4, 0x01000000, LITTLE_ENDIAN); //arg0
-  dv.setUint32(8, 0x00001000, LITTLE_ENDIAN); //arg1
-  dv.setUint32(12, t.length + 1, LITTLE_ENDIAN); //data_length
-  dv.setUint32(20, 0xbcb1a7b1); //command ^ 0xffffffff
-  var cnt = t.length, i = 0, j = 24, sum = 0;
-  for (; i < cnt; i++, j++) {
-    var c = t.charCodeAt(i);
-    dv.setUint8(j, c);
-    sum += c;
   }
-  dv.setUint32(16, sum, LITTLE_ENDIAN); //data_sum
 
-  tcp.send(socketId, buf, function (sendInfo) {
-    if (sendInfo.resultCode)
-      console.error(logHead + 'failed to reply CNXN. ' + getLastError() + '(' + sendInfo.resultCode + ')');
-    else
-      console.log(logHead + 'reply CNXN ok');
-  });
-}
+  function dev_on_cmd_CNXN(dev) {
+    console.log(dev.connectionLogHead + 'CNXN');
+    var t = 'device::ro.product.name=sumatium;ro.product.model=sumatium;ro.product.device=sumatium;';
+    var buf = new ArrayBuffer(24 + t.length + 1);
+    var dv = new DataView(buf);
+    dv.setUint32(0, 0x434e584e); //command
+    dv.setUint32(4, 0x01000000, LITTLE_ENDIAN); //arg0
+    dv.setUint32(8, 0x00001000, LITTLE_ENDIAN); //arg1
+    dv.setUint32(12, t.length + 1, LITTLE_ENDIAN); //data_length
+    dv.setUint32(20, 0xbcb1a7b1); //command ^ 0xffffffff
+    var cnt = t.length, i = 0, j = 24, sum = 0;
+    for (; i < cnt; i++, j++) {
+      var c = t.charCodeAt(i);
+      dv.setUint8(j, c);
+      sum += c;
+    }
+    dv.setUint32(16, sum, LITTLE_ENDIAN); //data_sum
+
+    console.log(dev.connectionLogHead + 'replay CNXN');
+    chrome.sockets.tcp.send(dev.connectionId, buf, function (sendInfo) {
+      if (sendInfo.resultCode) {
+        console.error(dev.connectionLogHead + 'failed to reply CNXN. ' + getChromeLastError() + '(' + sendInfo.resultCode + ')');
+      } else {
+        console.log(dev.connectionLogHead + 'reply CNXN ok. ' + sendInfo.bytesSent + ' bytes sent');
+        dev.connected = true;
+      }
+      postMessageToExternal(dev);
+    });
+  }
+
+  function letAdbHostConnectToDev(dev) {
+    console.log('letAdbHostConnectToDev');
+    console.log('tcp.create');
+    chrome.sockets.tcp.create({}, function (createInfo) {
+      console.log('tcp.connect to adbHost');
+      chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 5037, function (resultCode) {
+        if (resultCode) {
+          console.error('failed to connect to ADB host. ' + getChromeLastError());
+          chrome.sockets.tcp.close(createInfo.socketId);
+          return postMessageToExternal(dev);
+        }
+        console.log('tcp.connect OK');
+        var cmd = "host:connect:localhost:" + dev.port;
+        cmd = ('000' + cmd.length.toString(16)).slice(-4) + cmd;
+        var buf = new ArrayBuffer(cmd.length);
+        var dv = new DataView(buf);
+        var cnt = cmd.length, i = 0;
+        for (; i < cnt; i++) {
+          dv.setUint8(i, cmd.charCodeAt(i));
+        }
+        console.log('send to adbHost');
+        return chrome.sockets.tcp.send(createInfo.socketId, buf, function (sendInfo) {
+          if (sendInfo.resultCode) {
+            console.error('failed to send to ADB host cmd sock. ' + getChromeLastError() + '(' + sendInfo.resultCode + ')');
+            postMessageToExternal(dev);
+          } else {
+            console.log('send ok. ' + sendInfo.bytesSent + ' bytes sent');
+            setTimeout(function () {
+              !dev.connected && postMessageToExternal(dev);
+            }, 1000);
+          }
+          console.log('tcp.close');
+          //chrome.sockets.tcp.disconnect(createInfo.socketId);
+          chrome.sockets.tcp.close(createInfo.socketId);
+        });
+      }); //end of chrome.sockets.tcp.connect
+    }); //end of chrome.sockets.tcp.create
+  } //end of letAdbHostConnectToDev
+
+}); //end of onConnectExternal
+
 
 function bufToStr(buf) {
   return String.fromCharCode.apply(null, new Uint8Array(buf));
 }
 
-function getLastError() {
+function getChromeLastError() {
   return chrome.runtime.lastError && chrome.runtime.lastError.message || '';
+}
+
+function createWebSocket(url, on_open) {
+  function call_on_open_once(err, ws) {
+    if (on_open) {
+      on_open(err, ws);
+      on_open = null;
+    }
+  }
+
+  var ws = new WebSocket(url);
+  delete ws.URL; //because chrome keep warning on it
+  ws.binaryType = 'arraybuffer';
+  ws.addEventListener('open', function () {
+    ws.isOpened = true;
+    console.log('WebSocket is opened. url: ' + url);
+    call_on_open_once(null, ws);
+  });
+  ws.addEventListener('close', function () {
+    var err = 'WebSocket is closed';
+    console.log(err + '. url: ' + url);
+    ws.isOpened = false;
+    call_on_open_once(err);
+  });
+  debug && ws.addEventListener('message', function (e) {
+    console.log('WebSocket message come in. url: ' + url + ' data.length: ' + e.data.length);
+  });
+  ws.addEventListener('error', function (err) {
+    err = 'WebSocket error: ' + err;
+    console.err(err + '. url: ' + url);
+    call_on_open_once(err);
+  });
 }
