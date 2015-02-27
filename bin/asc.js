@@ -970,7 +970,8 @@ function enableWebSocket() {
   cfg.logAllSockets = true;
   var wsServer = new ws.server({httpServer: streamWeb ? [adminWeb, streamWeb] : adminWeb});
   wsServer.on('request', function (wsReq) {
-    var req = wsReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
+    var req = wsReq.httpRequest, channelMap = {/*id:*/}, nextChannelId = 0, wsBuf;
+    var tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
     log(tag + ' ' + req.url + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
     if (urlPath !== '/adbBridge' && (chk.err = 'invalid request') || !dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied') || dev.status !== 'OK' && (chk.err = 'error: device not ready')) {
@@ -980,100 +981,131 @@ function enableWebSocket() {
     log(tag + '[AdbBridge ' + dev.id + ']' + ' accept');
     var wsConnection = wsReq.accept(null, wsReq.origin);
     wsConnection.binaryType = "arraybuffer";
-
-    var adbHostConnection, nextChannelId = 0;
-
+    wsConnection.__tag = '[AdbBridge ' + dev.id + ']';
     wsConnection.on('close', function (reasonCode, description) {
-      log('[AdbBridge ' + dev.id + ']' + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
-      adbHost_disconnect();
+      log(wsConnection.__tag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
+      forEachValueIn(channelMap, adbHost_disconnect);
     });
 
     return wsConnection.on('message', function (msg) {
-      var cmd = msg.binaryData.slice(0, 4).toString();
-      cfg.logAllSockets && log('[AdbBridge ' + dev.id + ']' + ' cmd: ', cmd);
+      wsBuf = wsBuf ? Buffer.concat([wsBuf, msg.binaryData]) : msg.binaryData;
+      while (wsBuf.length >= 24) {
+        var cmd = wsBuf.slice(0, 4).toString();
+        var hostId = wsBuf.readUInt32LE(4);
+        var channelId = wsBuf.readUInt32LE(8);
+        var payloadLen = wsBuf.readInt32LE(12);
+        if (wsBuf.length < 24 + payloadLen) {
+          cfg.logAllSockets && log(wsConnection.__tag + ' recv ' + cmd + ' (' + channelId + '<-' + hostId + '  payloadLength:' + payloadLen + ') need more ' + (24 + payloadLen - wsBuf.length) + ' bytes');
+          break;
+        }
+        var payloadBuf = wsBuf.slice(24, 24 + payloadLen);
+        wsBuf = wsBuf.slice(24 + payloadLen);
+        cfg.logAllSockets && log(wsConnection.__tag + ' recv ' + cmd + ' (' + channelId + '<-' + hostId + '  payloadLength:' + payloadLen + ')');
+        var adbHostCon = channelMap[channelId];
 
-      var payloadLen = msg.binaryData.readInt32LE(12,/*noAssert:*/true);
-      var payloadData = msg.binaryData.slice(24, 24+payloadLen);
+        if (cmd === 'OPEN') {
+          adbHostCon = adbHost_connect();
+          channelId = adbHostCon.__channelId;
 
-      if (cmd === 'OPEN') {
-        var hostId = msg.binaryData.readUInt32LE(4);
-        var adbHostCmd = payloadData[payloadLen-1] ? payloadData : payloadData.slice(0, payloadLen-1);
-        adbHostCmd = Buffer.concat([new Buffer('host-serial:'+dev.conId+':'), adbHostCmd]);
-        adbHost_connect();
-        adbHostConnection.send(('0000'+adbHostCmd.length.toString(16)).slice(-4/*last 4 char*/));
-        adbHostConnection.send(adbHostCmd);
+          adbHost_send(adbHostCon, new Buffer('host:transport:' + dev.conId));
 
-        var channelId  = ++nextChannelId, channelStarted, channelFinished, adbHostResponse;
-        adbHostConnection.on('data', function(buf){
-          if (!channelStarted) {
+          var ok = 0, finished, adbHostResponse;
+          adbHostCon.on('data', function (buf) {
             adbHostResponse = adbHostResponse ? Buffer.concat([adbHostResponse, buf]) : buf;
-            if (adbHostResponse.length >= 4) {
-              channelStarted = true;
-              if (adbHostResponse.slice(0, 4).toString() === 'OKAY') {
-                ws_write('OKAY', /*senderId:*/channelId, /*receiverId:*/hostId);
-                ws_write('WRTE', /*senderId:*/channelId, /*receiverId:*/hostId, adbHostResponse.slice(4));
+            while (adbHostResponse.length) {
+              if (ok < 2) {
+                if (adbHostResponse.length < 4) {
+                  break;
+                }
+                if (adbHostResponse.slice(0, 4).toString() === 'OKAY') {
+                  adbHostResponse = adbHostResponse.slice(4);
+                  ok++;
+                  ok === 1 && adbHost_send(adbHostCon, payloadBuf[payloadLen - 1] ? payloadBuf : payloadBuf.slice(0, payloadLen - 1));
+                  ok === 2 && ws_write('OKAY', /*senderId:*/channelId, /*receiverId:*/hostId);
+                } else {
+                  (finished = true) && ws_write('CLSE', /*senderId:*/0, /*receiverId:*/hostId);
+                  adbHostResponse = EMPTY_BUF;
+                  adbHost_disconnect(adbHostCon);
+                }
               } else {
-                ws_write('FAIL', /*senderId:*/0, /*receiverId:*/hostId);
-                channelFinished = true;
+                ws_write('WRTE', /*senderId:*/channelId, /*receiverId:*/hostId, adbHostResponse);
+                adbHostResponse = EMPTY_BUF;
               }
-              adbHostResponse = null;
             }
-          } else {
-            ws_write('WRTE', /*senderId:*/channelId, /*receiverId:*/hostId, buf);
-          }
-        });
+          });
 
-        adbHostConnection.once('error', function(err) {
-          !channelFinished && (channelFinished=true) && ws_write('FAIL', /*senderId:*/0, /*receiverId:*/hostId);
-        });
-        adbHostConnection.once('close', function(){
-          channelStarted ? ws_write('CLSE', /*senderId:*/0, /*receiverId:*/hostId) :
-              channelFinished ?  ws_write('FAIL', /*senderId:*/0, /*receiverId:*/hostId) : '';
-        });
+          adbHostCon.once('error', function () {
+            !finished && (finished = true) && ws_write('CLSE', /*senderId:*/0, /*receiverId:*/hostId);
+          });
+          adbHostCon.once('close', function () {
+            !finished && (finished = true) && ws_write('CLSE', /*senderId:*/0, /*receiverId:*/hostId);
+          });
+        } //end of OPEN
+        else if (cmd === 'WRTE') {
+          adbHost_send(adbHostCon, payloadBuf);
+        }
+        else if (cmd === 'CLSE') {
+          adbHost_disconnect(adbHostCon);
+        }
+        else if (cmd === 'OKAY') {
+        }
       }
     });
 
-    function ws_write(cmd, channelId, hostId, payloadBuf) {
-      cfg.logAllSockets && log('[AdbBridge ' + dev.id + ']send response. cmd: '+cmd);
-      var buf = new Buffer(24+ (payloadBuf?payloadBuf.length:0));
-      buf.writeUInt8(0,cmd.charCodeAt(0));
-      buf.writeUInt8(1,cmd.charCodeAt(1));
-      buf.writeUInt8(2,cmd.charCodeAt(2));
-      buf.writeUInt8(3,cmd.charCodeAt(3));
-      buf.writeUInt32LE(4,channelId);
-      buf.writeUInt32LE(8,hostId);
-      buf.writeUInt32LE(12, (payloadBuf?payloadBuf.length:0));
-      buf.writeUInt32LE(20, buf.readUInt32LE(0)^0xffffffff);
+    function ws_write(cmd, senderId, receiverId, payloadBuf) {
+      cfg.logAllSockets && log(wsConnection.__tag + ' send ' + cmd + ' (' + senderId + '->' + receiverId + '  payloadLength:' + (payloadBuf ? payloadBuf.length : 0) + ')');
+      var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
+      buf.writeUInt8(cmd.charCodeAt(0), 0);
+      buf.writeUInt8(cmd.charCodeAt(1), 1);
+      buf.writeUInt8(cmd.charCodeAt(2), 2);
+      buf.writeUInt8(cmd.charCodeAt(3), 3);
+      buf.writeUInt32LE(senderId, 4);
+      buf.writeUInt32LE(receiverId, 8);
+      buf.writeUInt32LE((payloadBuf ? payloadBuf.length : 0), 12);
+      buf.writeUInt32LE(buf.readUInt32LE(0) ^ 0xffffffff, 20, /*noAssert:*/true);
       var sum = 0;
-      for(var cnt = (payloadBuf?payloadBuf.length-1:0); i>=0; i--) {
+      for (var cnt = (payloadBuf ? payloadBuf.length : 0) - 1; cnt >= 0; cnt--) {
         sum += payloadBuf[cnt];
       }
-      buf.writeUInt32LE(16, sum);
+      buf.writeUInt32LE(sum, 16);
       payloadBuf && payloadBuf.copy(buf, 24);
       wsConnection.send(buf);
     }
 
     function adbHost_connect() {
-      if (adbHostConnection) return adbHostConnection;
-      var target = {host:dev.adbHost.host||'127.0.0.1', port:dev.adbHost.port||5037};
-      cfg.logAllSockets && log('[AdbBridge ' + dev.id + ']connect to adb host '+JSON.stringify(target));
+      var target = {host: dev.adbHost.host || '127.0.0.1', port: dev.adbHost.port || 5037};
+      cfg.logAllSockets && log('[AdbBridge ' + dev.id + ']connect to adb host ' + JSON.stringify(target));
 
-      adbHostConnection = net.connect(target);
+      var adbHostCon = net.connect(target);
 
-      adbHostConnection.once('error', function(err) {
-        cfg.logAllSockets && log('[AdbBridge ' + dev.id + '][adbHost connection] error: ' + err);
+      adbHostCon.__channelId = ++nextChannelId;
+      adbHostCon.__tag = '[AdbBridge ' + dev.id + '][channel ' + adbHostCon.__channelId + ']';
+      channelMap[adbHostCon.__channelId] = adbHostCon;
+
+      adbHostCon.once('error', function (err) {
+        cfg.logAllSockets && log(adbHostCon.__tag + ' error: ' + err);
       });
-      adbHostConnection.once('close', function(){
-        cfg.logAllSockets && log('[AdbBridge ' + dev.id + '][adbHost connection] closed');
-        adbHostConnection = null;
+      adbHostCon.once('close', function () {
+        cfg.logAllSockets && log(adbHostCon.__tag + ' closed');
+        delete channelMap[adbHostCon.__channelId];
       });
+
+      return adbHostCon;
     }
 
-    function adbHost_disconnect() {
-      if(!adbHostConnection) return;
-      cfg.logAllSockets && log('[AdbBridge ' + dev.id + '][adbHost connection] disconnect');
-      adbHostConnection.end();
-      adbHostConnection = null;
+    function adbHost_disconnect(adbHostCon) {
+      if (adbHostCon && channelMap[adbHostCon.__channelId]) {
+        cfg.logAllSockets && log(adbHostCon.__tag + ' disconnect');
+        delete channelMap[adbHostCon.__channelId];
+        adbHostCon.end();
+      }
+    }
+
+    function adbHost_send(adbHostCon, buf) {
+      if (adbHostCon) {
+        adbHostCon.write(('0000' + buf.length.toString(16)).slice(-4/*last 4 char*/));
+        adbHostCon.write(buf);
+      }
     }
   });
 }
