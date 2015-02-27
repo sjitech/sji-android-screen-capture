@@ -1,4 +1,4 @@
-var AscUtil = {showEventsOnly: false, debug: false};
+var AscUtil = {debug: false, showEventsOnly: false};
 
 (function ($) {
   'use strict';
@@ -238,43 +238,62 @@ var AscUtil = {showEventsOnly: false, debug: false};
     }, 1000 / 4);
   };
 
-  var CHROME_EXTENSION_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
 
-  function getOrCreateAdbDevice(websocket_url, callback, isCreate) {
-    if (websocket_url.match(/:/)) {
-      if (!websocket_url.match(/^ws:\/\//) && !websocket_url.match(/^wss:\/\//)) {
-        callback('invalid parameter(websocket_url must start with ws:// or ws://');
-        return;
-      }
+  function getWebSocketURL(url) {
+    if (url.slice(0, 5) === 'ws://') {
+      //
+    } else if (url.slice(0, 6) === 'wss://') {
+      //
     } else {
-      websocket_url = (websocket_url.URL && websocket_url.URL[4] === 's' ? 'wss://' : 'ws://') + websocket_url;
+      if (url.slice(0, 7) === 'http://') {
+        url = 'ws://' + url.slice(7);
+      }
+      else if (url.slice(0, 8) === 'https://') {
+        url = 'wss://' + url.slice(8);
+      }
+      else if (url[0] === '/') {
+        if (document.URL.slice(0, 7) === 'http://') {
+          url = 'ws://' + document.URL.slice(7).replace(/^([^/]+).*$/, '$1' + url);
+        } else if (document.URL.slice(0, 8) === 'https://') {
+          url = 'ws://' + document.URL.slice(8).replace(/^([^/]+).*$/, '$1' + url);
+        }
+      }
+      else {
+        if (document.URL.slice(0, 7) === 'http://') {
+          url = 'ws://' + document.URL.slice(7).replace(/\/[^/]+$/, '/' + url);
+        } else if (document.URL.slice(0, 8) === 'https://') {
+          url = 'wss://' + document.URL.slice(8).replace(/\/[^/]+$/, '/' + url);
+        }
+      }
     }
-
-    try {
-      var port = chrome.runtime.connect(CHROME_EXTENSION_ID);
-      port.postMessage({cmd: isCreate ? 'createAdbDevice' : 'getAdbDevice', websocket_url: websocket_url});
-      port.onMessage.addListener(function (response) {
-        if (arguments.length === 0)
-          response = 'internal error in "Sumatium ADB Bridge" chrome extension';
-        if (typeof(response) === 'string')
-          callback(response);
-        else
-          callback(null, 'localhost:' + response.port, response.connected);
-        port.disconnect();
-      });
-    } catch (e) {
-      callback('please install "Sumatium ADB Bridge" chrome extension into Chrome from Chrome Store');
-    }
+    return url;
   }
 
-  AscUtil.createAdbDevice = function (websocket_url, callback) {
-    getOrCreateAdbDevice(websocket_url, callback || empty, true);
-  };
+  AscUtil.createAdbDevice = function (url, callback) {
+    var timer_checkHello;
 
-  AscUtil.getAdbDevice = function (websocket_url, callback) {
-    getOrCreateAdbDevice(websocket_url, callback || empty, false);
-  };
+    function callback_once(err, connect_str, connected) {
+      if (callback) {
+        err ? console.error(err) : console.log('connect_str: ' + connect_str + ' connected:' + connected);
+        callback(err, connect_str, connected);
+        callback = null;
+      }
+    }
 
-  function empty() {
+    url = getWebSocketURL(url);
+    var port = chrome.runtime.connect('bfipgicjldmmihdbneggbdmindfbmgfn');
+    port.postMessage(url);
+    port.onMessage.addListener(function (msg) {
+      clearTimeout(timer_checkHello);
+      timer_checkHello = null;
+      if (msg === 'hello') return;
+      arguments.length === 0 && (msg = (chrome.runtime.lastError && chrome.runtime.lastError.message || '') + '\nPlease confirm about "Sumatium ADB Bridge" Chrome Extension has been: \n\t1. it has been installed to current Chrome Browser(from Chrome Store). \n\t2. it has been configured to allow Current web page URL to connect to it.');
+      typeof(msg) === 'string' ? callback_once(msg/*err*/) : callback_once(null, 'localhost:' + msg.port, msg.connected);
+      port.disconnect();
+    });
+    timer_checkHello = setTimeout(function () {
+      callback_once('no response.' + '\nPlease confirm about "Sumatium ADB Bridge" Chrome Extension has been: \n\t1. it has been installed to current Chrome Browser(from Chrome Store). \n\t2. it has been configured to allow Current web page URL to connect to it.');
+      port.disconnect();
+    }, 1000);
   }
 })($/*jQuery*/);

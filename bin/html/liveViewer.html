@@ -76,7 +76,7 @@
     </div>
   </div>
   <div style="margin-top: 12px">
-    <button onclick="AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey', function(err, conStr, connected){console.log(err||(conStr+' ' + (connected?'(registed to local adb daemon)':'(not registed to local adb daemon, but will retry in background)')))})">Enable ADB</button>
+    <button onclick="enableAdb()">Enable ADB</button>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
@@ -119,6 +119,16 @@
     $orient.next().attr('class', orient);
     $size.val($size.val().replace(/^([^x]*)x([^x]*)$/i, '$2x$1'));
   });
+
+  function enableAdb() {
+    AscUtil.createAdbDevice('adbBridge?device=@device&accessKey=@accessKey', function (err, conStr, connected) {
+      if (err)
+        alert(err);
+      else
+        alert(conStr + ' ' + (connected ? '(registed to local adb daemon)' : '(not registed to local adb daemon, please manually run "adb connect ' + conStr + '")'));
+    });
+  }
+
 </script>
 </body>
 </html>
