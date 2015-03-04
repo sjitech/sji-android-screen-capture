@@ -8,7 +8,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
   console.log("external connected");
   chromePort.postMessage('hello');
 
-  function postMessageToExternal(dev) {
+  function postMsgToExternalOnce(dev) {
     if (!chromePort) return;
     var msg = typeof(dev) === 'string' ? dev/*err*/ : {port: dev.port, connected: dev.connected};
     console.log('postMessage to external. msg: ' + JSON.stringify(msg));
@@ -29,7 +29,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
 
   function dev_close(dev, err) {
     if (err) {
-      postMessageToExternal(err);
+      postMsgToExternalOnce(err);
     }
     if (devMap[dev.url]) {
       console.log('dev_close');
@@ -46,7 +46,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
     console.log('createWebSocket');
     var dev = devMap[url];
     if (dev) {
-      return !dev.created ? postMessageToExternal('creating') : dev.connected ? postMessageToExternal(dev) : letAdbHostConnectToDev(dev);
+      return !dev.created ? postMsgToExternalOnce('creating') : dev.connected ? postMsgToExternalOnce(dev) : letAdbHostConnectToDev(dev);
     }
     dev = devMap[url] = {url: url};
 
@@ -119,7 +119,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
       chrome.sockets.tcp.disconnect(connectionId);
       chrome.sockets.tcp.close(connectionId);
       dev.connected = false;
-      postMessageToExternal(dev);
+      postMsgToExternalOnce(dev);
     }
   }
 
@@ -165,16 +165,17 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
     var buf = new ArrayBuffer(24 + t.length + 1);
     var dv = new DataView(buf);
     dv.setUint32(0, 0x434e584e); //command
-    dv.setUint32(4, 0x01000000, LITTLE_ENDIAN); //arg0
-    dv.setUint32(8, 0x00001000, LITTLE_ENDIAN); //arg1
+    dv.setUint32(4, 0x01000000, LITTLE_ENDIAN); //arg0: A_VERSION
+    dv.setUint32(8, 0x00001000, LITTLE_ENDIAN); //arg1: MAX_PAYLOAD
     dv.setUint32(12, t.length + 1, LITTLE_ENDIAN); //data_length
     dv.setUint32(20, 0xbcb1a7b1); //command ^ 0xffffffff
-    var cnt = t.length, i = 0, j = 24, sum = 0;
-    for (; i < cnt; i++, j++) {
+    var cnt = t.length, i = 0, sum = 0;
+    for (; i < cnt; i++) {
       var c = t.charCodeAt(i);
-      dv.setUint8(j, c);
+      dv.setUint8(24 + i, c);
       sum += c;
     }
+    dv.setUint8(24 + i, 0);
     dv.setUint32(16, sum, LITTLE_ENDIAN); //data_sum
 
     console.log(dev.connectionLogHead + 'replay CNXN');
@@ -185,7 +186,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
         console.log(dev.connectionLogHead + 'reply CNXN ok. ' + sendInfo.bytesSent + ' bytes sent');
         dev.connected = true;
       }
-      postMessageToExternal(dev);
+      postMsgToExternalOnce(dev);
     });
   }
 
@@ -198,7 +199,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
         if (resultCode) {
           console.error('failed to connect to ADB host. ' + getChromeLastError());
           chrome.sockets.tcp.close(createInfo.socketId);
-          return postMessageToExternal(dev);
+          return postMsgToExternalOnce(dev);
         }
         console.log('tcp.connect OK');
         var cmd = "host:connect:localhost:" + dev.port;
@@ -213,11 +214,11 @@ chrome.runtime.onConnectExternal.addListener(function (chromePort) {
         return chrome.sockets.tcp.send(createInfo.socketId, buf, function (sendInfo) {
           if (sendInfo.resultCode) {
             console.error('failed to send to ADB host cmd sock. ' + getChromeLastError() + '(' + sendInfo.resultCode + ')');
-            postMessageToExternal(dev);
+            postMsgToExternalOnce(dev);
           } else {
             console.log('send ok. ' + sendInfo.bytesSent + ' bytes sent');
             setTimeout(function () {
-              !dev.connected && postMessageToExternal(dev);
+              !dev.connected && postMsgToExternalOnce(dev);
             }, 1000);
           }
           console.log('tcp.close');
