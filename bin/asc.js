@@ -10,7 +10,7 @@ process.on('uncaughtException', function (err) {
   log('uncaughtException: ' + err + "\n" + err.stack, {stderr: true});
   throw err;
 });
-var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, ws;
+var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket;
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
@@ -698,6 +698,51 @@ streamWeb_handlerMap['/saveImage'] = function (dev, q, urlPath, req, res) {
   });
   return end(res, 'OK: ' + q.filename);
 };
+streamWeb_handlerMap['/touch'] = function (dev, q, urlPath, req, res) {
+  if (!chk('type', q.type, ['d', 'u', 'o', 'm']) || !chk('x', q.x = Number(q.x), 0, 1) || !chk('x', q.y = Number(q.y), 0, 1)) {
+    return end(res, JSON.stringify(chk.err), 'text/json');
+  }
+  if (!dev.capture || !dev.capture.image) {
+    return end(res, JSON.stringify('device is not being live viewed'), 'text/json');
+  }
+  if (dev.touchStatus !== 'OK') {
+    return end(res, JSON.stringify(dev.touchStatus || 'not prepared'), 'text/json');
+  } else {
+    sendTouchEvent(dev, q);
+    return end(res, JSON.stringify('OK'), 'text/json');
+  }
+};
+streamWeb_handlerMap['/sendKey'] = function (dev, q, urlPath, req, res) {
+  if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
+    return end(res, chk.err);
+  }
+  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
+    timeout: cfg.adbSendKeyTimeout * 1000,
+    log: cfg.logAllAdbCommands
+  });
+  return end(res, 'OK');
+};
+streamWeb_handlerMap['/sendText'] = function (dev, q, urlPath, req, res) {
+  if (!chk('text', q.text)) {
+    return end(res, chk.err);
+  }
+  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
+    timeout: cfg.adbSendKeyTimeout * 1000,
+    log: cfg.logAllAdbCommands
+  });
+  return end(res, 'OK');
+};
+streamWeb_handlerMap['/turnOnScreen'] = function (dev, q, urlPath, req, res) {
+  turnOnScreen(dev);
+  end(res, 'OK');
+};
+streamWeb_handlerMap['/setOrientation'] = function (dev, q, urlPath, req, res) {
+  if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
+    return end(res, chk.err);
+  }
+  setDeviceOrientation(dev, q.orientation);
+  return end(res, 'OK');
+};
 streamWeb_handlerMap['/liveViewer.html'] = function (dev, q, urlPath, req, res) {
   if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
     return end(res, chk.err);
@@ -767,51 +812,6 @@ streamWeb_handlerMap['/getFile'] = function (dev, q, urlPath, req, res) {
         end(res, stringifyError(err));
       }).pipe(res);
 };
-streamWeb_handlerMap['/touch'] = function (dev, q, urlPath, req, res) {
-  if (!chk('type', q.type, ['d', 'u', 'o', 'm']) || !chk('x', q.x = Number(q.x), 0, 1) || !chk('x', q.y = Number(q.y), 0, 1)) {
-    return end(res, JSON.stringify(chk.err), 'text/json');
-  }
-  if (!dev.capture || !dev.capture.image) {
-    return end(res, JSON.stringify('device is not being live viewed'), 'text/json');
-  }
-  if (dev.touchStatus !== 'OK') {
-    return end(res, JSON.stringify(dev.touchStatus || 'not prepared'), 'text/json');
-  } else {
-    sendTouchEvent(dev, q);
-    return end(res, JSON.stringify('OK'), 'text/json');
-  }
-};
-streamWeb_handlerMap['/sendKey'] = function (dev, q, urlPath, req, res) {
-  if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
-    return end(res, chk.err);
-  }
-  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
-    timeout: cfg.adbSendKeyTimeout * 1000,
-    log: cfg.logAllAdbCommands
-  });
-  return end(res, 'OK');
-};
-streamWeb_handlerMap['/sendText'] = function (dev, q, urlPath, req, res) {
-  if (!chk('text', q.text)) {
-    return end(res, chk.err);
-  }
-  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
-    timeout: cfg.adbSendKeyTimeout * 1000,
-    log: cfg.logAllAdbCommands
-  });
-  return end(res, 'OK');
-};
-streamWeb_handlerMap['/turnOnScreen'] = function (dev, q, urlPath, req, res) {
-  turnOnScreen(dev);
-  return end(res, 'OK');
-};
-streamWeb_handlerMap['/setOrientation'] = function (dev, q, urlPath, req, res) {
-  if (!chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])) {
-    return end(res, chk.err);
-  }
-  setDeviceOrientation(dev, q.orientation);
-  return end(res, 'OK');
-};
 
 function adminWeb_handler(req, res) {
   if (req.url.length > 8 * 1024 || req.method !== 'GET' || req.url === '/favicon.ico' || req.url.slice(0, 6) === '/apple') {
@@ -862,10 +862,15 @@ adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
   q.orientation && setDeviceOrientation(dev, q.orientation);
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 };
-adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  return !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
-    end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
-  }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
+adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  scanAllDevices(/*mode:*/q.mode);
+  end(res, 'OK');
+};
+adminWeb_handlerMap['/getWebHost'] = function (dev, q, urlPath, req, res) {
+  end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
+};
+adminWeb_handlerMap['/getAdbHost'] = function (dev, q, urlPath, req, res) {
+  end(res, JSON.stringify((dev && dev.adbHost) ? {host: dev.adbHost.host, port: dev.adbHost.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
 };
 adminWeb_handlerMap['/'] = function (dev, q, urlPath, req, res) {
   q.viewUrlBase && (q.viewUrlBase = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase).format());
@@ -880,7 +885,7 @@ adminWeb_handlerMap['/'] = function (dev, q, urlPath, req, res) {
     html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
   });
   cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
-  return end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
+  end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
     return (cfg.showDisconnectedDevices ? devAry : devAry.filter(function (dev) {
       return dev.adbHost && dev.status !== ERR_DEV_NOT_FOUND;
     })).sort(function (dev1, dev2) {
@@ -893,18 +898,24 @@ adminWeb_handlerMap['/'] = function (dev, q, urlPath, req, res) {
         }, ''/*initial joinedStr*/);
   }), 'text/html');
 };
-adminWeb_handlerMap['/stopServer' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  end(res, 'OK');
-  adminWeb.close();
-  streamWeb && streamWeb.close();
-  forEachValueIn(procMap, function (proc) {
-    proc.kill('SIGKILL');
-  });
-  return process.exit(0);
-};
-adminWeb_handlerMap['/reloadResource' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  reloadResource();
-  return end(res, 'OK');
+adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
+  if (!(q._fileSize = getFileSizeSync(q._logFilePath) || (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)))) {
+    return end(res, chk.err);
+  }
+  q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
+  dev && (res.__oldWrite = res.write) && (res.write = function (buf) {
+    Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
+      (buf = (s.indexOf(dev.sn) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
+      i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
+    });
+  }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(dev.sn)) === dev.sn && (q.qdevice = '');
+  return fs.createReadStream(q._logFilePath, {
+    start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
+    end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
+  }).once('error', function (err) {
+    end(res, stringifyError(err));
+  }).pipe(res);
 };
 adminWeb_handlerMap['/set' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
   if (q.size !== undefined || q.orient !== undefined) {
@@ -925,7 +936,24 @@ adminWeb_handlerMap['/set' + cfg.adminUrlSuffix] = function (dev, q, urlPath, re
   }
   scheduleUpdateWholeUI();
   return end(res, 'OK');
-
+};
+adminWeb_handlerMap['/reloadResource' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  reloadResource();
+  end(res, 'OK');
+};
+adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
+    end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
+  }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
+};
+adminWeb_handlerMap['/stopServer' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
+  end(res, 'OK');
+  adminWeb.close();
+  streamWeb && streamWeb.close();
+  forEachValueIn(procMap, function (proc) {
+    proc.kill('SIGKILL');
+  });
+  process.exit(0);
 };
 adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   res.__previousVer = q.ver;
@@ -934,44 +962,12 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   res.once('close', function () { //closed by http peer
     delete status.consumerMap[res.__tag];
   });
-  return scheduleUpdateLiveUI();
-};
-adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
-  if (!(q._fileSize = getFileSizeSync(q._logFilePath))) {
-    return end(res, chk.err);
-  }
-  if (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)) {
-    return end(res, chk.err);
-  }
-  q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
-  dev && (res.__oldWrite = res.write) && (res.write = function (buf) {
-    Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
-      (buf = (s.indexOf(dev.sn) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
-      i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
-    });
-  }) && (res.__orphanBuf = new Buffer([])) && (q.qdevice = querystring.escape(dev.sn)) === dev.sn && (q.qdevice = '');
-  return fs.createReadStream(q._logFilePath, {
-    start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
-    end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
-  }).once('error', function (err) {
-    end(res, stringifyError(err));
-  }).pipe(res);
-};
-adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  scanAllDevices(/*mode:*/q.mode);
-  return end(res, 'OK');
-};
-adminWeb_handlerMap['/getWebHost'] = function (dev, q, urlPath, req, res) {
-  return end(res, JSON.stringify({adminHost: req.connection.address().address + ':' + cfg.adminWeb_port, streamHost: req.connection.address().address + ':' + cfg.streamWeb_port}), 'text/json');
-};
-adminWeb_handlerMap['/getAdbHost'] = function (dev, q, urlPath, req, res) {
-  return end(res, JSON.stringify((dev && dev.adbHost) ? {host: dev.adbHost.host, port: dev.adbHost.port, sn: dev.conId, adbArgs: dev.adbArgs} : '`device`: unknown device'), 'text/json');
+  scheduleUpdateLiveUI();
 };
 
 cfg.logAllSockets = true;
 function enableWebSocket() {
-  new ws.server({httpServer: streamWeb ? [adminWeb, streamWeb] : [adminWeb]}).on('request', function (wsConReq) {
+  new websocket.server({httpServer: streamWeb ? [adminWeb, streamWeb] : [adminWeb]}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
     log(tag + ' ' + req.url + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (' origin: ' + wsConReq.origin || ''));
@@ -980,35 +976,25 @@ function enableWebSocket() {
       return wsConReq.reject();
     }
     log(tag + ' accept');
-    return handle_websocket_connection(wsConReq.accept(null, wsConReq.origin), dev);
+    return handle_adbBridgeWebsocket_connection(wsConReq.accept(null, wsConReq.origin), dev);
   });
 }
 
-function handle_websocket_connection(ws, dev) {
-  var backendMap = {/*id:*/}, nextBackendId = 0, wsBuf;
-  var bridgeTag = '[AdbBridge ' + dev.id + ']';
+function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
+  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge ' + dev.id + ']';
 
-  ws.binaryType = "arraybuffer";
-  ws.once('close', function (reasonCode, description) {
+  adbBridgeWebSocket.binaryType = "arraybuffer";
+  adbBridgeWebSocket.once('close', function (reasonCode, description) {
     log(bridgeTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
-    forEachValueIn(backendMap, backend_close);
+    forEachValueIn(backendMap, backend_cleanup);
   });
 
-  return ws.on('message', function (msg) {
-    wsBuf = wsBuf ? Buffer.concat([wsBuf, msg.binaryData]) : msg.binaryData;
-    while (wsBuf.length >= 24) {
-      var cmd = wsBuf.slice(0, 4).toString();
-      var arg0 = wsBuf.readUInt32LE(4); //arg0, from
-      var arg1 = wsBuf.readUInt32LE(8); //arg1, to
-      var payloadLen = wsBuf.readInt32LE(12);
-      if (wsBuf.length < 24 + payloadLen) {
-        return;
-      }
-      var payloadBuf = wsBuf.slice(24, 24 + payloadLen);
-      wsBuf = wsBuf.slice(24 + payloadLen);
-
-      handle_adb_command(cmd, arg0, arg1, payloadBuf);
+  return adbBridgeWebSocket.on('message', function (msg) {
+    var buf = Buffer.concat([adbBridgeWebSocket.__recvBuf || new Buffer(), msg.binaryData]), payloadLen;
+    for (; buf.length >= 24 && buf.length >= 24 + (payloadLen = buf.readUInt32LE(12)); buf = buf.slice(24 + payloadLen)) {
+      handle_adb_command(/*cmd:*/ buf.slice(0, 4).toString(), /*arg0:*/ buf.readUInt32LE(4), /*arg1:*/ buf.readUInt32LE(8), /*payloadBuf:*/ buf.slice(24, 24 + payloadLen));
     }
+    adbBridgeWebSocket.__recvBuf = buf;
   });
 
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
@@ -1017,11 +1003,12 @@ function handle_websocket_connection(ws, dev) {
       var service = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)).toString();
       cfg.logAllSockets && log(bridgeTag + ' recv ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes: ' + service);
       arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
+
       backend = backend_create(arg1, arg0);
 
       backend_write(backend, new Buffer('host:transport:' + dev.conId)); //switch transport
 
-      var ok = 0, allBuf;
+      var ok = 0, allBuf, readOutputOnce;
       backend.on('data', function (buf) {
         allBuf = allBuf ? Buffer.concat([allBuf, buf]) : buf;
         if (ok < 2 && allBuf.length >= 4) {
@@ -1030,28 +1017,29 @@ function handle_websocket_connection(ws, dev) {
 
             ok === 1 && backend_write(backend, new Buffer(service));
 
-            ok === 2 && ws_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
+            ok === 2 && bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
             allBuf = allBuf.slice(4);
           } else {
-            backend_close(backend);
+            backend_cleanup(backend);
           }
         }
         if (ok === 2) {
           var len;
-          if (service === 'shell:') {
+          if (service === 'shell:' && readOutputOnce) {
             if (allBuf.length > 4) {
               len = parseInt(allBuf.slice(0, 4), 16);
               if (allBuf.length >= 4 + len) {
-                ws_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(4, len));
+                bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(4, len));
                 allBuf = allBuf.slice(4 + len);
               }
             }
           } else {
             while (allBuf.length) {
               len = Math.min(4096, allBuf.length);
-              ws_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(0, len));
+              bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(0, len));
               allBuf = allBuf.slice(len);
             }
+            readOutputOnce = true;
           }
         }
       });
@@ -1059,16 +1047,16 @@ function handle_websocket_connection(ws, dev) {
     else {
       cfg.logAllSockets && log(bridgeTag + ' recv ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes');
       if (!backend) {
-        ws_write('CLSE', /*local:*/0, /*remote:*/arg0);
+        backend_cleanup(backend);
       } else if (cmd === 'WRTE') {
         backend_write(backend, payloadBuf);
       } else if (cmd === 'CLSE') {
-        backend_close(backend, /*is_frontend_closed*/true);
+        backend_cleanup(backend, /*is_frontend_closed*/true);
       }
     }
   }
 
-  function ws_write(cmd, arg0, arg1, payloadBuf) {
+  function bridge_write(cmd, arg0, arg1, payloadBuf) {
     cfg.logAllSockets && log(bridgeTag + ' send ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes');
     var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
     buf.writeUInt8(cmd.charCodeAt(0), 0);
@@ -1085,7 +1073,7 @@ function handle_websocket_connection(ws, dev) {
     }
     buf.writeUInt32LE(sum, 16);
     payloadBuf && payloadBuf.copy(buf, 24);
-    ws.send(buf);
+    adbBridgeWebSocket.send(buf);
   }
 
   function backend_create(backendId, frontendId/*for peer id*/) {
@@ -1102,24 +1090,24 @@ function handle_websocket_connection(ws, dev) {
 
     backend.once('close', function () { //closed by peer
       !backend.__isClosedByPeer && (backend.__isClosedByPeer = true) && cfg.logAllSockets && log(tag + ' closed');
-      backend_close(backend);
+      backend_cleanup(backend);
     });
     backend.once('error', function (err) {
       !backend.__isEnded && !backend.__isClosedByPeer && cfg.logAllSockets && log(tag + ' error: ' + err);
-      backend_close(backend);
+      backend_cleanup(backend);
     });
 
     return backend;
   }
 
-  function backend_close(backend, is_frontend_closed) {
+  function backend_cleanup(backend, is_frontend_closed) {
     if (backend && backendMap[backend.__id]) {
-      cfg.logAllSockets && log(backend.__tag + ' close');
+      cfg.logAllSockets && log(backend.__tag + ' cleanup');
       delete backendMap[backend.__id];
       backend.removeAllListeners('data');
       !backend.__isClosedByPeer && cfg.logAllSockets && log(backend.__tag + ' end')
       && (backend.__isEnded = true) && backend.end();
-      !is_frontend_closed && ws_write('CLSE', /*arg0:*/0, /*arg1:*/backend.__frontendId);
+      !is_frontend_closed && bridge_write('CLSE', /*arg0:*/0, /*arg1:*/backend.__frontendId);
     }
   }
 
@@ -1153,7 +1141,11 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(ret) {
     ret !== 0 && log('Failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file', {stderr: true});
-    !(ws = require('websocket')) && log('Failed to check websocket lib (you can install it from https://github.com/theturtle32/WebSocket-Node ). You will not be able to use some advanced function(i.e. AdbBridge via browser)', {stderr: true});
+    try {
+      websocket = require('websocket')
+    } catch (err) {
+    }
+    !websocket && log('Failed to check websocket lib (you can install it from https://github.com/theturtle32/WebSocket-Node ). You will not be able to use some advanced function(i.e. AdbBridge via browser)', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       if (cfg.streamWeb_port) {
@@ -1167,6 +1159,6 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
     });
     scanAllDevices();
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
-    ws && enableWebSocket();
+    websocket && enableWebSocket();
   }, {timeout: 10 * 1000, log: true});
 }, {timeout: 30 * 1000, log: true});
