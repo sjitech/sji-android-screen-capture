@@ -16,8 +16,8 @@ var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, 
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAllSockets', 'fastResize', 'fastCapture', 'checkDevTimeLimit'];
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAllSockets: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeTrans', 'dumpAdbBridgeBackendReceivedData', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit'];
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeTrans: false, dumpAdbBridgeBackendReceivedData: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -965,7 +965,7 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   scheduleUpdateLiveUI();
 };
 
-cfg.logAllSockets = true;
+cfg.logAdbBridgeTrans = cfg.dumpAdbBridgeBackendReceivedData = true;
 function enableWebSocket() {
   new websocket.server({httpServer: streamWeb ? [adminWeb, streamWeb] : [adminWeb]}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
@@ -990,62 +990,66 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   });
 
   return adbBridgeWebSocket.on('message', function (msg) {
-    var buf = adbBridgeWebSocket.__recvBuf ? Buffer.concat([adbBridgeWebSocket.__recvBuf, msg.binaryData]) : msg.binaryData, payloadLen;
-    for (; buf.length >= 24 && buf.length >= 24 + (payloadLen = buf.readUInt32LE(12)); buf = buf.slice(24 + payloadLen)) {
-      handle_adb_command(/*cmd:*/ buf.slice(0, 4).toString(), /*arg0:*/ buf.readUInt32LE(4), /*arg1:*/ buf.readUInt32LE(8), /*payloadBuf:*/ buf.slice(24, 24 + payloadLen));
+    var allBuf = adbBridgeWebSocket.__recvBuf ? Buffer.concat([adbBridgeWebSocket.__recvBuf, msg.binaryData]) : msg.binaryData, payloadLen;
+    for (; allBuf.length >= 24 && allBuf.length >= 24 + (payloadLen = allBuf.readUInt32LE(12)); allBuf = allBuf.slice(24 + payloadLen)) {
+      handle_adb_command(/*cmd:*/ allBuf.slice(0, 4).toString(), /*arg0:*/ allBuf.readUInt32LE(4), /*arg1:*/ allBuf.readUInt32LE(8), /*payloadBuf:*/ allBuf.slice(24, 24 + payloadLen));
     }
-    adbBridgeWebSocket.__recvBuf = buf;
+    adbBridgeWebSocket.__recvBuf = allBuf;
   });
 
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
     var backend = backendMap[arg1];
     if (cmd === 'OPEN') {
       var service = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)).toString();
-      cfg.logAllSockets && log(bridgeTag + ' recv ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes: ' + service);
+      cfg.logAdbBridgeTrans && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes: "' + service + '"');
       arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
 
       backend = backend_create(arg1, arg0);
 
       backend_write(backend, new Buffer('host:transport:' + dev.conId)); //switch transport
 
-      var ok = 0, allBuf, readOutputOnce;
+      var ok = 0, allBuf, len, isShellTty = (service === 'shell:'), haveWriteShellPrompt;
       backend.on('data', function (buf) {
+        cfg.dumpAdbBridgeBackendReceivedData && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
         allBuf = allBuf ? Buffer.concat([allBuf, buf]) : buf;
         if (ok < 2 && allBuf.length >= 4) {
           if (allBuf.slice(0, 4).toString() === 'OKAY') {
             ok++;
-
             ok === 1 && backend_write(backend, new Buffer(service));
-
             ok === 2 && bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
             allBuf = allBuf.slice(4);
           } else {
             backend_cleanup(backend);
+            return;
           }
         }
         if (ok === 2) {
-          var len;
-          if (service === 'shell:' && readOutputOnce) {
-            if (allBuf.length > 4) {
-              len = parseInt(allBuf.slice(0, 4), 16);
-              if (allBuf.length >= 4 + len) {
-                bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(4, len));
-                allBuf = allBuf.slice(4 + len);
+          while (allBuf.length) {
+            if (isShellTty && haveWriteShellPrompt) {
+              if (allBuf.length > 4 && allBuf.length >= 4 + (len = parseInt(allBuf.slice(0, 4), 16))) {
+                allBuf = allBuf.slice(4);
+              } else {
+                break;
+              }
+            } else {
+              len = Math.min(4096, allBuf.length);
+            }
+            bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(0, len));
+            //isShellTty && !haveWriteShellPrompt && (haveWriteShellPrompt = true);
+            if (isShellTty) {
+              if (haveWriteShellPrompt) {
+                bridge_write('OKAY',/*local:*/arg1, /*remote:*/arg0);
+              } else {
+                haveWriteShellPrompt = true;
               }
             }
-          } else {
-            while (allBuf.length) {
-              len = Math.min(4096, allBuf.length);
-              bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(0, len));
-              allBuf = allBuf.slice(len);
-            }
-            readOutputOnce = true;
+            allBuf = allBuf.slice(len);
           }
         }
       });
     } //end of OPEN
     else {
-      cfg.logAllSockets && log(bridgeTag + ' recv ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes');
+      cfg.logAdbBridgeTrans && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes');
       if (!backend) {
         backend_cleanup(backend);
       } else if (cmd === 'WRTE') {
@@ -1057,7 +1061,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   }
 
   function bridge_write(cmd, arg0, arg1, payloadBuf) {
-    cfg.logAllSockets && log(bridgeTag + ' send ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes');
+    cfg.logAdbBridgeTrans && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes');
     var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
     buf.writeUInt8(cmd.charCodeAt(0), 0);
     buf.writeUInt8(cmd.charCodeAt(1), 1);
@@ -1079,7 +1083,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   function backend_create(backendId, frontendId/*for peer id*/) {
     var target = {host: dev.adbHost.host || '127.0.0.1', port: dev.adbHost.port || 5037};
     var tag = bridgeTag + '[' + target.host + ':' + target.port + ' (' + hexUint32(backendId) + ')]';
-    cfg.logAllSockets && log(tag + ' connect');
+    cfg.logAdbBridgeTrans && log(tag + ' connect');
 
     var backend = net.connect(target);
 
@@ -1089,11 +1093,11 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
     backendMap[backendId] = backend;
 
     backend.once('close', function () { //closed by peer
-      !backend.__isClosedByPeer && (backend.__isClosedByPeer = true) && cfg.logAllSockets && log(tag + ' closed');
+      !backend.__isClosedByPeer && (backend.__isClosedByPeer = true) && cfg.logAdbBridgeTrans && log(tag + ' closed');
       backend_cleanup(backend);
     });
     backend.once('error', function (err) {
-      !backend.__isEnded && !backend.__isClosedByPeer && cfg.logAllSockets && log(tag + ' error: ' + err);
+      !backend.__isEnded && !backend.__isClosedByPeer && cfg.logAdbBridgeTrans && log(tag + ' error: ' + err);
       backend_cleanup(backend);
     });
 
@@ -1102,10 +1106,10 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
   function backend_cleanup(backend, is_frontend_closed) {
     if (backend && backendMap[backend.__id]) {
-      cfg.logAllSockets && log(backend.__tag + ' cleanup');
+      cfg.logAdbBridgeTrans && log(backend.__tag + ' cleanup');
       delete backendMap[backend.__id];
       backend.removeAllListeners('data');
-      !backend.__isClosedByPeer && cfg.logAllSockets && log(backend.__tag + ' end')
+      !backend.__isClosedByPeer && cfg.logAdbBridgeTrans && log(backend.__tag + ' end')
       && (backend.__isEnded = true) && backend.end();
       !is_frontend_closed && bridge_write('CLSE', /*arg0:*/0, /*arg1:*/backend.__frontendId);
     }
@@ -1113,7 +1117,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
   function backend_write(backend, buf) {
     if (backend) {
-      cfg.logAllSockets && log(backend.__tag + ' write. 4 + ' + hexUint32(buf.length) + ' bytes');
+      cfg.logAdbBridgeTrans && log(backend.__tag + ' write 4+' + hexUint32(buf.length) + ' bytes');
       backend.write(hexUint32(buf.length));
       backend.write(buf);
     }

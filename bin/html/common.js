@@ -270,6 +270,16 @@ var AscUtil = {debug: false, showEventsOnly: false};
   }
 
   AscUtil.createAdbDevice = function (url, callback) {
+    var isChrome;
+    try {
+      isChrome = typeof(chrome.runtime.connect) !== 'Function';
+    } catch (err) {
+    }
+    if (!isChrome) {
+      callback && callback('you must use Chrome Browser');
+      return;
+    }
+
     var timer_checkHello;
 
     function callback_once(err, connect_str, connected) {
