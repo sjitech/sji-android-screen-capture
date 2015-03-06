@@ -79,7 +79,7 @@
     <a id="btnAdb" class="button false" href="javascript:switchAdb()" title="Enable/Disable ADB from local">
       <input type="checkbox"/>ADB
     </a>
-    <div id="lblAdbConnectString"></div>
+    <div id="lblAdbConId"></div>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
@@ -132,22 +132,22 @@
     this.parentNode.click();
   });
 
-  var websocketUrl = 'adbBridge?device=@device&accessKey=@accessKey';
+  var adbBridgeWebSocketUrl = 'adbBridge?device=@device&accessKey=@accessKey';
 
   function switchAdb() {
     if ($chkAdb.prop('checked')) {
-      AscUtil.closeAdbDevice(websocketUrl);
+      AscUtil.disconnectAdbDevice(adbBridgeWebSocketUrl);
     } else {
-      AscUtil.createAdbDevice(websocketUrl, function (dev) {
-        alert(dev.status !== 'OK' ? dev.status : (dev.id + (dev.connected ? ' (connected)' : ' (not connected)')));
+      AscUtil.connectAdbDevice(adbBridgeWebSocketUrl, function (dev) {
+        alert(dev.conId ? (dev.conId + (dev.connected ? ' (connected)' : ' (not connected)')) : dev.status);
       });
     }
   }
 
-  AscUtil.monitorAdbDevice(websocketUrl, function (dev) {
+  AscUtil.watchAdbDevice(adbBridgeWebSocketUrl, function (dev) {
     $btnAdb.css('class', 'button ' + dev.connected);
     $chkAdb.prop('checked', dev.connected);
-    $('#lblAdbConnectString').text(dev.id);
+    $('#lblAdbConId').text(dev.conId);
   });
 
 </script>
