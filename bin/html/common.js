@@ -239,71 +239,129 @@ var AscUtil = {debug: false, showEventsOnly: false};
   };
 
 
-  function getWebSocketURL(url) {
-    if (url.slice(0, 5) === 'ws://') {
-      //
-    } else if (url.slice(0, 6) === 'wss://') {
-      //
-    } else {
-      if (url.slice(0, 7) === 'http://') {
-        url = 'ws://' + url.slice(7);
-      }
-      else if (url.slice(0, 8) === 'https://') {
-        url = 'wss://' + url.slice(8);
-      }
-      else if (url[0] === '/') {
-        if (document.URL.slice(0, 7) === 'http://') {
-          url = 'ws://' + document.URL.slice(7).replace(/^([^/]+).*$/, '$1' + url);
-        } else if (document.URL.slice(0, 8) === 'https://') {
-          url = 'ws://' + document.URL.slice(8).replace(/^([^/]+).*$/, '$1' + url);
+  (function /*adb bridge functions*/() {
+    var isChrome = /chrome/i.test(navigator.userAgent);
+    var err_extension_not_installed = 'Please confirm about "Sumatium ADB Bridge" Chrome Extension: \n\t* it has been installed to current Chrome Browser(from Chrome Store). \n\t*. it has been configured to allow current web page to connect to it.';
+    var err_env = isChrome ? err_extension_not_installed : 'you must use Chrome Browser';
+    var CHROME_EXTENSION_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
+    var devMap = {/*webSocketUrl:*/};
+
+    function getAdbDevice(url) {
+      var dev = devMap[(url = getWebSocketURL(url))] || (devMap[url] = {
+            url: url,
+            status: err_env,
+            id: '', //i.e. "localhost:50300"
+            connected: false,
+            callbackAry: [],
+            callback1Ary: []
+          });
+      if (!dev.ext) {
+        dev.err = err_env;
+        try {
+          if ((dev.ext = chrome.runtime.connect(CHROME_EXTENSION_ID, {name: url/*ext.name will be the url*/}))) {
+            dev.ext.onDisconnect.addListener(function () {
+              dev.ext = null;
+              dev.status = 'chrome extension is disconnected';
+              dev.id = '';
+              dev.connected = false;
+
+              notifyCallbacks(dev);
+            });
+
+            dev.ext.onMessage.addListener(function (msg) {
+              if (arguments.length === 0) {
+                dev.status = (chrome.runtime.lastError && chrome.runtime.lastError.message || '') + '\n' + err_extension_not_installed;
+              } else if (typeof(msg) === 'object') {
+                dev.status = 'OK';
+                dev.id = 'localhost:' + msg.port;
+                dev.connected = msg.connected;
+              } else if (msg === 'hello') {
+                dev.status = 'inited';
+              } else {
+                dev.status = String(msg);
+              }
+
+              notifyCallbacks(dev);
+            });
+          }
+        } catch (err) {
+          console.log(err);
         }
       }
-      else {
-        if (document.URL.slice(0, 7) === 'http://') {
-          url = 'ws://' + document.URL.slice(7).replace(/\/[^/]+$/, '/' + url);
-        } else if (document.URL.slice(0, 8) === 'https://') {
-          url = 'wss://' + document.URL.slice(8).replace(/\/[^/]+$/, '/' + url);
+      return dev;
+    }
+
+    AscUtil.createAdbDevice = function (url, callback) {
+      console.log('create virtual adbDev for ' + url);
+      var dev = getAdbDevice(url);
+      callback && dev.callback1Ary.push(callback);
+      dev.ext && dev.ext.postMessage('create');
+    };
+
+    AscUtil.closeAdbDevice = function (url) {
+      console.log('close virtual adbDev for ' + url);
+      var dev = getAdbDevice(url);
+      if (!dev.ext) return;
+      dev.status = 'closed';
+      dev.id = '';
+      dev.connected = false;
+      try {
+        dev.ext.postMessage('close');
+      } catch (err) {
+        console.log(err);
+      }
+
+      notifyCallbacks(dev);
+    };
+
+    AscUtil.monitorAdbDevice = function (url, callback/*{status, id, connected}*/) {
+      var dev = getAdbDevice(url);
+      dev.callbackAry.push(callback);
+      dev.callbackAry.forEach(function (callback) {
+        callback(dev);
+      });
+    };
+
+    function notifyCallbacks(dev) {
+      console.log('virtual adbDev status: ' + JSON.stringify(dev));
+      dev.callbackAry.forEach(function (callback) {
+        callback(dev);
+      });
+      dev.callback1Ary.forEach(function (callback) {
+        callback(dev);
+      });
+      dev.callback1Ary = [];
+    }
+
+    function getWebSocketURL(url) {
+      if (url.slice(0, 5) === 'ws://') {
+        //
+      } else if (url.slice(0, 6) === 'wss://') {
+        //
+      } else {
+        if (url.slice(0, 7) === 'http://') {
+          url = 'ws://' + url.slice(7);
+        }
+        else if (url.slice(0, 8) === 'https://') {
+          url = 'wss://' + url.slice(8);
+        }
+        else if (url[0] === '/') {
+          if (document.URL.slice(0, 7) === 'http://') {
+            url = 'ws://' + document.URL.slice(7).replace(/^([^/]+).*$/, '$1' + url);
+          } else if (document.URL.slice(0, 8) === 'https://') {
+            url = 'ws://' + document.URL.slice(8).replace(/^([^/]+).*$/, '$1' + url);
+          }
+        }
+        else {
+          if (document.URL.slice(0, 7) === 'http://') {
+            url = 'ws://' + document.URL.slice(7).replace(/\/[^/]+$/, '/' + url);
+          } else if (document.URL.slice(0, 8) === 'https://') {
+            url = 'wss://' + document.URL.slice(8).replace(/\/[^/]+$/, '/' + url);
+          }
         }
       }
+      return url;
     }
-    return url;
-  }
+  })();
 
-  AscUtil.createAdbDevice = function (url, callback) {
-    var isChrome;
-    try {
-      isChrome = typeof(chrome.runtime.connect) !== 'Function';
-    } catch (err) {
-    }
-    if (!isChrome) {
-      callback && callback('you must use Chrome Browser');
-      return;
-    }
-
-    var timer_checkHello;
-
-    function callback_once(err, connect_str, connected) {
-      if (callback) {
-        err ? console.error(err) : console.log('connect_str: ' + connect_str + ' connected:' + connected);
-        callback(err, connect_str, connected);
-        callback = null;
-      }
-    }
-
-    url = getWebSocketURL(url);
-    var port = chrome.runtime.connect('bfipgicjldmmihdbneggbdmindfbmgfn');
-    port.postMessage(url);
-    port.onMessage.addListener(function (msg) {
-      clearTimeout(timer_checkHello);
-      timer_checkHello = null;
-      if (msg === 'hello') return;
-      arguments.length === 0 && (msg = (chrome.runtime.lastError && chrome.runtime.lastError.message || '') + '\nPlease confirm about "Sumatium ADB Bridge" Chrome Extension has been: \n\t1. it has been installed to current Chrome Browser(from Chrome Store). \n\t2. it has been configured to allow Current web page URL to connect to it.');
-      typeof(msg) === 'string' ? callback_once(msg/*err*/) : callback_once(null, 'localhost:' + msg.port, msg.connected);
-      port.disconnect();
-    });
-    timer_checkHello = setTimeout(function () {
-      callback_once('no response.' + '\nPlease confirm about "Sumatium ADB Bridge" Chrome Extension has been: \n\t1. it has been installed to current Chrome Browser(from Chrome Store). \n\t2. it has been configured to allow Current web page URL to connect to it.');
-      port.disconnect();
-    }, 1000);
-  }
 })($/*jQuery*/);
