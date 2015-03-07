@@ -244,7 +244,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
   });
 }
 
-var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;', 'getprop', 'ro.serialno;',
+var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;', 'getprop', 'ro.serialno;', 'getprop', 'ro.product.name;', 'getprop', 'ro.product.device;',
   'echo', '===;', 'getevent', '-pS;', //get touch device info
   'echo', '===;', 'cd', cfg.androidWorkDir, '&&', 'cat', 'version', '||', 'exit;'];
 var cmd_getExtraInfo = ['echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
@@ -275,7 +275,11 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
       dev.info[3] = (dev.info[3] = dev.info[3].replace(/^armeabi-|^arm64-/, '')) == 'v7a' ? '' : dev.info[3];
       getTouchDeviceInfo(dev, parts[1]);
-      dev.internalSN = dev.info.pop(); //maybe different with external sn
+      dev.internalSN = dev.info[4]; //maybe different with external sn
+      dev.productModel = dev.info[1];
+      dev.productName = dev.info[5];
+      dev.productDevice = dev.info[6];
+      dev.info.splice(4, 3); //remove last 3 items
       dev.conId.match(/^.+:\d+$/)/*wifi ip:port*/ && dev.internalSN && (dev.sn = dev.internalSN) && setDevId(dev);
       dev.info_htm = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
       if (parts.length === 9 && getMoreInfo(dev, parts.slice(3)) && parts[2] === prepareDeviceFile.ver && !force) {
@@ -1000,7 +1004,10 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
     var backend = backendMap[arg1];
     cfg.logAdbBridgeTrans && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + ((cfg.dumpAdbBridgeData || cmd === 'OPEN') && payloadBuf.length ? ': "' + payloadBuf.toString('ascii') + '"' : ''));
-    if (cmd === 'OPEN') {
+    if (cmd === 'CNXN') {
+      bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.productName + ';ro.product.model=' + dev.productModel + ';ro.product.device=' + dev.productDevice + ';'));
+    }
+    else if (cmd === 'OPEN') {
       var service = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)).toString();
       arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
 

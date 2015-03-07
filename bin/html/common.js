@@ -239,63 +239,69 @@ var AscUtil = {debug: false, showEventsOnly: false};
   };
 
 
-  (function /*adb bridge functions*/() {
+  (function /*Virtual ADB Device functions*/() {
     var isChrome = /chrome/i.test(navigator.userAgent);
     var err_extension_not_installed = 'Please confirm about "Sumatium ADB Bridge" Chrome Extension: \n\t* it has been installed to current Chrome Browser(from Chrome Store). \n\t*. it has been configured to allow current web page to connect to it.';
     var CHROME_EXTENSION_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
     var devMap = {/*adbBridgeWebSocketUrl:*/};
 
-    function getOrCreateAdbDevice(url/*adbBridgeWebSocketUrl*/) {
+    function getOrCreateVirtualAdbDevice(adbBridgeWebSocketUrl) {
+      var url = getWebSocketURL(adbBridgeWebSocketUrl);
       return devMap[url] || (devMap[url] = {
-            url: url,
             info: {
               conId: '', //i.e. "localhost:50300"
               connected: false,
               status: ''
             },
+            url: url,
+            tag: makeLogHead(url),
             callbackAry: [],
             callback1Ary: []
           });
     }
 
-    AscUtil.connectAdbDevice = function (url/*adbBridgeWebSocketUrl*/, callback) {
-      var dev = getOrCreateAdbDevice(url = getWebSocketURL(url));
+    AscUtil.connectVirtualAdbDevice = function (adbBridgeWebSocketUrl, callback, timeout) {
+      var dev = getOrCreateVirtualAdbDevice(adbBridgeWebSocketUrl);
       if (dev.chromeExtensionIPC) {
         callback && callback(dev.info);
         return;
       }
 
-      console.log('[VirtAdb ' + url + '] connect');
+      console.log(dev.tag + ' connect');
       callback && dev.callback1Ary.push(callback);
 
       if (chrome && chrome.runtime && typeof(chrome.runtime.connect) === 'function') {
         try {
-          dev.chromeExtensionIPC = chrome.runtime.connect(CHROME_EXTENSION_ID, {name: url/*ext.name will be the url*/});
+          dev.chromeExtensionIPC = chrome.runtime.connect(CHROME_EXTENSION_ID, {name: dev.url/*applied to chromeExtensionIPC.name*/, test: 'test'});
           if (dev.chromeExtensionIPC) {
+
             dev.chromeExtensionIPC.onDisconnect.addListener(function () {
               dev.chromeExtensionIPC = null;
-              dev.info = {conId: '', connected: false, status: 'disconnected'};
+              dev.info = {conId: '', connected: false, status: 'Chrome Extension is disconnected'};
               notifyCallbacks(dev);
             });
 
-            dev.chromeExtensionIPC.onMessage.addListener(function (msg) {
-              if (typeof(msg) === 'object') {
-                if (dev.timer_disconnect) {
-                  clearTimeout(dev.timer_disconnect);
-                  dev.timer_disconnect = null;
-                }
-                dev.info = {conId: 'localhost:' + msg.port, connected: msg.connected, status: 'created'};
+            dev.chromeExtensionIPC.onMessage.addListener(function (info) {
+              if (typeof(info) === 'object') {
+                clearNoResponseTimeout2(dev);
+                dev.info = info;
                 notifyCallbacks(dev);
               } else {
-                dev.info.status = arguments.length ? String(msg) : ((chrome.runtime.lastError && chrome.runtime.lastError.message || '') + '\n' + err_extension_not_installed);
-                notifyCallbacks(dev);
-                AscUtil.disconnectAdbDevice(url);
+                clearNoResponseTimeout1(dev);
+                if (arguments.length === 0) {
+                  dev.info.status = (chrome.runtime.lastError && chrome.runtime.lastError.message || '') + '\n' + err_extension_not_installed;
+                  notifyCallbacks(dev);
+                  disconnect(dev);
+                }
               }
             });
 
-            dev.timer_disconnect = setTimeout(function () {
-              AscUtil.disconnectAdbDevice(url);
+            dev.timer_disconnect1 = setTimeout(function () {
+              disconnect(dev);
             }, 1000);
+            dev.timer_disconnect2 = setTimeout(function () {
+              disconnect(dev);
+            }, timeout || 5000);
           }
         } catch (err) {
           console.log(err);
@@ -308,40 +314,47 @@ var AscUtil = {debug: false, showEventsOnly: false};
       }
     };
 
-    AscUtil.disconnectAdbDevice = function (url/*adbBridgeWebSocketUrl*/) {
-      var dev = devMap[url = getWebSocketURL(url)];
-      if (!dev || !dev.chromeExtensionIPC) {
+    AscUtil.disconnectVirtualAdbDevice = function (adbBridgeWebSocketUrl) {
+      var dev = getOrCreateVirtualAdbDevice(adbBridgeWebSocketUrl);
+      if (!dev.chromeExtensionIPC) {
         return;
       }
-      console.log('[VirtAdb ' + url + '] disconnect');
+      disconnect(dev);
+    };
+
+    function disconnect(dev) {
+      var connected = dev.info.connected;
+      console.log(dev.tag + ' disconnect');
+      clearNoResponseTimeout1(dev);
+      clearNoResponseTimeout2(dev);
       try {
         dev.chromeExtensionIPC.disconnect();
         dev.chromeExtensionIPC = null;
       } catch (err) {
         console.log(err);
       }
-      if (dev.timer_disconnect) {
-        clearTimeout(dev.timer_disconnect);
-        dev.timer_disconnect = null;
-      }
       dev.info = {conId: '', connected: false, status: 'disconnected'};
 
-      notifyCallbacks(dev);
-    };
+      connected && notifyCallbacks(dev);
+    }
 
-    AscUtil.closeAdbDevice = function (url/*adbBridgeWebSocketUrl*/) {
-      var dev = devMap[url = getWebSocketURL(url)];
-      if (!dev) {
-        return;
+    function clearNoResponseTimeout1(dev) {
+      if (dev.timer_disconnect1) {
+        clearTimeout(dev.timer_disconnect1);
+        dev.timer_disconnect1 = null;
       }
-      console.log('[VirtAdb ' + url + '] close');
-      AscUtil.disconnectAdbDevice(url);
-      delete devMap[url];
-    };
+    }
 
-    AscUtil.watchAdbDevice = function (url/*adbBridgeWebSocketUrl*/, callback/*(info)*/) {
-      var dev = getOrCreateAdbDevice((url = getWebSocketURL(url)));
-      console.log('[VirtAdb ' + url + '] add callback');
+    function clearNoResponseTimeout2(dev) {
+      if (dev.timer_disconnect2) {
+        clearTimeout(dev.timer_disconnect2);
+        dev.timer_disconnect2 = null;
+      }
+    }
+
+    AscUtil.watchVirtualAdbDevice = function (adbBridgeWebSocketUrl, callback/*(info)*/) {
+      var dev = getOrCreateVirtualAdbDevice(adbBridgeWebSocketUrl);
+      console.log(dev.tag + ' add status callback');
       dev.callbackAry.push(callback);
       dev.callbackAry.forEach(function (callback) {
         callback(dev.info);
@@ -349,7 +362,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
     };
 
     function notifyCallbacks(dev) {
-      console.log('[VirtAdb ' + dev.url + '] ' + JSON.stringify(dev.info));
+      console.log(dev.tag + ' ' + JSON.stringify(dev.info));
       dev.callbackAry.forEach(function (callback) {
         callback(dev.info);
       });
@@ -359,6 +372,11 @@ var AscUtil = {debug: false, showEventsOnly: false};
         });
         dev.callback1Ary = [];
       }
+    }
+
+    function makeLogHead(url) {
+      var match = url.match(/\bdevice=([^&]+)/), id = match ? decodeURIComponent(match[1]) : url;
+      return '[VirtAdbDev ' + id + ']';
     }
 
     function getWebSocketURL(url) {
