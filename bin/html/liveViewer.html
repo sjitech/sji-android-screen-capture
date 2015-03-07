@@ -76,10 +76,11 @@
     </div>
   </div>
   <div style="margin-top: 12px; margin-bottom: 4px; background-color: white; border: 1px solid #000000">
-    <a id="btnAdb" class="button false" href="javascript:switchAdb()" title="Enable/Disable ADB from local">
-      <label><input type="checkbox"/>ADB</label>
+    <a id="btnAdb" class="button false" href="javascript:" title="Enable/Disable ADB from local">
+      <label><input type="checkbox"/></label>ADB
     </a>
-    <div id="lblAdbConId"></div>
+    <div id="lblAdbConId_want">localhost:<input type="text" id="adbPort" value="" style="width:25px" /></div>
+    <div id="lblAdbConId_real" style="display: none"></div>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
@@ -126,7 +127,7 @@
 
   /////////////////////Virtual ADB Device//////////////////////////////////////
 
-  var $btnAdb = $('#btnAdb'), $chkAdb = $btnAdb.find('input:checkbox');
+  var $btnAdb = $('#btnAdb'), $chkAdb = $btnAdb.find('input:checkbox'), $adbPort= $('#adbPort'), $lblAdbConId_want=$('#lblAdbConId_want'), $lblAdbConId_real=$('#lblAdbConId_real');
   $chkAdb.on('click', function (e) {
     e.preventDefault();
     this.parentNode.click();
@@ -134,20 +135,32 @@
 
   var adbBridgeWebSocketUrl = 'adbBridge?device=@device&accessKey=@accessKey';
 
+  $btnAdb.on('click', switchAdb);
+  $adbPort.on('keydown', function (e) {
+    e.which === 0xd && switchAdb();
+  });
+
   function switchAdb() {
     if ($chkAdb.prop('checked')) {
       AscUtil.disconnectVirtualAdbDevice(adbBridgeWebSocketUrl);
     } else {
       AscUtil.connectVirtualAdbDevice(adbBridgeWebSocketUrl, function (info) {
-        alert((info.conId ? (info.conId + (info.connected ? ' (connected)' : ' (not connected)')) : '') + ' Detail status: ' + info.status);
-      });
+        alert((info.conId ? (info.conId + (info.connected ? ' (connected)' : ' (not connected)')) : '') + '\nDetail status: ' + info.status);
+      }, {port: Number($adbPort.val())});
     }
   }
 
   AscUtil.watchVirtualAdbDevice(adbBridgeWebSocketUrl, function (info) {
-    $btnAdb.css('class', 'button ' + info.connected);
-    $chkAdb.prop('checked', info.connected);
-    $('#lblAdbConId').text(info.conId);
+    var created = info.conId ? true : false;
+    $btnAdb.css('class', 'button ' + created);
+    $chkAdb.prop('checked', created);
+    if (created) {
+      $lblAdbConId_want.hide();
+      $lblAdbConId_real.text(info.conId + (info.connected ? ' (connected)' : ' (not connected)')).show();
+    } else {
+      $lblAdbConId_want.show();
+      $lblAdbConId_real.hide();
+    }
   });
 
 </script>
