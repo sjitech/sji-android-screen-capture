@@ -969,7 +969,6 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   scheduleUpdateLiveUI();
 };
 
-cfg.logAdbBridgeTrans = cfg.dumpAdbBridgeData = true;
 function enableWebSocket() {
   new websocket.server({httpServer: streamWeb ? [adminWeb, streamWeb] : [adminWeb]}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';

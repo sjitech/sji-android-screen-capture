@@ -267,7 +267,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
         return;
       }
 
-      console.log(dev.tag + ' connect');
+      AscUtil.debug && console.log(dev.tag + ' connect');
       callback && dev.callback1Ary.push(callback);
 
       if (chrome && chrome.runtime && typeof(chrome.runtime.connect) === 'function') {
@@ -290,7 +290,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
               } else {
                 clearNoResponseTimeout1(dev);
                 if (arguments.length === 0) {
-                  console.log(dev.tag + ' Chrome Extension error: ' + (chrome.runtime.lastError && chrome.runtime.lastError.message || ''));
+                  AscUtil.debug && console.log(dev.tag + ' Chrome Extension error: ' + (chrome.runtime.lastError && chrome.runtime.lastError.message || ''));
                   disconnect(dev, 'Chrome Extension error, or ' + err_extension_not_installed);
                 }
               }
@@ -304,7 +304,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
             }, option && option.timeout || 5000);
           }
         } catch (err) {
-          console.log(err);
+          AscUtil.debug && console.log(err);
         }
       }
 
@@ -321,7 +321,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
     };
 
     function disconnect(dev, reason) {
-      console.log(dev.tag + ' disconnect. reason: ' + reason);
+      AscUtil.debug && console.log(dev.tag + ' disconnect. reason: ' + reason);
       clearNoResponseTimeout1(dev);
       clearNoResponseTimeout2(dev);
       if (dev.chromeExtensionIPC) {
@@ -329,7 +329,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
           dev.chromeExtensionIPC.disconnect();
           dev.chromeExtensionIPC = null;
         } catch (err) {
-          console.log(err);
+          AscUtil.debug && console.log(err);
         }
       }
       dev.info = {conId: '', connected: false, status: 'disconnected. reason: ' + reason};
@@ -352,7 +352,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
 
     AscUtil.watchVirtualAdbDevice = function (adbBridgeWebSocketUrl, callback/*(info)*/) {
       var dev = getOrCreateVirtualAdbDevice(adbBridgeWebSocketUrl);
-      console.log(dev.tag + ' add status callback');
+      AscUtil.debug && console.log(dev.tag + ' add status callback');
       dev.callbackAry.push(callback);
       dev.chromeExtensionIPC && dev.callbackAry.forEach(function (callback) {
         callback(dev.info);
@@ -360,7 +360,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
     };
 
     function notifyCallbacks(dev) {
-      console.log(dev.tag + ' ' + JSON.stringify(dev.info));
+      AscUtil.debug && console.log(dev.tag + ' ' + JSON.stringify(dev.info));
       dev.callbackAry.forEach(function (callback) {
         callback(dev.info);
       });
