@@ -1,12 +1,11 @@
 'use strict';
-var debug = false;
 if (false === true) var chrome = console.log({runtime: {}, onConnectExternal: {}, onDisconnect: {}, onMessage: {}, resultCode: 0, tcp: {}, tcpServer: {}, getInfo: Function, onAccept: {}, onAcceptError: {}, clientSocketId: 0, onReceive: {}, onReceiveError: {}, getUint32: Function, setUint32: Function, setUint8: Function, setPaused: Function, listen: Function, sockets: {}, addListener: Function, localPort: 0, removeListener: Function, disconnect: Function, connect: Function, bytesSent: 0, socketId: 0, __end: 0});
 
 chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
-  console.log('connected from web page. Args: ', chromeExtensionIPC.name);
-  var args = JSON.parse(chromeExtensionIPC.name), url = args.url, prefServerPort = args.port;
+  console.log(chromeExtensionIPC.name);
+  var args = JSON.parse(chromeExtensionIPC.name), url = args.url, prefServerPort = args.port, debug = args.debug;
   var adbBridgeWebSocket, serverSocketId, serverPort, transportSocketId, connected = false;
-  var devTag = makeLogHead(url), transTag = devTag + '[LocalAdbTransport]', wsTag = devTag + '[AdbBridgeWebSocket]', adbHostTag = devTag + '[->localhost:5037]';
+  var devTag = makeLogHead(url), wsTag = devTag + '[AdbBridgeWebSocket]', transTag = devTag + '[LocalAdbTransport]', serverTag = devTag + '[LocalAdbTransportTcpServer]', adbHostTag = devTag + '[->localhost:5037]';
   chromeExtensionIPC.postMessage('hello');
 
   chromeExtensionIPC.onDisconnect.addListener(function () {
@@ -15,32 +14,31 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
     cleanup('disconnected from web page');
   });
 
-  connectToAdbBridgeWebSocket(function /*on_ok*/() {
+  AdbBridgeWebSocket_connect(function /*on_ok*/() {
     adbBridgeWebSocket.addEventListener('message', function (e) {
-      debug && console.log(wsTag + ' read  ' + hexUint32(e.data.byteLength) + ' bytes and forward to LocalAdbTransport');
+      debug && console.log(wsTag + ' read  ' + hexUint32(e.data.byteLength) + ' bytes' + (debug ? '' : ' and forward to LocalAdbTransport'));
       chrome.sockets.tcp.send(transportSocketId, e.data, function (info) {
         (debug || info.resultCode) && console.log(transTag + (!info.resultCode ? (' write ' + hexUint32(info.bytesSent) + ' bytes') : (' write error: ' + info.resultCode + ' ' + getChromeLastError())));
         info.resultCode && cleanup('failed to write to LocalAdbTransport');
       });
       !connected && (connected = true) && notifyStatus('connected');
     });
-    createTcpServer(function /*on_ok*/() {
-      chrome.sockets.tcpServer.onAccept.addListener(onAccept);
-      chrome.sockets.tcpServer.onAcceptError.addListener(onAccept);
+    LocalAdbTransportTcpServer_create(function /*on_ok*/() {
+      chrome.sockets.tcpServer.onAccept.addListener(LocalAdbTransportTcpServer_onAccept);
+      chrome.sockets.tcpServer.onAcceptError.addListener(LocalAdbTransportTcpServer_onAccept);
       registerToLocalAdbDaemon();
     });
   });
 
-  function onAccept(info) {
+  function LocalAdbTransportTcpServer_onAccept(info) {
     if (info.socketId !== serverSocketId) return;
-    console.log(devTag + '[tcpServer]' + (!info.resultCode ? ('accept connection') : ('accept connection error: ' + info.resultCode + ' ' + getChromeLastError())));
-    !info.resultCode ? handle_LocalAdbTransport(info.clientSocketId) : cleanup('failed to accept connection');
+    console.log(serverTag + (!info.resultCode ? (' connected') : (' accept connection error: ' + info.resultCode + ' ' + getChromeLastError())));
+    !info.resultCode ? LocalAdbTransport_init(info.clientSocketId) : cleanup('failed to accept connection');
   }
 
-  function handle_LocalAdbTransport(socketId) {
+  function LocalAdbTransport_init(socketId) {
     if (transportSocketId) {
-      console.log(devTag + ' abandon accepted connection due to already connected');
-      chrome.sockets.tcp.disconnect(socketId);
+      console.log(devTag + ' abandon connection');
       chrome.sockets.tcp.close(socketId);
       return;
     }
@@ -52,14 +50,14 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
 
   function LocalAdbTransport_onReceive(info) {
     if (info.socketId !== transportSocketId) return;
-    console.log(transTag + (!info.resultCode ? (' read  ' + hexUint32(info.data.byteLength) + ' bytes' + (adbBridgeWebSocket ? ' and forward to AdbBridgeWebSocket' : '')) : (' read  error: ' + info.resultCode + ' ' + getChromeLastError())));
+    (debug || info.resultCode) && console.log(transTag + (!info.resultCode ? (' read  ' + hexUint32(info.data.byteLength) + ' bytes' + (adbBridgeWebSocket && !debug ? ' and forward to AdbBridgeWebSocket' : '')) : (' read  error: ' + info.resultCode + ' ' + getChromeLastError())));
     !info.resultCode ? adbBridgeWebSocket ? adbBridgeWebSocket.send(info.data) : '' : LocalAdbTransport_close();
   }
 
   function registerToLocalAdbDaemon() {
-    console.log(devTag + ' register to local adb daemon');
+    debug && console.log(devTag + ' register to local adb daemon');
     chrome.sockets.tcp.create({}, function (createInfo) {
-      console.log(adbHostTag + ' connect');
+      debug && console.log(adbHostTag + ' connect');
       return chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 5037, function (resultCode) {
         if (resultCode) {
           console.log(adbHostTag + ' connect error: ' + resultCode + ' ' + getChromeLastError());
@@ -74,18 +72,18 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
         for (; i < cnt; i++) {
           dv.setUint8(i, cmd.charCodeAt(i));
         }
-        console.log(adbHostTag + ' write "' + cmd + '"');
+        debug && console.log(adbHostTag + ' write "' + cmd + '"');
         return chrome.sockets.tcp.send(createInfo.socketId, buf, function (info) {
-          console.log(adbHostTag + (!info.resultCode ? (' write OK. Now close') : (' write error: ' + info.resultCode + ' ' + getChromeLastError())));
+          (debug || info.resultCode) && console.log(adbHostTag + (!info.resultCode ? (' write OK. Now close') : (' write error: ' + info.resultCode + ' ' + getChromeLastError())));
           info.resultCode && notifyStatus('failed to write to local adb daemon');
           chrome.sockets.tcp.close(createInfo.socketId);
         });
       }); //end of chrome.sockets.tcp.connect
     }); //end of chrome.sockets.tcp.create
-  } //end of letAdbHostConnectToDev
+  }
 
-  function connectToAdbBridgeWebSocket(on_ok) {
-    console.log(wsTag + ' connect');
+  function AdbBridgeWebSocket_connect(on_ok) {
+    debug && console.log(wsTag + ' connect');
 
     adbBridgeWebSocket = new WebSocket(url);
     adbBridgeWebSocket.binaryType = 'arraybuffer';
@@ -96,9 +94,9 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
       console.log(wsTag + ' opened');
       on_ok();
     });
-    adbBridgeWebSocket.addEventListener('close', function () {
+    adbBridgeWebSocket.addEventListener('close', function (e) {
       if (!adbBridgeWebSocket) return;
-      console.log(wsTag + ' closed');
+      console.log(wsTag + ' closed.' + (e ? ((e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : '')) : ''));
       adbBridgeWebSocket = null;
       cleanup('AdbBridgeWebSocket is closed');
     });
@@ -109,22 +107,22 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
     });
   }
 
-  function createTcpServer(on_ok) {
+  function LocalAdbTransportTcpServer_create(on_ok) {
     chrome.sockets.tcpServer.create({}, function (createInfo) {
       serverSocketId = createInfo.socketId;
-      chrome.sockets.tcpServer.listen(createInfo.socketId, '127.0.0.1', prefServerPort || 0 /*random port*/, 0 /*backlog:auto*/, function (resultCode) {
+      chrome.sockets.tcpServer.listen(createInfo.socketId, '127.0.0.1', prefServerPort || 0 /*random port*/, /*backlog:*/0, function (resultCode) {
         if (resultCode) {
-          console.log(devTag + '[tcpServer] listen error: ' + resultCode + ' ' + getChromeLastError());
-          return cleanup('failed to listen tcp server');
+          console.log(serverTag + ' listen error: ' + resultCode + ' ' + getChromeLastError());
+          return cleanup('failed to listen at port ' + (prefServerPort || 0));
         }
         return chrome.sockets.tcpServer.getInfo(createInfo.socketId, function (info) {
-          console.log(devTag + '[tcpServer] listening at port: ' + info.localPort);
+          debug && console.log(serverTag + ' listening at port: ' + info.localPort);
           serverPort = info.localPort;
           on_ok();
         }); //end of chrome.sockets.tcpServer.getInfo
       }); //end of chrome.sockets.tcpServer.listen
     }); //end of chrome.sockets.tcpServer.create
-  } //end of createTcpServer
+  }
 
   function cleanup(reason) {
     if (cleanup.called) return;
@@ -133,8 +131,8 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
     notifyStatus(reason);
     LocalAdbTransport_close();
     if (serverSocketId) {
-      chrome.sockets.tcpServer.onAccept.removeListener(onAccept);
-      chrome.sockets.tcpServer.onAcceptError.removeListener(onAccept);
+      chrome.sockets.tcpServer.onAccept.removeListener(LocalAdbTransportTcpServer_onAccept);
+      chrome.sockets.tcpServer.onAcceptError.removeListener(LocalAdbTransportTcpServer_onAccept);
       chrome.sockets.tcpServer.close(serverSocketId);
       serverSocketId = 0;
       serverPort = 0;
@@ -151,10 +149,9 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
 
   function LocalAdbTransport_close() {
     if (!transportSocketId) return;
-    console.log(transTag + ' disconnect');
+    console.log(transTag + ' close');
     chrome.sockets.tcp.onReceive.removeListener(LocalAdbTransport_onReceive);
     chrome.sockets.tcp.onReceiveError.removeListener(LocalAdbTransport_onReceive);
-    chrome.sockets.tcp.disconnect(transportSocketId);
     chrome.sockets.tcp.close(transportSocketId);
     transportSocketId = 0;
     connected = false;
@@ -164,7 +161,7 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
   function notifyStatus(status) {
     if (!chromeExtensionIPC) return;
     var info = {conId: serverPort ? 'localhost:' + serverPort : '', connected: connected, status: status};
-    console.log(devTag + ' announce ' + JSON.stringify(info));
+    console.log(devTag + ' ' + JSON.stringify(info));
     chromeExtensionIPC.postMessage(info);
   }
 

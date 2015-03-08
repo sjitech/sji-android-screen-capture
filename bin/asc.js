@@ -16,8 +16,8 @@ var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, 
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeTrans', 'dumpAdbBridgeData', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit'];
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeTrans: false, dumpAdbBridgeData: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit'];
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -983,8 +983,11 @@ function enableWebSocket() {
   });
 }
 
+var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1};
+
 function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
-  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge ' + dev.id + ']';
+  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge  ' + dev.id + ']',
+      buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
 
   adbBridgeWebSocket.binaryType = "arraybuffer";
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
@@ -1002,26 +1005,27 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
     var backend = backendMap[arg1];
-    cfg.logAdbBridgeTrans && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + ((cfg.dumpAdbBridgeData || cmd === 'OPEN') && payloadBuf.length ? ': "' + payloadBuf.toString('ascii') + '"' : ''));
+    (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
+
     if (cmd === 'CNXN') {
       bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.productName + ';ro.product.model=' + dev.productModel + ';ro.product.device=' + dev.productDevice + ';'));
     }
     else if (cmd === 'OPEN') {
-      var service = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)).toString();
+      var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1));
       arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
 
       backend = backend_create(arg1, arg0);
 
-      backend_write(backend, 'host:transport:' + dev.conId); //switch transport
+      backend_write(backend, buf_switchTransport);
 
       var ok = 0, allBuf, len;
       backend.on('data', function (buf) {
-        cfg.logAdbBridgeTrans && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes' + (cfg.dumpAdbBridgeData ? ': "' + buf.toString('ascii') + '"' : ''));
+        cfg.logAdbBridgeDetail && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
         allBuf = allBuf ? Buffer.concat([allBuf, buf]) : buf;
         if (ok < 2 && allBuf.length >= 4) {
           if (allBuf.slice(0, 4).toString() === 'OKAY') {
             ok++;
-            ok === 1 && backend_write(backend, service);
+            ok === 1 && backend_write(backend, backend_makeBuf(serviceBuf));
             ok === 2 && bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
             allBuf = allBuf.slice(4);
           } else {
@@ -1042,8 +1046,8 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
       if (!backend) {
         backend_cleanup(backend);
       } else if (cmd === 'WRTE') {
-        bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
         backend_write(backend, payloadBuf);
+        bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
       } else if (cmd === 'CLSE') {
         backend_cleanup(backend, /*is_frontend_closed*/true);
       }
@@ -1051,7 +1055,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   }
 
   function bridge_write(cmd, arg0, arg1, payloadBuf) {
-    cfg.logAdbBridgeTrans && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes' + (cfg.dumpAdbBridgeData && payloadBuf ? ': "' + payloadBuf.toString('ascii') + '"' : ''));
+    cfg.logAdbBridgeDetail && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes' + (cfg.logAdbBridgeDetail && payloadBuf ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
     var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
     buf.writeUInt8(cmd.charCodeAt(0), 0);
     buf.writeUInt8(cmd.charCodeAt(1), 1);
@@ -1071,9 +1075,8 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   }
 
   function backend_create(backendId, frontendId/*for peer id*/) {
-    var target = {host: dev.adbHost.host || '127.0.0.1', port: dev.adbHost.port || 5037};
-    var tag = bridgeTag + '[' + target.host + ':' + target.port + ' (' + hexUint32(backendId) + ')]';
-    cfg.logAdbBridgeTrans && log(tag + ' connect');
+    var tag = '[AdbBackend ' + dev.id + ']', target = {host: dev.adbHost.host || '127.0.0.1', port: dev.adbHost.port || 5037};
+    cfg.logAdbBridgeDetail && log(tag + ' connect to ' + target.host + ':' + target.port);
 
     var backend = net.connect(target);
 
@@ -1083,11 +1086,11 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
     backendMap[backendId] = backend;
 
     backend.once('close', function () { //closed by peer
-      !backend.__isClosedByPeer && (backend.__isClosedByPeer = true) && cfg.logAdbBridgeTrans && log(tag + ' closed');
+      !backend.__isClosedByPeer && (backend.__isClosedByPeer = true) && cfg.logAdbBridgeDetail && log(tag + ' closed');
       backend_cleanup(backend);
     });
     backend.once('error', function (err) {
-      !backend.__isEnded && !backend.__isClosedByPeer && cfg.logAdbBridgeTrans && log(tag + ' error: ' + err);
+      !backend.__isClosedByPeer && !backend.__isEnded && log(tag + ' error: ' + err);
       backend_cleanup(backend);
     });
 
@@ -1096,27 +1099,24 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
   function backend_cleanup(backend, is_frontend_closed) {
     if (backend && backendMap[backend.__id]) {
-      cfg.logAdbBridgeTrans && log(backend.__tag + ' cleanup');
+      cfg.logAdbBridgeDetail && log(backend.__tag + ' cleanup');
       delete backendMap[backend.__id];
       backend.removeAllListeners('data');
-      !backend.__isClosedByPeer && cfg.logAdbBridgeTrans && log(backend.__tag + ' end')
-      && (backend.__isEnded = true) && backend.end();
+      if (!backend.__isClosedByPeer && !backend.__isEnded) {
+        cfg.logAdbBridgeDetail && log(backend.__tag + ' end');
+        (backend.__isEnded = true) && backend.end();
+      }
       !is_frontend_closed && bridge_write('CLSE', /*arg0:*/0, /*arg1:*/backend.__frontendId);
     }
   }
 
-  function backend_write(backend, bufOrCmdStr) {
-    if (backend) {
-      var buf = bufOrCmdStr;
-      if (Buffer.isBuffer(bufOrCmdStr)) {
-        cfg.logAdbBridgeTrans && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes' + (cfg.dumpAdbBridgeData ? ': "' + buf.toString('ascii') + '"' : ''));
-      } else {
-        buf = new Buffer(bufOrCmdStr);
-        buf = Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
-        cfg.logAdbBridgeTrans && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
-      }
-      backend.write(buf);
-    }
+  function backend_write(backend, buf) {
+    cfg.logAdbBridgeDetail && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
+    backend.write(buf);
+  }
+
+  function backend_makeBuf(buf) {
+    return Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
   }
 }
 
