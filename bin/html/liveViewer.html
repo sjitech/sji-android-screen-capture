@@ -150,7 +150,7 @@
       $lblAdbConId_real.hide();
     } else {
       var called = true;
-      AscUtil.createVirtualAdbDevice(adbBridgeWebSocketUrl, function (info) {
+      AscUtil.createVirtualAdbDevice(adbBridgeWebSocketUrl, function (info/*{conId, connected, status}*/) {
         var created = info.conId ? true : false;
         !called && (called = true) && !created && alert(info.status); //show alert only if device is not created
         $btnAdb.prop('class', 'button ' + created);

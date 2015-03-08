@@ -11,13 +11,16 @@
   },
   "sockets": {
     "tcpServer": {
-      "listen": ""
+      "listen": "127.0.0.1:*"
     },
     "tcp": {
-      "connect": "*:*"
+      "connect": "127.0.0.1:5037"
     }
   },
   "externally_connectable": {
-    "matches": ["https://www.sumatium.com/*", "*://localhost.local:*/*"]
+    "matches": [
+      "https://www.sumatium.com/*",
+      "*://localhost.local:*/*"
+    ]
   }
 }
