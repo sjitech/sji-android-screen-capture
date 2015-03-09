@@ -241,8 +241,8 @@ var AscUtil = {debug: false, showEventsOnly: false};
 
   (function /*Virtual ADB Device functions*/() {
     var isChrome = /chrome/i.test(navigator.userAgent);
-    var err_extension_not_installed = 'you have not installed Chrome extension named "Sumatium Virtual Android Device for ADB"';
-    var CHROME_EXTENSION_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
+    var err_chrome_app_not_installed = 'you have not installed Chrome app named "Sumatium Virtual Android Device for ADB"';
+    var CHROME_APP_ID = 'bfipgicjldmmihdbneggbdmindfbmgfn';
     var devMap = {/*adbBridgeWebSocketUrl:*/};
 
     AscUtil.createVirtualAdbDevice = function (adbBridgeWebSocketUrl, callback/*be called multiple times*/, option/*{timeout, port}*/) {
@@ -260,7 +260,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
 
       callback && dev.callbackAry.push(callback);
 
-      if (dev.chromeExtensionIPC) {
+      if (dev.chromeAppIPC) {
         callback && callback(dev.info);
         return;
       }
@@ -269,21 +269,21 @@ var AscUtil = {debug: false, showEventsOnly: false};
 
       if (chrome && chrome.runtime && typeof(chrome.runtime.connect) === 'function') {
         try {
-          dev.chromeExtensionIPC = chrome.runtime.connect(CHROME_EXTENSION_ID, {
+          dev.chromeAppIPC = chrome.runtime.connect(CHROME_APP_ID, {
             name: JSON.stringify({
               url: dev.url,
               port: option && option.port,
               debug: AscUtil.debug
-            }) //will be applied to chromeExtensionIPC.name
+            }) //will be applied to chromeAppIPC.name
           });
-          if (dev.chromeExtensionIPC) {
+          if (dev.chromeAppIPC) {
 
-            dev.chromeExtensionIPC.onDisconnect.addListener(function () {
-              dev.chromeExtensionIPC = null;
-              cleanup(dev, 'Chrome extension is disconnected');
+            dev.chromeAppIPC.onDisconnect.addListener(function () {
+              dev.chromeAppIPC = null;
+              cleanup(dev, 'Chrome app is disconnected');
             });
 
-            dev.chromeExtensionIPC.onMessage.addListener(function (info) {
+            dev.chromeAppIPC.onMessage.addListener(function (info) {
               if (typeof(info) === 'object') {
                 clearNoResponseTimeout2(dev);
                 dev.info = info;
@@ -291,8 +291,8 @@ var AscUtil = {debug: false, showEventsOnly: false};
               } else { //i.e. "hello"
                 clearNoResponseTimeout1(dev);
                 if (arguments.length === 0) {
-                  AscUtil.debug && console.log(dev.tag + ' Chrome extension error: ' + (chrome.runtime.lastError && chrome.runtime.lastError.message || ''));
-                  cleanup(dev, 'Chrome extension error, or ' + err_extension_not_installed);
+                  AscUtil.debug && console.log(dev.tag + ' Chrome app error: ' + (chrome.runtime.lastError && chrome.runtime.lastError.message || ''));
+                  cleanup(dev, 'Chrome app error, or ' + err_chrome_app_not_installed);
                 }
               }
             });
@@ -309,7 +309,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
         }
       }
 
-      !dev.chromeExtensionIPC && cleanup(isChrome ? err_extension_not_installed : 'you are not using Chrome browser');
+      !dev.chromeAppIPC && cleanup(isChrome ? err_chrome_app_not_installed : 'you are not using Chrome browser');
     };
 
     AscUtil.closeVirtualAdbDevice = function (adbBridgeWebSocketUrl) {
@@ -329,10 +329,10 @@ var AscUtil = {debug: false, showEventsOnly: false};
       delete devMap[dev.url];
       clearNoResponseTimeout1(dev);
       clearNoResponseTimeout2(dev);
-      if (dev.chromeExtensionIPC) {
+      if (dev.chromeAppIPC) {
         try {
-          dev.chromeExtensionIPC.disconnect();
-          dev.chromeExtensionIPC = null;
+          dev.chromeAppIPC.disconnect();
+          dev.chromeAppIPC = null;
         } catch (err) {
           AscUtil.debug && console.log(dev.tag + err);
         }
