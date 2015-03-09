@@ -22,7 +22,6 @@
       <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap" class="deviceSN" title="#adbArgs">#device</span>
         <form action="deviceControl" target="resultIFrame" onsubmit="return confirm('Sure to set/clear protect key?' + ($('#recordingCount_$device').text() || !$('#liveViewCount_$device').text() ? 'All running live view or recording will be stopped.' : ''))" style="display: inline-block; white-space: nowrap; float: right">
-          <input type="hidden" name="action" value="setAccessKey"/>
           <input type="hidden" name="device" value="#device"/>
           <!--<button type="submit" class="internal">Set</button>-->
           <label title="Access Key. Set a key to protect access to live view page, and disable resize from live view page">
@@ -167,6 +166,11 @@
     <div>
       <a class="button @checkDevTimeLimit" href="set@adminUrlSuffix?checkDevTimeLimit=@checkDevTimeLimit_negVal" target="resultIFrame" title="">
         <input type="checkbox" checkedIf_checkDevTimeLimit/>Check Device TimeLimit
+      </a>
+    </div>
+    <div>
+      <a class="button @enableAdbBridge" href="set@adminUrlSuffix?enableAdbBridge=@enableAdbBridge_negVal" target="resultIFrame" title="">
+        <input type="checkbox" checkedIf_enableAdbBridge/>Enable ADB Bridge
       </a>
     </div>
     <form action="set@adminUrlSuffix" target="resultIFrame" style="border-top: 1px solid lightgray; margin-top: 4px">
