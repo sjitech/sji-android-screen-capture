@@ -177,4 +177,4 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
   function hexUint32(d) {
     return ('0000' + d.toString(16)).slice(-4);
   }
-}); //end of onConnectExternal
+});
