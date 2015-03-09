@@ -267,8 +267,8 @@ var AscUtil = {debug: false, showEventsOnly: false};
 
       AscUtil.debug && console.log(dev.tag + ' create');
 
-      if (chrome && chrome.runtime && typeof(chrome.runtime.connect) === 'function') {
-        try {
+      try {
+        if (chrome && chrome.runtime && typeof(chrome.runtime.connect) === 'function') {
           dev.chromeAppIPC = chrome.runtime.connect(CHROME_APP_ID, {
             name: JSON.stringify({
               url: dev.url,
@@ -304,12 +304,12 @@ var AscUtil = {debug: false, showEventsOnly: false};
               cleanup(dev, 'timeout');
             }, option && option.timeout || 5000);
           }
-        } catch (err) {
-          AscUtil.debug && console.log(dev.tag + err);
         }
+      } catch (err) {
+        AscUtil.debug && console.log(dev.tag + err);
       }
 
-      !dev.chromeAppIPC && cleanup(isChrome ? err_chrome_app_not_installed : 'you are not using Chrome browser');
+      !dev.chromeAppIPC && cleanup(dev, isChrome ? err_chrome_app_not_installed : 'you are not using Chrome browser');
     };
 
     AscUtil.closeVirtualAdbDevice = function (adbBridgeWebSocketUrl) {
