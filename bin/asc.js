@@ -1,7 +1,7 @@
 'use strict';
 var old_work_dir = process.cwd();
 process.chdir(__dirname); //set dir of current file as working dir
-var child_process = require('child_process'), fs = require('fs'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'), net = require('net'),
+var child_process = require('child_process'), fs = require('fs'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'), net = require('net'), os = require('os'),
     jsonFile = require('./node_modules/jsonFile.js'), logger = require('./node_modules/logger.js'),
     cfg = util._extend(jsonFile.parse('./config.json'), process.argv[2/*first param*/] && jsonFile.parse(Path.resolve(old_work_dir, process.argv[2]))), //combine user provided configuration file with base file
     log = logger.create(cfg && cfg.log_filePath, cfg && cfg.log_keepOldFileDays);
@@ -15,7 +15,8 @@ var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: i
 var ERR_DEV_NOT_FOUND = 'error: device not found', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
-    re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
+    cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
+    re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit'];
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
@@ -193,7 +194,7 @@ function setDevId(dev) {
   dev.var = dev.sn.replace(/[^0-9a-zA-Z]/g, function (match) {
     return ('_' + match.charCodeAt(0).toString(16) + '_');
   }) + (devGrp.length === 0 ? '' : '_' + (devGrp.length + 1));
-  dev.re_lastViewId_cookie = new RegExp('\\b' + '_' + cfg.adminWeb_port + '_' + 'viewId_' + dev.var + '=([^;]+)');
+  dev.re_lastViewId_cookie = new RegExp('\\b' + cookie_id_head + 'viewId_' + dev.var + '=([^;]+)');
   return (devGrp[devGrp.length] = dev);
 }
 function getDev(id) {
@@ -543,7 +544,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     endCaptureConsumer(res);
   });
   res.setHeader && res.setHeader('Content-Type', q.type === 'ajpg' ? 'multipart/x-mixed-replace;boundary=MULTIPART_BOUNDARY' : 'image/jpeg');
-  res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
+  res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', cookie_id_head + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
     (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.proc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
@@ -552,6 +553,23 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
   q.type === 'jpg' && dev.capture.image && endCaptureConsumer(res, dev.capture.image.buf);
   q.type === 'jpg' && dev.capture.image && dev.capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
+}
+function doRecord(dev, q/*same as capture*/) {
+  var filename = querystring.escape(dev.sn) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
+  var childProc = spawn('[REC ' + dev.id + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
+      '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+      '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
+      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
+  ), function/*on_close*/() {
+    dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + dev.subOutputDir + '/' + filename, log.nonEmpty);
+  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
+  childProc.stdin.__feedConvertTimer = setInterval(function () {
+    dev.capture.image && write(childProc.stdin, dev.capture.image.buf);
+  }, 1000 / cfg.videoFileFrameRate);
+  childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
+  childProc.stdin.__tag = REC_TAG;
+  doCapture(dev, childProc.stdin, q);
+  return 'OK: ' + filename;
 }
 function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/) {
   var dev = getDev(res.q.devId);
@@ -575,23 +593,6 @@ function endCaptureProcess(dev) {
   procMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
   dev.capture = null;
   scheduleUpdateLiveUI();
-}
-function doRecord(dev, q/*same as capture*/) {
-  var filename = querystring.escape(dev.sn) + '~rec_' + (dev.capture && dev.capture.q || q)._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
-  var childProc = spawn('[REC ' + dev.id + ' ' + (dev.capture && dev.capture.q || q)._hash + ']', cfg.ffmpeg, [].concat(
-      '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/,
-      '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
-  ), function/*on_close*/() {
-    dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + dev.subOutputDir + '/' + filename, log.nonEmpty);
-  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true, noMergeStderr: true});
-  childProc.stdin.__feedConvertTimer = setInterval(function () {
-    dev.capture.image && write(childProc.stdin, dev.capture.image.buf);
-  }, 1000 / cfg.videoFileFrameRate);
-  childProc.stdin.__recordTimer = global.setTimeout(endCaptureConsumer, cfg.maxRecordTime * 1000, childProc.stdin);
-  childProc.stdin.__tag = REC_TAG;
-  doCapture(dev, childProc.stdin, q);
-  return 'OK: ' + filename;
 }
 
 function scheduleUpdateLiveUI() {
@@ -888,7 +889,7 @@ adminWeb_handlerMap['/'] = function (dev, q, urlPath, req, res) {
   switchList.forEach(function (k) { //set enable or disable of some config buttons for /var? command
     html = html.replace(new RegExp('@' + k + '\\b', 'g'), cfg[k]).replace(new RegExp('@' + k + '_negVal\\b', 'g'), String(!cfg[k])).replace(new RegExp('checkedIf_' + k + '\\b', 'g'), cfg[k] ? 'checked' : '');
   });
-  cfg.adminKey && res.setHeader('Set-Cookie', '_' + cfg.adminWeb_port + '_' + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
+  cfg.adminKey && res.setHeader('Set-Cookie', cookie_id_head + 'adminKey=' + querystring.escape(cfg.adminKey) + '; HttpOnly');
   end(res, html.replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
     return (cfg.showDisconnectedDevices ? devAry : devAry.filter(function (dev) {
       return dev.adbHost && dev.status !== ERR_DEV_NOT_FOUND;
