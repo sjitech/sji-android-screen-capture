@@ -113,10 +113,14 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
       chrome.sockets.tcpServer.listen(createInfo.socketId, '127.0.0.1', prefServerPort || 0 /*random port*/, /*backlog:*/0, function (resultCode) {
         if (resultCode) {
           console.log(serverTag + ' listen error: ' + resultCode + ' ' + getChromeLastError());
-          return cleanup('failed to listen at port ' + (prefServerPort || 0));
+          return cleanup('failed to listen at port ' + (prefServerPort || '0(any)') + ' (in localhost)');
         }
         return chrome.sockets.tcpServer.getInfo(createInfo.socketId, function (info) {
-          debug && console.log(serverTag + ' listening at port: ' + info.localPort);
+          if (!info.localPort) {
+            console.log(serverTag + ' listen error: ' + getChromeLastError());
+            return cleanup('failed to listen at port ' + (prefServerPort || '0(any)') + ' (in localhost)');
+          }
+          debug && console.log(serverTag + ' listening at port: ' + info.localPort + ' (in localhost)');
           serverPort = info.localPort;
           on_ok();
         }); //end of chrome.sockets.tcpServer.getInfo
