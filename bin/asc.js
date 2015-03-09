@@ -991,7 +991,7 @@ function enableWebSocket() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), autoAcceptConnections: false}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
-    log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (' origin: ' + wsConReq.origin || ''));
+    log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
     if ((!cfg.enableAdbBridge || !dev.enableAdbBridge) && (chk.err = 'disabled')
         || (urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
         || (!dev && (chk.err = '`device`: unknown device'))
