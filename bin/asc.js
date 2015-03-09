@@ -113,6 +113,11 @@ function chk(name, value /*, next parameters: candidateArray | candidateValue | 
   return true;
 }
 
+function getHttpSourceAddr(req) {
+  var ip = req.headers['x-real-ip'] /*reported by nginx reverse proxy*/, directIp = req.connection.remoteAddress;
+  directIp = directIp === '::ffff:127.0.0.1' ? 'localhost' : directIp === '127.0.0.1' ? 'localhost' : directIp;
+  return (ip ? (ip + ' ') : '') + directIp + ':' + req.connection.remotePort;
+}
 function write(res, buf) {
   return !res.__isEnded && !res.__isClosedByPeer && res.write(buf);
 }
@@ -668,7 +673,7 @@ function streamWeb_handler(req, res) {
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && getDev(q.device);
   dev && (q.devId = dev.id);
   res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp));
-  res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
+  res.__log && log((res.__tag = '[' + cfg.streamWeb_protocol + '_' + (++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
@@ -825,7 +830,7 @@ function adminWeb_handler(req, res) {
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, urlExt = Path.extname(urlPath), dev = q.device && getDev(q.device);
   dev && (q.devId = dev.id);
   res.__log = cfg.logAllHttpReqRes || !(urlExt === '.html' || urlExt === '.js' || urlExt === '.css' || urlPath === '/getFile' || urlPath === '/touch' || (urlPath === '/capture' && q.type === 'jpg' && q.timestamp) || urlPath === '/' || urlPath === '/status' || urlPath === '/getServerLog' + cfg.adminUrlSuffix || urlPath === '/cmd' + cfg.adminUrlSuffix);
-  res.__log && log((res.__tag = '[' + cfg.adminWeb_protocol.toUpperCase() + '_' + (++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
+  res.__log && log((res.__tag = '[' + cfg.adminWeb_protocol.toUpperCase() + '_' + (++httpSeq) + ']') + ' ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   if (urlExt === '.js' || urlExt === '.css') {
     return end(res, htmlCache[urlPath], urlExt === '.css' ? 'text/css' : urlExt === '.js' ? 'text/javascript' : '');
   }
@@ -971,10 +976,10 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
 };
 
 function enableWebSocket() {
-  new websocket.server({httpServer: streamWeb ? [adminWeb, streamWeb] : [adminWeb]}).on('request', function (wsConReq) {
+  new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), autoAcceptConnections: false}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
-    log(tag + ' ' + req.url + (cfg.logHttpReqDetail ? ' [from ' + req.connection.remoteAddress + ':' + req.connection.remotePort + ']' : '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (' origin: ' + wsConReq.origin || ''));
+    log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (' origin: ' + wsConReq.origin || ''));
     if (urlPath !== '/adbBridge' && (chk.err = 'invalid request') || !dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied') || dev.status !== 'OK' && (chk.err = 'error: device not ready')) {
       log(tag + ' reject');
       return wsConReq.reject();
