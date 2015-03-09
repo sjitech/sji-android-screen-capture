@@ -82,7 +82,7 @@
     <a id="btnAdb" class="button false" href="javascript:" title="Enable/Disable ADB from local">
       <input type="checkbox"/>ADB
     </a>
-    <div id="lblAdbConId_want">localhost:<input type="text" id="adbPort" value="" style="width:25px" /></div>
+    <div id="lblAdbConId_want">localhost:<input type="text" id="adbPort" value="" style="width:35px" /></div>
     <div id="lblAdbConId_real" style="display: none"></div>
   </div>
 </div>
@@ -149,7 +149,7 @@
       $lblAdbConId_want.show();
       $lblAdbConId_real.hide();
     } else {
-      var called = true;
+      var called = false;
       AscUtil.createVirtualAdbDevice(adbBridgeWebSocketUrl, function (info/*{conId, connected, status}*/) {
         var created = info.conId ? true : false;
         !called && (called = true) && !created && alert(info.status); //show alert only if device is not created
