@@ -95,6 +95,9 @@ function getTimestamp() {
 function stringifyTimestampShort(ts) {
   return ts.slice(4, 6) + '/' + ts.slice(6, 8) + ' ' + ts.slice(8, 10) + ':' + ts.slice(10, 12) + ':' + ts.slice(12, 14);
 }
+function buf2ascii(buf) {
+  return buf.toString('ascii').replace('\0', '\\0');
+}
 
 function chk(name, value /*, next parameters: candidateArray | candidateValue | candidateMinValue, candidateMaxValue*/) {
   if (arguments.length === 3) { //check against array
@@ -1028,7 +1031,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
     var backend = backendMap[arg1];
-    (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
+    (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(bridgeTag + ' read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
 
     if (cmd === 'CNXN') {
       bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.productName + ';ro.product.model=' + dev.productModel + ';ro.product.device=' + dev.productDevice + ';'));
@@ -1043,7 +1046,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
 
       var ok = 0, allBuf, len;
       backend.on('data', function (buf) {
-        cfg.logAdbBridgeDetail && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
+        cfg.logAdbBridgeDetail && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
         allBuf = allBuf ? Buffer.concat([allBuf, buf]) : buf;
         if (ok < 2 && allBuf.length >= 4) {
           if (allBuf.slice(0, 4).toString() === 'OKAY') {
@@ -1078,7 +1081,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   }
 
   function bridge_write(cmd, arg0, arg1, payloadBuf) {
-    cfg.logAdbBridgeDetail && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes' + (cfg.logAdbBridgeDetail && payloadBuf ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
+    cfg.logAdbBridgeDetail && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes' + (cfg.logAdbBridgeDetail && payloadBuf ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
     var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
     buf.writeUInt8(cmd.charCodeAt(0), 0);
     buf.writeUInt8(cmd.charCodeAt(1), 1);
@@ -1134,7 +1137,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   }
 
   function backend_write(backend, buf) {
-    cfg.logAdbBridgeDetail && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
+    cfg.logAdbBridgeDetail && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
     backend.write(buf);
   }
 
