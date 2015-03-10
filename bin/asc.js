@@ -18,7 +18,7 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'enableAdbBridge'];
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -605,7 +605,6 @@ function endCaptureProcess(dev) {
   procMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
   dev.capture = null;
   scheduleUpdateLiveUI();
-  setDeviceOrientation(dev, 'free');
 }
 
 function scheduleUpdateLiveUI() {
@@ -855,17 +854,16 @@ function adminWeb_handler(req, res) {
   }
 }
 adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
-  q.action === 'setAccessKey' && (q.action = ''); //support old style request
   if (!dev && (chk.err = '`device`: unknown device')
-      || q.action && !chk('action', q.action, ['startRecording', 'stopRecording', 'stopLiveView'])
+      || q.action && !chk('action', q.action, ['startRecording', 'stopRecording', 'stopLiveView', 'setAccessKey'])
       || q.action === 'startRecording' && !chkCaptureParameter(dev, req, q, /*force_ajpg:*/true, /*forRecording*/true)
       || q.orientation && !chk('orientation', q.orientation, ['landscape', 'portrait', 'free'])
-      || q.enableAdbBridge && !chk('enableAdbBridge', q.enableAdbBridge, ['true', 'false'])
+      || q.adbBridge && !chk('adbBridge', q.adbBridge, ['true', 'false'])
   ) {
     return end(res, chk.err);
   }
   q._diff_accessKey = q.accessKey !== undefined && q.accessKey !== dev.accessKey && q.accessKey !== dev.accessKey.slice(11);
-  if (q.subOutputDir !== undefined) {
+  if (q.subOutputDir !== undefined && q.subOutputDir !== dev.subOutputDir) {
     try {
       !fs.existsSync(cfg.outputDir + '/' + q.subOutputDir) && fs.mkdirSync(cfg.outputDir + '/' + q.subOutputDir);
     } catch (err) {
@@ -873,8 +871,6 @@ adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
     }
     dev.subOutputDir = q.subOutputDir;
   }
-  q.enableAdbBridge && (dev.enableAdbBridge = (q.enableAdbBridge === 'true'));
-
   forEachValueIn(dev.consumerMap, function (res) {
     (q._diff_accessKey || (q.action === 'stopRecording' && res.__tag === REC_TAG) || (q.action === 'startRecording' && res.__tag === REC_TAG) || (q.action === 'stopLiveView' && res.__tag !== REC_TAG))
     && endCaptureConsumer(res);
@@ -884,6 +880,11 @@ adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
     scheduleUpdateWholeUI();
     dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
   }
+  if (dev.adbBridgeWebSocket && (q._diff_accessKey || q.adbBridge === 'false')) {
+    dev.adbBridgeWebSocket.close(NaN/*normal exit*/, 'on demand');
+    dev.adbBridgeWebSocket = null;
+  }
+  q.adbBridge && (dev.enableAdbBridge = (q.adbBridge === 'true'));
   q.orientation && setDeviceOrientation(dev, q.orientation);
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 };
@@ -990,7 +991,7 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   scheduleUpdateLiveUI();
 };
 
-function enableWebSocket() {
+function adbBridgeWebSocketServer_create() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), autoAcceptConnections: false}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
@@ -1001,26 +1002,29 @@ function enableWebSocket() {
         || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))
         || (dev.status !== 'OK' && (chk.err = 'error: device not ready'))
     ) {
-      log(tag + ' reject');
+      log(tag + ' reject. reason: ' + chk.err);
       return wsConReq.reject();
     }
     log(tag + ' accept');
-    return handle_adbBridgeWebsocket_connection(wsConReq.accept(null, wsConReq.origin), dev);
+    dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(NaN/*normal*/, 'new adbBridge is requested');
+    dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
+    dev.adbBridgeWebSocket.__httpTag = tag;
+    return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev);
   });
 }
 
 var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1};
 
 function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
-  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge  ' + dev.id + ']',
-      buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
-
+  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge  ' + dev.id + ']', buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
   adbBridgeWebSocket.binaryType = "arraybuffer";
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
-    log(bridgeTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
+    log(bridgeTag + adbBridgeWebSocket.__httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
     forEachValueIn(backendMap, backend_cleanup);
   });
-
+  adbBridgeWebSocket.on('error', function (err) {
+    log(bridgeTag + ' error: ' + err);
+  });
   return adbBridgeWebSocket.on('message', function (msg) {
     var allBuf = adbBridgeWebSocket.__recvBuf ? Buffer.concat([adbBridgeWebSocket.__recvBuf, msg.binaryData]) : msg.binaryData, payloadLen;
     for (; allBuf.length >= 24 && allBuf.length >= 24 + (payloadLen = allBuf.readUInt32LE(12)); allBuf = allBuf.slice(24 + payloadLen)) {
@@ -1038,7 +1042,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
     }
     else if (cmd === 'OPEN') {
       var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1));
-      arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
+      arg1/*as localId*/ = (nextBackendId === 0xffffffff ? (nextBackendId = 1) : ++nextBackendId);
 
       backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
 
@@ -1078,31 +1082,32 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
         backend_cleanup(backend, /*is_frontend_closed*/true);
       }
     }
-  }
+  } //end of handle_adb_command
 
   function bridge_write(cmd, arg0, arg1, payloadBuf) {
-    cfg.logAdbBridgeDetail && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf ? payloadBuf.length : 0) + ' bytes' + (cfg.logAdbBridgeDetail && payloadBuf ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
-    var buf = new Buffer(24 + (payloadBuf ? payloadBuf.length : 0));
+    payloadBuf = payloadBuf || EMPTY_BUF;
+    cfg.logAdbBridgeDetail && log(bridgeTag + ' write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (cfg.logAdbBridgeDetail ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
+    var buf = new Buffer(24 + payloadBuf.length);
     buf.writeUInt8(cmd.charCodeAt(0), 0);
     buf.writeUInt8(cmd.charCodeAt(1), 1);
     buf.writeUInt8(cmd.charCodeAt(2), 2);
     buf.writeUInt8(cmd.charCodeAt(3), 3);
     buf.writeUInt32LE(arg0, 4);
     buf.writeUInt32LE(arg1, 8);
-    buf.writeUInt32LE((payloadBuf ? payloadBuf.length : 0), 12);
+    buf.writeUInt32LE(payloadBuf.length, 12);
     buf.writeUInt32LE(buf.readUInt32LE(0) ^ 0xffffffff, 20, /*noAssert:*/true);
-    var sum = 0;
-    for (var cnt = (payloadBuf ? payloadBuf.length : 0) - 1; cnt >= 0; cnt--) {
-      sum += payloadBuf[cnt];
+    var sum = 0, i;
+    for (i = payloadBuf.length - 1; i >= 0; i--) {
+      sum += payloadBuf[i];
     }
     buf.writeUInt32LE(sum, 16);
-    payloadBuf && payloadBuf.copy(buf, 24);
+    payloadBuf.copy(buf, 24);
     adbBridgeWebSocket.send(buf);
   }
 
   function backend_create(backendId, frontendId/*for peer id*/) {
     var tag = '[AdbBackend ' + dev.id + ']', target = {host: dev.adbHost.host || '127.0.0.1', port: dev.adbHost.port || 5037};
-    cfg.logAdbBridgeDetail && log(tag + ' connect to ' + target.host + ':' + target.port);
+    cfg.logAdbBridgeDetail && log(tag + +hexUint32(backendId) + ' connect to ' + target.host + ':' + target.port);
 
     var backend = net.connect(target);
 
@@ -1144,7 +1149,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
   function backend_makeBuf(buf) {
     return Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
   }
-}
+} // end of handle_adbBridgeWebsocket_connection
 
 function reloadResource() {
   scheduleUpdateWholeUI();
@@ -1171,7 +1176,7 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
       websocket = require('websocket')
     } catch (err) {
     }
-    !websocket && log('Failed to check websocket lib (you can install it from https://github.com/theturtle32/WebSocket-Node ). You will not be able to use some advanced function(i.e. AdbBridge via browser)', {stderr: true});
+    !websocket && log('Failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser). You can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node"', {stderr: true});
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, adminWeb_handler) : require('http').createServer(adminWeb_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       if (cfg.streamWeb_port) {
@@ -1185,6 +1190,6 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
     });
     scanAllDevices();
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
-    websocket && enableWebSocket();
+    websocket && adbBridgeWebSocketServer_create();
   }, {timeout: 10 * 1000, log: true});
 }, {timeout: 30 * 1000, log: true});
