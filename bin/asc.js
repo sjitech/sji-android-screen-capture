@@ -994,7 +994,7 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
 function adbBridgeWebSocketServer_create() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), autoAcceptConnections: false}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
-    var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
+    var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device), bridgeTag = dev ? '[AdbBridge  ' + dev.id + ']' : '';
     log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
     if ((!cfg.enableAdbBridge || !dev.enableAdbBridge) && (chk.err = 'disabled')
         || (urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
@@ -1002,30 +1002,30 @@ function adbBridgeWebSocketServer_create() {
         || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))
         || (dev.status !== 'OK' && (chk.err = 'error: device not ready'))
     ) {
-      log(tag + ' reject. reason: ' + chk.err);
+      log(bridgeTag + tag + ' reject. reason: ' + chk.err);
       return wsConReq.reject();
     }
-    log(tag + ' accept');
+    log(bridgeTag + tag + ' accept');
     dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(''/*normal*/, 'new adbBridge is requested');
     dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
-    dev.adbBridgeWebSocket.__httpTag = tag;
-    return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev);
+    return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev, bridgeTag, tag);
   });
 }
 
 var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1};
 
-function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
-  var backendMap = {/*id:*/}, nextBackendId = 0, bridgeTag = '[AdbBridge  ' + dev.id + ']', buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
+function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag, httpTag) {
+  var backendMap = {/*id:*/}, nextBackendId = 0, buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
   adbBridgeWebSocket.binaryType = "arraybuffer";
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
-    log(bridgeTag + adbBridgeWebSocket.__httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
+    log(bridgeTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
     forEachValueIn(backendMap, backend_cleanup);
   });
   adbBridgeWebSocket.on('error', function (err) {
-    log(bridgeTag + ' error: ' + err);
+    log(bridgeTag + httpTag + ' error: ' + err);
   });
   return adbBridgeWebSocket.on('message', function (msg) {
+    if (adbBridgeWebSocket !== dev.adbBridgeWebSocket) return;
     var allBuf = adbBridgeWebSocket.__recvBuf ? Buffer.concat([adbBridgeWebSocket.__recvBuf, msg.binaryData]) : msg.binaryData, payloadLen;
     for (; allBuf.length >= 24 && allBuf.length >= 24 + (payloadLen = allBuf.readUInt32LE(12)); allBuf = allBuf.slice(24 + payloadLen)) {
       handle_adb_command(/*cmd:*/ allBuf.slice(0, 4).toString(), /*arg0:*/ allBuf.readUInt32LE(4), /*arg1:*/ allBuf.readUInt32LE(8), /*payloadBuf:*/ allBuf.slice(24, 24 + payloadLen));

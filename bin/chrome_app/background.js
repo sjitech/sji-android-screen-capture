@@ -96,13 +96,13 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
     });
     adbBridgeWebSocket.addEventListener('close', function (e) {
       if (!adbBridgeWebSocket) return;
-      console.log(wsTag + ' closed.' + (e ? ((e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : '')) : ''));
+      console.log(wsTag + ' closed.' + (e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : ''));
       adbBridgeWebSocket = null;
       cleanup('AdbBridgeWebSocket is closed');
     });
-    adbBridgeWebSocket.addEventListener('error', function (err) {
+    adbBridgeWebSocket.addEventListener('error', function () {
       if (!adbBridgeWebSocket) return;
-      console.log(wsTag + ' ' + err);
+      console.log(wsTag + ' error');
       cleanup('AdbBridgeWebSocket error');
     });
   }
@@ -113,14 +113,14 @@ chrome.runtime.onConnectExternal.addListener(function (chromeExtensionIPC) {
       chrome.sockets.tcpServer.listen(createInfo.socketId, '127.0.0.1', prefServerPort || 0 /*random port*/, /*backlog:*/0, function (resultCode) {
         if (resultCode) {
           console.log(serverTag + ' listen error: ' + resultCode + ' ' + getChromeLastError());
-          return cleanup('failed to listen at port ' + (prefServerPort || '0(any)') + ' (in localhost)');
+          return cleanup('failed to listen at ' + (prefServerPort ? 'specified port' : 'any port') + ' in localhost');
         }
         return chrome.sockets.tcpServer.getInfo(createInfo.socketId, function (info) {
           if (!info.localPort) {
             console.log(serverTag + ' listen error: ' + getChromeLastError());
-            return cleanup('failed to listen at port ' + (prefServerPort || '0(any)') + ' (in localhost)');
+            return cleanup('failed to listen at ' + (prefServerPort ? 'specified port' : 'any port') + ' in localhost');
           }
-          debug && console.log(serverTag + ' listening at port: ' + info.localPort + ' (in localhost)');
+          debug && console.log(serverTag + ' listening at port ' + info.localPort + ' in localhost');
           serverPort = info.localPort;
           on_ok();
         }); //end of chrome.sockets.tcpServer.getInfo
