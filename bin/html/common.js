@@ -242,7 +242,7 @@ var AscUtil = {debug: false, showEventsOnly: false};
   (function /*Virtual ADB Device functions*/() {
     var isChrome = /chrome/i.test(navigator.userAgent);
     var err_chrome_app_not_installed = 'You have not installed Chrome app named "Sumatium ADB Bridge"';
-    var CHROME_APP_ID = 'hkfpolcfchpgmegencopemjjpdlnknjh';
+    var CHROME_APP_ID = 'egjnjhhnnnjgolnphfhmhcjoiembdfmo';
     var devMap = {/*adbBridgeWebSocketUrl:*/};
 
     AscUtil.createVirtualAdbDevice = function (adbBridgeWebSocketUrl, callback/*be called multiple times*/, option/*{timeout, port}*/) {

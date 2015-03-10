@@ -13,3 +13,4 @@ src/**/std_toolchain
 bin/usb
 *trial*
 .idea
+bin/chrome_app.zip
