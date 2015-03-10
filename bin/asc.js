@@ -881,7 +881,7 @@ adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
     dev.accessKey = (dev.masterMode = !!q.accessKey) ? getTimestamp().slice(4, 14) + '_' + q.accessKey : newAutoAccessKey();
   }
   if (dev.adbBridgeWebSocket && (q._diff_accessKey || q.adbBridge === 'false')) {
-    dev.adbBridgeWebSocket.close(NaN/*normal exit*/, 'on demand');
+    dev.adbBridgeWebSocket.close(''/*normal exit*/, 'on demand');
     dev.adbBridgeWebSocket = null;
   }
   q.adbBridge && (dev.enableAdbBridge = (q.adbBridge === 'true'));
@@ -1006,7 +1006,7 @@ function adbBridgeWebSocketServer_create() {
       return wsConReq.reject();
     }
     log(tag + ' accept');
-    dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(NaN/*normal*/, 'new adbBridge is requested');
+    dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(''/*normal*/, 'new adbBridge is requested');
     dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
     dev.adbBridgeWebSocket.__httpTag = tag;
     return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev);
