@@ -1040,7 +1040,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
       var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1));
       arg1 = (nextBackendId === 0xffffffff ? 0 : ++nextBackendId);
 
-      backend = backend_create(arg1, arg0);
+      backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
 
       backend_write(backend, buf_switchTransport);
 
@@ -1052,7 +1052,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
           if (allBuf.slice(0, 4).toString() === 'OKAY') {
             ok++;
             ok === 1 && backend_write(backend, backend_makeBuf(serviceBuf));
-            ok === 2 && bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
+            ok === 2 && bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
             allBuf = allBuf.slice(4);
           } else {
             backend_cleanup(backend);
@@ -1062,7 +1062,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
         if (ok === 2) {
           while (allBuf.length) {
             len = Math.min(4096, allBuf.length);
-            bridge_write('WRTE', /*local:*/arg1, /*remote:*/arg0, allBuf.slice(0, len));
+            bridge_write('WRTE', /*localId:*/arg1, /*remoteId:*/arg0, allBuf.slice(0, len));
             allBuf = allBuf.slice(len);
           }
         }
@@ -1073,7 +1073,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
         backend_cleanup(backend);
       } else if (cmd === 'WRTE') {
         backend_write(backend, payloadBuf);
-        bridge_write('OKAY', /*local:*/arg1, /*remote:*/arg0);
+        bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
       } else if (cmd === 'CLSE') {
         backend_cleanup(backend, /*is_frontend_closed*/true);
       }
@@ -1132,7 +1132,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev) {
         cfg.logAdbBridgeDetail && log(backend.__tag + ' end');
         (backend.__isEnded = true) && backend.end();
       }
-      !is_frontend_closed && bridge_write('CLSE', /*arg0:*/0, /*arg1:*/backend.__frontendId);
+      !is_frontend_closed && bridge_write('CLSE', /*localId:*/0, /*remoteId:*/backend.__frontendId);
     }
   }
 
