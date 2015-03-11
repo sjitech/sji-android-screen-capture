@@ -1016,7 +1016,6 @@ var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1}
 
 function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag, httpTag) {
   var backendMap = {/*id:*/}, nextBackendId = 0, buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
-  adbBridgeWebSocket.binaryType = "arraybuffer";
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
     log(bridgeTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
     forEachValueIn(backendMap, backend_cleanup);
