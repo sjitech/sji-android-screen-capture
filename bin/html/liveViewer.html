@@ -84,6 +84,9 @@
     </a>
     <div id="lblAdbConId_want">localhost:<input type="text" id="adbPort" value="" style="width:35px" /></div>
     <div id="lblAdbConId_real" style="display: none"></div>
+    <div>
+      <a id="installAdbBridge" href="https://chrome.google.com/webstore/detail/sumatium-adb-bridge/egjnjhhnnnjgolnphfhmhcjoiembdfmo" target="InstallAdbBridge" style="display: none;">Install Sumatium ADB Bridge</a>
+    </div>
   </div>
 </div>
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
@@ -152,7 +155,17 @@
       var called = false;
       AscUtil.createVirtualAdbDevice(adbBridgeWebSocketUrl, function (info/*{conId, connected, status}*/) {
         var created = info.conId ? true : false;
-        !called && (called = true) && !created && alert(info.status); //show alert only if device is not created
+        if (!called) { //show alert only if device is not created
+          called = true;
+          if (created) {
+            $('#installAdbBridge').hide();
+          } else {
+            if (info.status === 'Chrome app is disconnected' || info.status.indexOf('not installed') >= 0) {
+              $('#installAdbBridge').show();
+              alert(info.status + '\n' + 'You have not installed Chrome app named "Sumatium ADB Bridge" or not allowed to use it. Please install it from the "Install Sumatium ADB Bridge"');
+            }
+          }
+        }
         $btnAdb.prop('class', 'button ' + created);
         $chkAdb.prop('checked', created);
         if (created) {
