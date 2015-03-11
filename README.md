@@ -25,7 +25,7 @@ New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on
 New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers<br>
 New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
 <b>New 2014/10/27: Successfully capture 30 screen per second in android 4.2-4.4, any size, clearly and almost 0% CPU usage!, but ffmpeg in android is too slow. I will try to optimize it or use native Media Encoder which is hardware assisted.</b><br>
-<b>New 2014/10/27: *****Found possibility to capture 30 screen per second in android 4.0-4.1*****</b><br>
+<b>New 2015/03/09: now can map device to browser user's PC, let browser user use adb/ADT/Eclipse/AndroidStudio to develop app to the mapped virtual device.  All this are done via Chrome browser (WebSocket + Chrome App)</b><br>
 <b>New 2014/11/07: We have a plan to capture audio</b><br>
 <br>
 ==========================
