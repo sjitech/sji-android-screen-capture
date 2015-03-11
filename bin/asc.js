@@ -17,7 +17,7 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'enableAdbBridge'];
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
@@ -194,8 +194,8 @@ function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port, may
   return (!adbHost ? devGrp[0] : devGrp.some(function (dev) {
         return (dev.adbHost ? (dev.adbHost === adbHost) : ((dev.adbHost = adbHost) && (dev.adbArgs = adbHost.adbArgs.concat('-s', conId)))) && (foundDev = dev);
       }) && foundDev) || setDevId((devAry[devAry.length] = {
-        conId: conId, sn: conId, info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {},
-        adbHost: adbHost, adbArgs: (adbHost ? adbHost.adbArgs : []).concat('-s', conId), enableAdbBridge: true,
+        conId: conId, sn: conId, info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, i: devAry.length,
+        adbHost: adbHost, adbArgs: (adbHost ? adbHost.adbArgs : []).concat('-s', conId), adbBridge: true,
         masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
       }));
 }
@@ -884,7 +884,7 @@ adminWeb_handlerMap['/deviceControl'] = function (dev, q, urlPath, req, res) {
     dev.adbBridgeWebSocket.close(''/*normal exit*/, 'on demand');
     dev.adbBridgeWebSocket = null;
   }
-  q.adbBridge && (dev.enableAdbBridge = (q.adbBridge === 'true'));
+  q.adbBridge && (dev.adbBridge = (q.adbBridge === 'true'));
   q.orientation && setDeviceOrientation(dev, q.orientation);
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 };
@@ -996,7 +996,7 @@ function adbBridgeWebSocketServer_create() {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device), bridgeTag = dev ? '[AdbBridge  ' + dev.id + ']' : '';
     log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
-    if ((!cfg.enableAdbBridge || !dev.enableAdbBridge) && (chk.err = 'disabled')
+    if ((!cfg.adbBridge || !dev.adbBridge) && (chk.err = 'disabled')
         || (urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
         || (!dev && (chk.err = '`device`: unknown device'))
         || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))

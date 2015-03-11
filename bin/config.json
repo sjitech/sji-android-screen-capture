@@ -23,7 +23,7 @@
   "fastResize": true,
   "fastCapture": true,
   "checkDevTimeLimit": true,
-  "enableAdbBridge": true,
+  "adbBridge": true,
 
   //log settings
   "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
