@@ -6,7 +6,6 @@ New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol need
 <b>Only if your company really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br><br>
 
 <b>New: I can provide a experience site for you to view and touch my android device remotely</b><br><br>
-==========================
 
 No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
 This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
@@ -26,7 +25,6 @@ New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers
 New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
 <b>New 2014/10/27: Successfully capture 30 screen per second in android 4.2-4.4, any size, clearly and almost 0% CPU usage!, but ffmpeg in android is too slow. I will try to optimize it or use native Media Encoder which is hardware assisted.</b><br>
 <b>New 2015/03/09: now can map device to browser user's PC, let browser user use adb/ADT/Eclipse/AndroidStudio to develop app to the mapped virtual device.  All this are done via Chrome browser (WebSocket + Chrome App)</b><br>
-<b>New 2014/11/07: We have a plan to capture audio</b><br>
 <br>
 ==========================
 ==========================
@@ -70,7 +68,7 @@ Or you can specify your own configuration file which can be partially copied fro
 node dir_of_this_project/bin/asc.js dir_of_your_config/myConfig.json
 </code></pre>
 3.<b>Show video/animated image of android from PC by browsing <a href="http://localhost:3000/">http://localhost:3000/</a></b>  <br>
-Support <a href="http://www.webmproject.org/">WebM</a> video and <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
+Support <a href="http://en.wikipedia.org/wiki/H.264/MPEG-4_AVC">H.264/MP4</a> and Animated JPEG/PNG by <a href="http://en.wikipedia.org/wiki/MIME#Mixed-Replace">Multi-Part HTTP Response</a>.
 Chrome,Firefox,Safari are well supported.
 <br> <br>
 
