@@ -80,7 +80,8 @@ function pad234(d, len/*2~4*/) {
   return len === 2 ? ((d < 10) ? '0' + d : d.toString()) : len === 3 ? ((d < 10) ? '00' + d : (d < 100) ? '0' + d : d.toString()) : len === 4 ? ((d < 10) ? '000' + d : (d < 100) ? '00' + d : (d < 1000) ? '0' + d : d.toString()) : d;
 }
 function hexUint32(d) {
-  return ('0000' + d.toString(16)).slice(-4);
+  var h = d.toString(16);
+  return d <= 0xf ? '000' + h : d <= 0xff ? '00' + h : d <= 0xfff ? '0' + h : d <= 0xffff ? h : h;
 }
 function getTimestamp() {
   var dt = new Date(), seqStr = '';
