@@ -1025,7 +1025,7 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag
     log(bridgeTag + httpTag + ' error: ' + err);
   });
   return adbBridgeWebSocket.on('message', function (msg) {
-    if (adbBridgeWebSocket !== dev.adbBridgeWebSocket) return;
+    if (adbBridgeWebSocket !== dev.adbBridgeWebSocket || !msg.binaryData) return;
     var allBuf = adbBridgeWebSocket.__recvBuf ? Buffer.concat([adbBridgeWebSocket.__recvBuf, msg.binaryData]) : msg.binaryData, payloadLen;
     for (; allBuf.length >= 24 && allBuf.length >= 24 + (payloadLen = allBuf.readUInt32LE(12)); allBuf = allBuf.slice(24 + payloadLen)) {
       handle_adb_command(/*cmd:*/ allBuf.slice(0, 4).toString(), /*arg0:*/ allBuf.readUInt32LE(4), /*arg1:*/ allBuf.readUInt32LE(8), /*payloadBuf:*/ allBuf.slice(24, 24 + payloadLen));
