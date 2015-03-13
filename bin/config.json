@@ -34,6 +34,7 @@
   "logFfmpegDebugInfo": false,
   "logFpsStatistic": false,
   "logAdbBridgeDetail": false,
+  "logRdcWebSocketDetail": false,
 
   "adbDeviceListUpdateInterval": 5, //get device list repeatedly at this interval
   "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly

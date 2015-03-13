@@ -106,8 +106,8 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
                 }
 
                 function send_by_websocket() {
-                  rdcWebSocket.__send(devHandle.toString(16) + ':' + String.fromCharCode(c), function (err/*, data*/) {
-                    !err ? sendKey() : on_ng();
+                  rdcWebSocket.__send(devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
+                    !err && res === '' ? sendKey() : on_ng();
                   }, {timeout: DEF_TIMEOUT});
                 }
 
@@ -151,8 +151,8 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
                 }
 
                 function send_by_websocket() {
-                  rdcWebSocket.__send(devHandle.toString(16) + '<' + t, function (err/*, data*/) {
-                    !err && sendText();
+                  rdcWebSocket.__send(devHandle.toString(16) + '<' + t, function (err, res) {
+                    !err && res === '' && sendText();
                   }, {timeout: DEF_TIMEOUT});
                 }
 
@@ -269,8 +269,8 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           bv.setFloat32(8, e.yPer);
           bv.setUint8(12, typeMap[e.type].charCodeAt(0));
 
-          rdcWebSocket.__send(buf, function (err/*, data*/) {
-            !err ? on_ok() : on_ng();
+          rdcWebSocket.__send(buf, function (err, res) {
+            !err && res === '' ? on_ok() : on_ng();
           }, {timeout: DEF_TIMEOUT});
         }
 
@@ -305,12 +305,12 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
     }; //end of AscUtil.setTouchHandler
 
     function RdcWebSocket_open_device(devUrl, callback/*(err, devHandle)*/, opt/*{timeout:}*/) {
-      rdcWebSocket.__send(devUrl, function (err, str) {
+      rdcWebSocket.__send(devUrl, function (err, res) {
         if (err) {
           callback(err);
           return;
         }
-        var res = JSON.parse(str);
+        var res = JSON.parse(res);
         if (res.err) {
           console.log('[RdcWebSocket] open_device error: ' + res.err);
           callback(res.err);
@@ -355,6 +355,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         var callback = callbackMap[seq];
         if (callback) {
           delete callbackMap[seq];
+          typeof(e.data) === 'string' && e.data !== '' && console.log(wsTag + ' recv "' + e.data + '"');
           callback('', e.data);
         }
       });

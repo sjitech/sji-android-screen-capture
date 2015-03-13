@@ -17,8 +17,9 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
+var keyCodeList = [3/*home*/, 4/*back*/, 82/*menu*/, 26/*power*/, 187/*apps*/, 66/*enter*/, 67/*del*/, 112/*forward_del*/];
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -235,7 +236,8 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
             (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[GetAllDevices] device connected: ' + dev.id);
             dev.status === ERR_DEV_NOT_FOUND && scheduleUpdateWholeUI();
             dev.status === ERR_DEV_NOT_FOUND && (dev.status = dev.touchStatus = '');
-            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status || dev.isOsStartingUp) && prepareDeviceFile(dev, mode === 'forcePrepare');
+            (mode === 'forcePrepare' || mode === 'checkPrepare' || !dev.status || dev._status !== _status || dev.isOsStartingUp)
+            && prepareDeviceFile(dev, mode === 'forcePrepare');
             dev._status = _status;
           }
         });
@@ -363,11 +365,11 @@ function getTouchDeviceInfo(dev, stdout) {
   });
   log('[GetTouchDevInfo ' + dev.id + ']' + ' ' + dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
 }
-function sendTouchEvent(dev, q) {
-  var x = (q.x * dev.touch.w).toFixed(), y = (q.y * dev.touch.h).toFixed(), cmd = '';
-  if (!(q.type === 'm' && dev.touchLast_x === x && dev.touchLast_y === y)) { //ignore move event if at same position
+function sendTouchEvent(dev, type, _x, _y) {
+  var x = (_x * dev.touch.w).toFixed(), y = (_y * dev.touch.h).toFixed(), cmd = '';
+  if (!(type === 'm' && dev.touchLast_x === x && dev.touchLast_y === y)) { //ignore move event if at same position
     if (dev.touch.maxTrackId === 65535) {
-      if (q.type === 'd') { //down
+      if (type === 'd') { //down
         cmd += dev.touch.cmdHead + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
         dev.touch.needBtnTouchEvent && (cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' 1; '); //BTN_TOUCH DOWN for sumsung devices
         cmd += dev.touch.cmdHead + ' 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
@@ -378,7 +380,7 @@ function sendTouchEvent(dev, q) {
         }
         cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
         cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-      } else if (q.type === 'm') { //move
+      } else if (type === 'm') { //move
         x !== dev.touchLast_x && (cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
         y !== dev.touchLast_y && (cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
       } else { //up, out
@@ -391,7 +393,7 @@ function sendTouchEvent(dev, q) {
       cmd += dev.touch.cmdHead + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
       cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
       cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
-      if (q.type === 'd' || q.type === 'm') { //down, move
+      if (type === 'd' || type === 'm') { //down, move
         cmd += dev.touch.cmdHead + ' 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
         dev.touch.avgPressure && (cmd += dev.touch.cmdHead + ' 3 ' + 0x3a + ' ' + dev.touch.avgPressure + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
       } else { //up, out
@@ -399,8 +401,8 @@ function sendTouchEvent(dev, q) {
         dev.touch.avgPressure && (cmd += dev.touch.cmdHead + ' 3 ' + 0x3a + ' ' + 0 + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
       }
       cmd += dev.touch.cmdHead + ' 0 2 0; '; //SYN_MT_REPORT   this is very important
-      if (dev.touch.needBtnTouchEvent && (q.type === 'd' || q.type === 'u' || q.type === 'o')) {
-        cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' ' + (q.type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
+      if (dev.touch.needBtnTouchEvent && (type === 'd' || type === 'u' || type === 'o')) {
+        cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' ' + (type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
       }
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
@@ -411,17 +413,29 @@ function sendTouchEvent(dev, q) {
     cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.id + ']' + ' exec: '});
     cmd && dev.touchShell.stdin.write(cmd + '\n');
 
-    if (q.type === 'd' || q.type === 'm') { //down, move
+    if (type === 'd' || type === 'm') { //down, move
       dev.touchLast_x = x;
       dev.touchLast_y = y;
     }
   }
 }
+function errTouchArgs(dev, type, x, y) {
+  return (!dev && (chk.err = 'device not opened')) || (dev.status !== 'OK' && (chk.err = 'device not ready'))
+      || (dev.touchStatus !== 'OK' && (chk.err = 'touch device not prepared'))
+      || (!(dev.capture && dev.capture.image) && (chk.err = 'device is not being live viewed'))
+      || !chk('type', type, ['d', 'm', 'u', 'o']) || !chk('x', x, 0, 1) || !chk('y', y, 0, 1)
+}
 function setDeviceOrientation(dev, orientation) {
   spawn('[SetOrientation ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('dumpsys', 'power', '|', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&&', '(', 'input', 'keyevent', 26, ';', 'input', 'keyevent', 82, ')').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('dumpsys power |', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&& (input keyevent 26; input keyevent 82; input keyevent 82)').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+}
+function sendKey(dev, keyCode) {
+  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input keyevent ' + keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+}
+function sendText(dev, text) {
+  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input text ' + text), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function encryptSn(sn) {
   sn = sn || ' ';
@@ -717,37 +731,24 @@ streamWeb_handlerMap['/saveImage'] = function (dev, q, urlPath, req, res) {
   return end(res, 'OK: ' + q.filename);
 };
 streamWeb_handlerMap['/touch'] = function (dev, q, urlPath, req, res) {
-  if (!chk('type', q.type, ['d', 'u', 'o', 'm']) || !chk('x', q.x = Number(q.x), 0, 1) || !chk('x', q.y = Number(q.y), 0, 1)) {
+  if (errTouchArgs(dev, q.type, q.x = Number(q.x), q.y = Number(q.y))) {
     return end(res, JSON.stringify(chk.err), 'text/json');
   }
-  if (!dev.capture || !dev.capture.image) {
-    return end(res, JSON.stringify('device is not being live viewed'), 'text/json');
-  }
-  if (dev.touchStatus !== 'OK') {
-    return end(res, JSON.stringify(dev.touchStatus || 'not prepared'), 'text/json');
-  } else {
-    sendTouchEvent(dev, q);
-    return end(res, JSON.stringify('OK'), 'text/json');
-  }
+  sendTouchEvent(dev, q.type, q.x, q.y);
+  return end(res, JSON.stringify('OK'), 'text/json');
 };
 streamWeb_handlerMap['/sendKey'] = function (dev, q, urlPath, req, res) {
-  if (!chk('keyCode', q.keyCode = Number(q.keyCode), [3, 4, 82, 26, 187, 66, 67, 112])) {
+  if (!chk('keyCode', q.keyCode = Number(q.keyCode), keyCodeList)) {
     return end(res, chk.err);
   }
-  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input', 'keyevent', q.keyCode), {
-    timeout: cfg.adbSendKeyTimeout * 1000,
-    log: cfg.logAllAdbCommands
-  });
+  sendKey(dev, q.keyCode);
   return end(res, 'OK');
 };
 streamWeb_handlerMap['/sendText'] = function (dev, q, urlPath, req, res) {
   if (!chk('text', q.text)) {
     return end(res, chk.err);
   }
-  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('input', 'text', "'" + q.text + "'").join(' ')), {
-    timeout: cfg.adbSendKeyTimeout * 1000,
-    log: cfg.logAllAdbCommands
-  });
+  sendText(dev, q.text);
   return end(res, 'OK');
 };
 streamWeb_handlerMap['/turnOnScreen'] = function (dev, q, urlPath, req, res) {
@@ -992,25 +993,37 @@ adminWeb_handlerMap['/status'] = function (dev, q, urlPath, req, res) {
   scheduleUpdateLiveUI();
 };
 
-function adbBridgeWebSocketServer_create() {
+function createWebSocketServer() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), autoAcceptConnections: false}).on('request', function (wsConReq) {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
-    var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device), bridgeTag = dev ? '[AdbBridge  ' + dev.id + ']' : '';
+    var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device);
     log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
-    if ((urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
-        || (!cfg.adbBridge) && (chk.err = 'disabled')
-        || (!dev && (chk.err = '`device`: unknown device'))
-        || (!dev.adbBridge && (chk.err = 'disabled'))
-        || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))
-        || (dev.status !== 'OK' && (chk.err = 'error: device not ready'))
-    ) {
-      log(bridgeTag + tag + ' reject. reason: ' + chk.err);
+    if (urlPath === '/adbBridge') {
+      var bridgeTag = dev ? '[AdbBridge  ' + dev.id + ']' : '';
+      if ((!cfg.adbBridge) && (chk.err = 'disabled')
+          || (!dev && (chk.err = '`device`: unknown device'))
+          || (!dev.adbBridge && (chk.err = 'disabled'))
+          || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))
+          || (dev.status !== 'OK' && (chk.err = 'error: device not ready'))
+      ) {
+        log(bridgeTag + tag + ' reject. reason: ' + chk.err);
+        return wsConReq.reject();
+      }
+      log(bridgeTag + tag + ' accept');
+      dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(''/*normal*/, 'new adbBridge is requested');
+      dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
+      return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev, bridgeTag, tag);
+    }
+    else if (urlPath === '/rdc') {
+      var rdcTag = '[RDC]';
+      log(rdcTag + tag + ' accept');
+      var rdcWebSocket = wsConReq.accept(null, wsConReq.origin);
+      return handle_rdcWebsocket_connection(rdcWebSocket, rdcTag, tag);
+    }
+    else {
+      log(tag + ' reject. reason: invalid request');
       return wsConReq.reject();
     }
-    log(bridgeTag + tag + ' accept');
-    dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(''/*normal*/, 'new adbBridge is requested');
-    dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
-    return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev, bridgeTag, tag);
   });
 }
 
@@ -1152,6 +1165,62 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag
   }
 } // end of handle_adbBridgeWebsocket_connection
 
+function handle_rdcWebsocket_connection(rdcWebSocket, rdcTag, httpTag) {
+  rdcWebSocket.once('close', function (reasonCode, description) {
+    log(rdcTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
+  });
+  rdcWebSocket.on('error', function (err) {
+    log(rdcTag + httpTag + ' error: ' + err);
+  });
+  var devHandleMap = {/*handle:*/};
+  rdcWebSocket.on('message', function (msg) {
+    var devHandle, dev, type;
+    if (msg.type === 'utf8') {
+      var match = msg.utf8Data.match(/^([0-9A-F]+)([:<])(.+)$/);
+      if (!match) { //treat as open_device request
+        cfg.logRdcWebSocketDetail && log(rdcTag + ' open device:  "' + msg.utf8Data + '"');
+        var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query;
+        dev = q.device && getDev(q.device);
+        if (!dev && (chk.err = '`device`: unknown device') || dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')) {
+          return rdcWebSocket.send(JSON.stringify({err: chk.err}));
+        }
+        devHandleMap[dev.i] = dev;
+        return rdcWebSocket.send(JSON.stringify({handle: dev.i}));
+      } //end of open_device request
+
+      devHandle = parseInt(match[1], 16);
+      type = match[2];
+      var body = match[3];
+      dev = devHandleMap[devHandle];
+      var isSendKey = type === ':', keyCode = isSendKey ? body.charCodeAt(0) : 0;
+      cfg.logRdcWebSocketDetail && log(rdcTag + '[Send' + (isSendKey ? 'Key ' : 'Text ') + (dev ? dev.id : '?#' + devHandle) + '] ' + (isSendKey ? keyCode : '"' + body + '"'));
+      if ((!dev && (chk.err = 'device not opened')) || (dev.status !== 'OK' && (chk.err = 'device not ready'))
+          || (isSendKey && !chk('keyCode', keyCode, keyCodeList))
+      ) {
+        return rdcWebSocket.send(chk.err);
+      }
+      isSendKey ? sendKey(dev, keyCode) : sendText(dev, body);
+    }
+    else { //binary
+      if (msg.binaryData.length !== 13) {
+        return rdcWebSocket.send('invalid request');
+      }
+      devHandle = msg.binaryData.readUInt32BE(0);
+      type = String.fromCharCode(msg.binaryData.readUInt8(12));
+      var x = msg.binaryData.readFloatBE(4),
+          y = msg.binaryData.readFloatBE(8);
+      dev = devHandleMap[devHandle];
+      cfg.logRdcWebSocketDetail && log(rdcTag + '[Touch ' + (dev ? dev.id : '?#' + devHandle) + '] type=' + type + ' x=' + x.toFixed(5) + ' y=' + y.toFixed(5));
+      if (errTouchArgs(dev, type, x, y)) {
+        return rdcWebSocket.send(chk.err);
+      }
+      sendTouchEvent(dev, type, x, y);
+    }
+    return rdcWebSocket.send('');
+  });
+
+}
+
 function reloadResource() {
   scheduleUpdateWholeUI();
   fs.readdirSync('./html').forEach(function (filename) {
@@ -1191,6 +1260,6 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(ret) {
     });
     scanAllDevices();
     setInterval(scanAllDevices, cfg.adbDeviceListUpdateInterval * 1000);
-    websocket && adbBridgeWebSocketServer_create();
+    websocket && createWebSocketServer();
   }, {timeout: 10 * 1000, log: true});
 }, {timeout: 30 * 1000, log: true});
