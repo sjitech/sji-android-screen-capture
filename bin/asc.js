@@ -997,9 +997,10 @@ function adbBridgeWebSocketServer_create() {
     var req = wsConReq.httpRequest, tag = '[' + (req.connection.server === adminWeb ? (cfg.adminWeb_protocol === 'https' ? 'WSS' : 'WS') : (cfg.streamWeb_protocol === 'https' ? 'wss' : 'ws')) + '_' + (++httpSeq) + ']';
     var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev = q.device && getDev(q.device), bridgeTag = dev ? '[AdbBridge  ' + dev.id + ']' : '';
     log(tag + ' ' + req.url + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
-    if ((!cfg.adbBridge || !dev.adbBridge) && (chk.err = 'disabled')
-        || (urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
+    if ((urlPath !== '/adbBridge' && (chk.err = 'invalid request'))
+        || (!cfg.adbBridge) && (chk.err = 'disabled')
         || (!dev && (chk.err = '`device`: unknown device'))
+        || (!dev.adbBridge && (chk.err = 'disabled'))
         || (dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied'))
         || (dev.status !== 'OK' && (chk.err = 'error: device not ready'))
     ) {
