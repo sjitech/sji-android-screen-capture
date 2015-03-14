@@ -22,12 +22,11 @@ for f in libgui libbinder libutils libcutils libui; do
 done
 
 TARGET_DIR=../../../bin/android
-t=0
 
 for v in 420 430 440 500; do
     echo ""
 	echo ---------------make fsc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -fPIC -shared fast-screen-capture.cpp *.so -o $TARGET_DIR/fsc-$v -Xlinker -rpath=/system/lib || exit 1
 done
 
 rm -f *.so

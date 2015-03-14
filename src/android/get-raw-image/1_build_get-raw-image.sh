@@ -22,17 +22,16 @@ for f in libgui libbinder libutils libcutils; do
 done
 
 TARGET_DIR=../../../bin/android
-t=0
 
 v=220
 echo ""
 echo ---------------make sc-$v --------------------
-$CC -DANDROID_VER=$v               -fPIC -shared get-raw-image.cpp -o $TARGET_DIR/sc-$v || exit 1
+$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp libcutils.so -o $TARGET_DIR/sc-$v || exit 1
 
 for v in 400 420 500; do
     echo ""
 	echo ---------------make sc-$v --------------------
-	$CC -DANDROID_VER=$v -DMAKE_TRIAL=$t               -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
+	$CC -DANDROID_VER=$v -fPIC -shared get-raw-image.cpp *.so -o $TARGET_DIR/sc-$v -Xlinker -rpath=/system/lib || exit 1
 done
 
 rm -f *.so
