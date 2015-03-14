@@ -16,6 +16,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       var evtAry = [], touchstart_delaySendTimer, touchstart_e;
       var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
       var typeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
+      var devHandle;
 
       $liveImage
           .unbind('mousedown touchstart dragstart mouseenter mouseout')
@@ -240,8 +241,6 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         }
       }
 
-      var devHandle;
-
       function sendMouseAction(e) {
         if (rdcWebSocket) {
           if (devHandle) {
@@ -310,7 +309,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           callback(err);
           return;
         }
-        var res = JSON.parse(res);
+        res = JSON.parse(res);
         if (res.err) {
           console.log('[RdcWebSocket] open_device error: ' + res.err);
           callback(res.err);
@@ -373,8 +372,6 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           callback('timeout');
         }, opt && opt.timeout || DEF_TIMEOUT);
       };
-
-      ws.__cleanup = cleanup;
 
       function cleanup(reason) {
         if (cleanup.called) return;
