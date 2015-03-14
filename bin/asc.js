@@ -1064,13 +1064,13 @@ function createWebSocketServer() {
       log(bridgeTag + tag + ' accept');
       dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.close(''/*normal*/, 'new adbBridge is requested');
       dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
-      return handle_adbBridgeWebsocket_connection(dev.adbBridgeWebSocket, dev, bridgeTag, tag);
+      return handle_adbBridgeWebSocket_connection(dev.adbBridgeWebSocket, dev, bridgeTag, tag);
     }
     else if (urlPath === '/rdc') {
       var rdcTag = '[RDC]';
       log(rdcTag + tag + ' accept');
       var rdcWebSocket = wsConReq.accept(null, wsConReq.origin);
-      return handle_rdcWebsocket_connection(rdcWebSocket, rdcTag, tag);
+      return handle_rdcWebSocket_connection(rdcWebSocket, rdcTag, tag);
     }
     else {
       log(tag + ' reject. reason: invalid request');
@@ -1081,7 +1081,7 @@ function createWebSocketServer() {
 
 var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1};
 
-function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag, httpTag) {
+function handle_adbBridgeWebSocket_connection(adbBridgeWebSocket, dev, bridgeTag, httpTag) {
   var backendMap = {/*id:*/}, nextBackendId = 0;
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
     log(bridgeTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
@@ -1210,9 +1210,9 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag
     cfg.logAdbBridgeDetail && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
     backend.write(buf);
   }
-} // end of handle_adbBridgeWebsocket_connection
+} // end of handle_adbBridgeWebSocket_connection
 
-function handle_rdcWebsocket_connection(rdcWebSocket, rdcTag, httpTag) {
+function handle_rdcWebSocket_connection(rdcWebSocket, rdcTag, httpTag) {
   rdcWebSocket.once('close', function (reasonCode, description) {
     log(rdcTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
   });
