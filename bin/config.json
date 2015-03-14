@@ -61,6 +61,7 @@
   "adbPushFileToDeviceTimeout": 600,
   "adbFinishPrepareFileTimeout": 120,
   "adbCaptureExitDelayTime": 2,
+  "adbTouchTimeout": 3000,
   "adbSendKeyTimeout": 10,
   "adbTurnScreenOnTimeout": 30,
   "adbSetOrientationTimeout": 30,

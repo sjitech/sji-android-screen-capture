@@ -19,7 +19,7 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllAdbCommands', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 var keyCodeList = [3/*home*/, 4/*back*/, 82/*menu*/, 26/*power*/, 187/*apps*/, 66/*enter*/, 67/*del*/, 112/*forward_del*/];
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', enableGetOutputFile: false, maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllAdbCommands: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, __end: 0});
 
 function spawn(tag, _path, args, _on_close, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, childProc, stdoutBufAry = [], stderrBufAry = [], logHead2;
@@ -65,6 +65,61 @@ function spawn(tag, _path, args, _on_close, _opt) {
 function stringifyError(err) {
   return !err ? '' : err.code === 'ENOENT' ? 'error: ENOENT(not found)' : err.code === 'EACCES' ? 'error: EACCES(access denied)' : err.code === 'EADDRINUSE' ? 'error: EADDRINUSE(IP or port already in use)'
       : (!(err = err.toString().trim().split(/\r*\n/)[0].trim()) ? '' : /error/i.test(err) ? err : 'error: ' + err);
+}
+function fastAdbExec(_tag, dev, cmd, _on_close, _opt) {
+  var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, stdoutBufAry = [], timer, closed;
+  var tag = _tag.replace(/^(\[[^\] ]+)/, '$1 ' + dev.id);
+  opt.log && log(tag + ' fastExec: ' + cmd);
+  var adbCon = net.connect(dev.adbHost.port || 5037, dev.adbHost.host||'127.0.0.1', function /*on_connected*/() {
+    adbCon.write(dev.buf_switchTransport);
+    var ok = 0;
+    adbCon.on('data', function (buf) {
+      if (ok < 2) {
+        if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
+          ok++;
+          ok === 1 && adbCon.write(adbHost_makeBuf(new Buffer('shell:' + cmd)));
+          ok === 2 && (buf = buf.slice(4));
+        } else {
+          cleanup(buf.toString());
+          return;
+        }
+      }
+      if (ok === 2 && buf.length) {
+        (on_close && !opt.noMergeStdout || opt.log && !opt.noLogStdout) && stdoutBufAry.push(buf);
+        adbCon.__on_data && adbCon.__on_data(buf);
+      }
+    });
+  });
+  adbCon.on('error', function () {
+    cleanup('error: protocol fault (no status)');
+  });
+  adbCon.on('close', function () {
+    closed = true;
+    cleanup();
+  });
+  opt.timeout && (timer = setTimeout(function () {
+    opt.log && log(tag + ' cleanup due to timeout(' + opt.timeout + 'ms)');
+    timer = null;
+    cleanup('error: timeout');
+  }, opt.timeout));
+
+  adbCon.__cleanup = cleanup;
+  adbCon.__tag = tag;
+  return adbCon;
+
+  function cleanup(err) {
+    if (cleanup.called) return;
+    cleanup.called = true;
+    timer && clearTimeout(timer);
+    !closed && adbCon.end();
+    var stdout = Buffer.concat(stdoutBufAry).toString();
+    stdoutBufAry.length = 0;
+    opt.log && !opt.noLogStdout && stdout && log(stdout, {noNewLine: true, head: tag + '>'});
+    on_close && on_close(err ? 1 : 0, stdout, err);
+  }
+}
+function adbHost_makeBuf(buf) {
+  return Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
 }
 
 function htmlEncode(text) {
@@ -198,6 +253,7 @@ function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port, may
       }) && foundDev) || setDevId((devAry[devAry.length] = {
         conId: conId, sn: conId, info: [], info_htm: '', status: '', touchStatus: '', touch: {}, consumerMap: {}, i: devAry.length,
         adbHost: adbHost, adbArgs: (adbHost ? adbHost.adbArgs : []).concat('-s', conId), adbBridge: true,
+        buf_switchTransport: adbHost_makeBuf(new Buffer('host:transport:' + conId)),
         masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
       }));
 }
@@ -251,7 +307,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
         !mode && devList.forEach(function (dev) {
           if (dev.status === 'OK' && Date.now() - (dev.lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
             dev.lastKeepAliveDateMs = Date.now();
-            spawn('[KeepAlive]', cfg.adb, dev.adbArgs.concat('shell', 'a='), {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
+            fastAdbExec('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000, log: cfg.logAllAdbCommands});
           }
         });
         adbHost.scanning = false;
@@ -260,15 +316,15 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
   });
 }
 
-var cmd_getBaseInfo = ['getprop', 'ro.product.manufacturer;', 'getprop', 'ro.product.model;', 'getprop', 'ro.build.version.release;', 'getprop', 'ro.product.cpu.abi;', 'getprop', 'ro.serialno;', 'getprop', 'ro.product.name;', 'getprop', 'ro.product.device;',
-  'echo', '===;', 'getevent', '-pS;', //get touch device info
-  'echo', '===;', 'cd', cfg.androidWorkDir, '&&', 'cat', 'version', '||', 'exit;'];
-var cmd_getExtraInfo = ['echo', '===;', 'umask', '077;', 'export', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;',
-  'echo', '===;', 'dumpsys', 'window', 'policy', '|', './busybox', 'grep', '-E', '\'mUnrestrictedScreen=|DisplayWidth=\';',
-  'echo', '===;', './busybox', 'grep', '-Ec', '\'^processor\'', '/proc/cpuinfo;',
-  'echo', '===;', './busybox', 'head', '-n', '1', '/proc/meminfo;',
-  '{', 'echo', '===;', './dlopen', './sc-???', '||', './dlopen.pie', './sc-???;',
-  'echo', '===;', './dlopen', './fsc-???', '||', './dlopen.pie', './fsc-???;', '}', '2>', cfg.androidLogPath, ';'];
+var cmd_getBaseInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device;'
+    + ' echo ===; getevent -pS;'
+    + ' echo ===; cd ' + cfg.androidWorkDir + ' && cat version || exit;';
+var cmd_getExtraInfo = ' echo ===; umask 077; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;'
+    + ' echo ===; dumpsys window policy | ./busybox grep -E \'mUnrestrictedScreen=|DisplayWidth=\';'
+    + ' echo ===; ./busybox grep -Ec \'^processor\' /proc/cpuinfo;'
+    + ' echo ===; ./busybox head -n 1 /proc/meminfo;'
+    + ' { echo ===; ./dlopen ./sc-??? || ./dlopen.pie ./sc-???;'
+    + ' echo ===; ./dlopen ./fsc-??? || ./dlopen.pie ./fsc-???; } 2>' + cfg.androidLogPath + ';';
 function prepareDeviceFile(dev, force/*optional*/) {
   if (!(dev.status === 'OK' && !force || dev.status === 'preparing')) {
     log('[PrepareDeviceFile for ' + dev.id + '] begin');
@@ -277,7 +333,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
       log('[PrepareFileToDevice ' + dev.id + '] ' + status);
       dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
     };
-    spawn('[CheckDevice ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat(cmd_getBaseInfo, cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+    fastAdbExec('[CheckDevice]', dev, cmd_getBaseInfo + cmd_getExtraInfo, function/*on_close*/(ret, stdout, stderr) {
       if (ret !== 0) {
         return on_complete(stringifyError(stderr) || 'unknown error: failed to check device');
       }
@@ -305,7 +361,7 @@ function prepareDeviceFile(dev, force/*optional*/) {
         if (ret !== 0) {
           return on_complete(stringifyError(stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '')) || 'unknown error: failed to push file to device');
         }
-        return spawn('[FinishPrepareFile ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('cd', cfg.androidWorkDir, '&&', 'chmod', '700', '.', '*', '&&', 'umask', '077', '&&', 'echo', prepareDeviceFile.ver, '>', 'version;', cmd_getExtraInfo).join(' ')), function/*on_close*/(ret, stdout, stderr) {
+        return fastAdbExec('[FinishPrepareFile]', dev, 'cd ' + cfg.androidWorkDir + ' && chmod 700 . * && umask 077 && echo ' + prepareDeviceFile.ver + ' > version;' + cmd_getExtraInfo, function/*on_close*/(ret, stdout, stderr) {
           if (ret !== 0) {
             return on_complete(stringifyError(stderr) || 'unknown error: failed to finish preparing device file');
           }
@@ -407,11 +463,7 @@ function sendTouchEvent(dev, type, _x, _y) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
-      dev.touchShell = null;
-    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
-    cmd && cfg.logAllAdbCommands && log(cmd, {head: '[Touch ' + dev.id + ']' + ' exec: '});
-    cmd && dev.touchShell.stdin.write(cmd + '\n');
+    fastAdbExec('[Touch]', dev, cmd, {timeout: cfg.adbTouchTimeout * 1000, log: cfg.logAllAdbCommands});
 
     if (type === 'd' || type === 'm') { //down, move
       dev.touchLast_x = x;
@@ -426,16 +478,16 @@ function errTouchArgs(dev, type, x, y) {
       || !chk('type', type, ['d', 'm', 'u', 'o']) || !chk('x', x, 0, 1) || !chk('y', y, 0, 1)
 }
 function setDeviceOrientation(dev, orientation) {
-  spawn('[SetOrientation ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|\\[INSTALL_FAILED_ALREADY_EXISTS\\]\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? ' --user 0' : '')), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
+  fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= '4.2.2' ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > '2.3.0' && spawn('[TurnScreenOn ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('dumpsys power |', (dev.sysVer >= '4.2.2' ? 'grep' : [cfg.androidWorkDir + '/busybox', 'grep']), '-q', (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0'), '&& (input keyevent 26; input keyevent 82; input keyevent 82)').join(' ')), {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
+  dev.sysVer > '2.3.0' && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= '4.2.2' ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= '4.2.2' ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function sendKey(dev, keyCode) {
-  spawn('[SendKey ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input keyevent ' + keyCode), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+  fastAdbExec('[SendKey]', dev, 'input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function sendText(dev, text) {
-  spawn('[sendText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell', 'input text ' + text), {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
+  fastAdbExec('[sendText]', dev, 'input text ' + text, {timeout: cfg.adbSendKeyTimeout * 1000, log: cfg.logAllAdbCommands});
 }
 function encryptSn(sn) {
   sn = sn || ' ';
@@ -523,15 +575,15 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
-  var childProc = capture.proc = spawn('[CAP ' + dev.id + ' ' + q._hash + ']', cfg.adb, dev.adbArgs.concat('shell', [].concat('{ date >&2 && cd', cfg.androidWorkDir,
+  var adbCon = capture.adbCon = fastAdbExec('[CAP ' + q._hash + ']', dev, [].concat('{ date >&2 && cd', cfg.androidWorkDir,
           '&& export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? '&& export ASC_LOG_ALL=1' : []), '&& export ASC_=' + encryptSn(dev.internalSN),
           '&& ./ffmpeg.armv' + dev.armv + (dev.sysVer >= '5.0.0' ? '.pie' : ''), '-nostdin -nostats -loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
           '-f androidgrab -probesize 32'/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
           (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f mjpeg -q:v 1 - ; } 2>', cfg.androidLogPath).join(' ') // "-" means stdout
-  ), function/*on_close*/() {
-    capture === dev.capture && endCaptureProcess(dev);
-  }, {noLogStdout: true, noMergeStdout: true, log: true});
-  childProc.stdout.on('data', function (buf) {
+      , function/*on_close*/() {
+        capture === dev.capture && endCaptureProcess(dev);
+      }, {noLogStdout: true, noMergeStdout: true, log: true});
+  adbCon.__on_data = function (buf) {
     capture === dev.capture && convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
       var pos = 0, unsavedStart = 0, endPos = buf.length;
       for (; pos < endPos; pos++) {
@@ -547,7 +599,7 @@ function _startNewCaptureProcess(dev, q) {
       } //end of for loop in buffer
       unsavedStart < endPos && bufAry.push(buf.slice(unsavedStart, endPos));
     });
-  });
+  };
   turnOnScreen(dev);
   scheduleUpdateLiveUI();
   q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
@@ -574,7 +626,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', cookie_id_head + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
-    (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.proc.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
+    (cfg.logFpsStatistic || res.__framesDropped) && log(dev.capture.adbCon.__tag + res.__tag + ' statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
   q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
@@ -617,7 +669,7 @@ function endCaptureProcess(dev) {
   clearTimeout(dev.capture.delayKillTimer);
   clearInterval(dev.capture.timer_resentImageForSafari);
   clearInterval(dev.capture.timer_resentUnchangedImage);
-  procMap[dev.capture.proc.pid] && dev.capture.proc.kill('SIGKILL');
+  dev.capture.adbCon && dev.capture.adbCon.__cleanup();
   dev.capture = null;
   scheduleUpdateLiveUI();
 }
@@ -970,7 +1022,7 @@ adminWeb_handlerMap['/reloadResource' + cfg.adminUrlSuffix] = function (dev, q, 
   end(res, 'OK');
 };
 adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (dev, q, urlPath, req, res) {
-  !dev ? end(res, '`device`: unknown device') : spawn('[cmd]', cfg.adb, dev.adbArgs.concat('shell', q.cmd), function/*on_close*/(ret, stdout, stderr) {
+  !dev ? end(res, '`device`: unknown device') : fastAdbExec('[cmd]', dev, q.cmd, function/*on_close*/(ret, stdout, stderr) {
     end(res, stdout || stringifyError(stderr) || (ret !== 0 ? 'unknown error' : ''), 'text/plain');
   }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, noLogStdout: true, log: cfg.logAllAdbCommands});
 };
@@ -1030,7 +1082,7 @@ function createWebSocketServer() {
 var importantAdbCmdSet = {'CNXN': 1, 'OPEN': 1, 'SYNC': 1, 'AUTH': 1, 'CLSE': 1};
 
 function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag, httpTag) {
-  var backendMap = {/*id:*/}, nextBackendId = 0, buf_switchTransport = backend_makeBuf(new Buffer('host:transport:' + dev.conId));
+  var backendMap = {/*id:*/}, nextBackendId = 0;
   adbBridgeWebSocket.once('close', function (reasonCode, description) {
     log(bridgeTag + httpTag + ' closed. ' + (reasonCode || '') + ' ' + (description || ''));
     forEachValueIn(backendMap, backend_cleanup);
@@ -1060,28 +1112,27 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag
 
       backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
 
-      backend_write(backend, buf_switchTransport);
+      backend_write(backend, dev.buf_switchTransport);
 
-      var ok = 0, allBuf, len;
+      var ok = 0;
       backend.on('data', function (buf) {
         cfg.logAdbBridgeDetail && log(backend.__tag + ' read  ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
-        allBuf = allBuf ? Buffer.concat([allBuf, buf]) : buf;
-        if (ok < 2 && allBuf.length >= 4) {
-          if (allBuf.slice(0, 4).toString() === 'OKAY') {
+        if (ok < 2) {
+          if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
             ok++;
-            ok === 1 && backend_write(backend, backend_makeBuf(serviceBuf));
+            ok === 1 && backend_write(backend, adbHost_makeBuf(serviceBuf));
             ok === 2 && bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
-            allBuf = allBuf.slice(4);
+            buf = buf.slice(4);
           } else {
             backend_cleanup(backend);
             return;
           }
         }
         if (ok === 2) {
-          while (allBuf.length) {
-            len = Math.min(4096, allBuf.length);
-            bridge_write('WRTE', /*localId:*/arg1, /*remoteId:*/arg0, allBuf.slice(0, len));
-            allBuf = allBuf.slice(len);
+          while (buf.length) {
+            var len = Math.min(4096, buf.length);
+            bridge_write('WRTE', /*localId:*/arg1, /*remoteId:*/arg0, buf.slice(0, len));
+            buf = buf.slice(len);
           }
         }
       });
@@ -1158,10 +1209,6 @@ function handle_adbBridgeWebsocket_connection(adbBridgeWebSocket, dev, bridgeTag
   function backend_write(backend, buf) {
     cfg.logAdbBridgeDetail && log(backend.__tag + ' write ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
     backend.write(buf);
-  }
-
-  function backend_makeBuf(buf) {
-    return Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
   }
 } // end of handle_adbBridgeWebsocket_connection
 
