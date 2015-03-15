@@ -74,6 +74,7 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = (typeof(_on_close) === 'function') && _on_close, opt = !on_close && _on_close || _opt || {}, stdoutBufAry = [], timer, closed;
   opt.log === undefined && (opt.log = cfg.logAllProcCmd);
   opt.logStdout === undefined && (opt.logStdout = opt.log);
+  opt.logStderr === undefined && (opt.logStderr = true);
   opt.mergeStdout === undefined && (opt.mergeStdout = opt.logStdout || !!on_close);
   var tag = _tag.replace(/^(\[[^\] ]+)/, '$1 ' + dev.id);
   opt.log && log(tag + '[FastADB] ' + cmd + ' with timeout(ms):' + (opt.timeout || 'No'));
@@ -102,11 +103,11 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
     cleanup('error: protocol fault');
   });
   adbCon.once('close', function () {
-    closed = true;
-    cleanup();
+    opt.log && log(tag + '[FastADB] closed');
+    (closed = true) && cleanup();
   });
   opt.timeout && (timer = setTimeout(function () {
-    opt.log && log(tag + '[FastADB] cleanup due to timeout(' + opt.timeout + 'ms)');
+    opt.logStderr && log(tag + '[FastADB] cleanup due to timeout(' + opt.timeout + 'ms)');
     cleanup('error: timeout');
   }, opt.timeout));
 
@@ -478,7 +479,12 @@ function sendTouchEvent(dev, type, _x, _y) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    fastAdbExec('[Touch]', dev, cmd, {timeout: cfg.adbTouchTimeout * 1000});
+    //fastAdbExec('[Touch]', dev, cmd, {timeout: cfg.adbTouchTimeout * 1000});
+    cmd && !dev.touchShell && (dev.touchShell = spawn('[Touch ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
+      dev.touchShell = null;
+    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
+    cmd && cfg.logAllProcCmd && log(cmd, {head: '[Touch ' + dev.id + ']' + ' exec: '});
+    cmd && dev.touchShell.stdin.write(cmd + '\n');
 
     if (type === 'd' || type === 'm') { //down, move
       dev.touchLast_x = x;
@@ -496,13 +502,13 @@ function setDeviceOrientation(dev, orientation) {
   fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
 }
 function turnOnScreen(dev) {
-  dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
+  dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
   fastAdbExec('[SendKey]', dev, 'input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function sendText(dev, text) {
-  fastAdbExec('[sendText]', dev, 'input text ' + text, {timeout: cfg.adbSendKeyTimeout * 1000});
+  fastAdbExec('[sendText]', dev, 'input text ' + text.replace(/ /g, '%s'), {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function encryptSn(sn) {
   sn = sn || ' ';
@@ -1234,7 +1240,7 @@ function handle_rdcWebSocket_connection(rdcWebSocket, rdcTag, httpTag) {
   rdcWebSocket.on('error', function (err) {
     log(rdcTag + httpTag + ' error: ' + err);
   });
-  var devHandleMap = {/*handle:*/};
+  var devHandleMap = {/*devHandle:*/};
   rdcWebSocket.on('message', function (msg) {
     var devHandle, dev, type;
     if (msg.type === 'utf8') {
@@ -1247,7 +1253,7 @@ function handle_rdcWebSocket_connection(rdcWebSocket, rdcTag, httpTag) {
           return rdcWebSocket.send(JSON.stringify({err: chk.err}));
         }
         devHandleMap[dev.i] = dev;
-        return rdcWebSocket.send(JSON.stringify({handle: dev.i}));
+        return rdcWebSocket.send(JSON.stringify({devHandle: dev.i}));
       } //end of open_device request
 
       devHandle = parseInt(match[1], 16);

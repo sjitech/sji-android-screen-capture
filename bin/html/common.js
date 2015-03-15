@@ -6,36 +6,37 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
   (function/*RDC(Remote Desktop Connection) namespace*/() {
 
     //following websocket,queue,url are shared by multiple live view, touch, keyboard control
-    var rdcWebSocket, keyQueue, txtQueue, targetDevUrlForSendKey, targetDevUrlForSendText;
+    var rdcWebSocket, focusedLiveImage;
+    var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
+    var touchTypeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
     var DEF_TIMEOUT = 3000;
 
     RdcWebSocket_init();
 
-    AscUtil.setTouchHandler = function (liveImage, touchServerUrl, rootRotator) {
+    AscUtil.setTouchHandler = function (liveImage/*htmlElement*/, urlForSendTouchEvent, rootRotator/*htmlElement, optional*/) {
       var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
       var evtAry = [], touchstart_delaySendTimer, touchstart_e;
-      var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
-      var typeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
-      var devHandle;
+      liveImage.ctx_sendTouch = {url: urlForSendTouchEvent, devHandle: undefined};
+      liveImage.ctx_sendKey = {url: urlForSendTouchEvent.replace(/touch\?/, 'sendKey?'), devHandle: undefined};
+      liveImage.ctx_sendText = {url: urlForSendTouchEvent.replace(/touch\?/, 'sendText?'), devHandle: undefined};
 
       $liveImage
           .unbind('mousedown touchstart dragstart mouseenter mouseout')
           .on('mouseenter.detect_input_focus', function () {
-            targetDevUrlForSendKey = touchServerUrl.replace(/touch\?/, 'sendKey?');
-            targetDevUrlForSendText = touchServerUrl.replace(/touch\?/, 'sendText?');
+            focusedLiveImage = liveImage;
           })
           .on('mouseout.detect_input_focus', function () {
-            targetDevUrlForSendKey = targetDevUrlForSendText = null;
+            focusedLiveImage = null;
           })
           .on('mousedown', function (e) { //touch handler for desktop browser
             if (e.which === 3) return; //skip right button
-            saveOrSendMouseAction(e);
+            convertToTouchEventAndSend(e);
             $liveImage
                 .on('mousemove', function (e) {
-                  saveOrSendMouseAction(e);
+                  convertToTouchEventAndSend(e);
                 })
                 .on('mouseup mouseout.detect_click_or_move', function (e) {
-                  saveOrSendMouseAction(e);
+                  convertToTouchEventAndSend(e);
                   $liveImage.unbind('mousemove mouseup mouseout.detect_click_or_move');
                 })
             ;
@@ -45,10 +46,10 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
               AscUtil.showEventsOnly && console.log(Date.now() + ' multi-touch down');
               $liveImage.unbind('touchmove touchend touchcancel touchleave');
               clearTimeout(touchstart_delaySendTimer);
-              touchstart_delaySendTimer = touchstart_e = null;
+              touchstart_e = null;
               return; //skip multi-touch
             }
-            saveOrSendMouseAction(e);
+            convertToTouchEventAndSend(e);
             $liveImage
                 .on('touchmove', function (e) {
                   if (isMultiTouch(e.originalEvent)) {
@@ -56,11 +57,11 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
                     $liveImage.unbind('touchmove touchend touchcancel touchleave'); //ignore multi-touch
                   } else {
                     e.preventDefault(); //prevent scrolling/resizing page only if not touched by multi-finger
-                    saveOrSendMouseAction(e);
+                    convertToTouchEventAndSend(e);
                   }
                 })
                 .on('touchend touchcancel touchleave', function (e) {
-                  saveOrSendMouseAction(e);
+                  convertToTouchEventAndSend(e);
                   $liveImage.unbind('touchmove touchend touchcancel touchleave');
                 })
                 .unbind('mousedown') //need not mousedown event anymore
@@ -74,102 +75,13 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           })
       ; //end of $liveImage.bind(...)
 
-      if (!txtQueue) {
-        txtQueue = [];
-        keyQueue = [];
-
-        $(document.body).unbind('keydown.live_input keypress.live_input')
-            .on('keydown.live_input', function (e) {
-              if (!targetDevUrlForSendKey) return; //do nothing if mouse is not inside some live image
-              var c = e.which === 0xd ? 66/*KEYCODE_ENTER*/ : e.which === 0x8 ? 67 /*KEYCODE_DEL*/ : e.which === 0x2e ? 112 /*KEYCODE_FORWARD_DEL*/ : 0;
-              if (!c) return;
-              keyQueue.push(c) && keyQueue.length === 1 && sendKey();
-              e.preventDefault();
-
-              function sendKey() {
-                if (!keyQueue.length) return;
-
-                if (rdcWebSocket) {
-                  if (devHandle) {
-                    send_by_websocket();
-                  } else {
-                    RdcWebSocket_open_device(targetDevUrlForSendKey, function (err, handle) {
-                      if (err) {
-                        send_by_ajax();
-                      } else {
-                        devHandle = handle;
-                        send_by_websocket();
-                      }
-                    }, {timeout: DEF_TIMEOUT});
-                  }
-                } else {
-                  send_by_ajax();
-                }
-
-                function send_by_websocket() {
-                  rdcWebSocket.__send(devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
-                    !err && res === '' ? sendKey() : on_ng();
-                  }, {timeout: DEF_TIMEOUT});
-                }
-
-                function send_by_ajax() {
-                  $.ajax(targetDevUrlForSendKey + '&keyCode=' + keyQueue.shift(), {timeout: DEF_TIMEOUT})
-                      .done(sendKey).fail(on_ng);
-                }
-
-                function on_ng() {
-                  keyQueue = [];
-                }
-              }
-            })
-            .on('keypress.live_input', function (e) {
-              if (!targetDevUrlForSendText) return; //do nothing if mouse is not inside some live image
-              if (e.metaKey || e.which < 0x20 || e.which > 0x7f) return;
-              var c = e.which === 0x20 ? '%s' : String.fromCharCode(e.which);
-              txtQueue.push(c) && txtQueue.length === 1 && sendText();
-              e.preventDefault();
-
-              function sendText() {
-                if (!txtQueue.length) return;
-                var t = txtQueue.join('');
-                txtQueue = [];
-
-                if (rdcWebSocket) {
-                  if (devHandle) {
-                    send_by_websocket();
-                  } else {
-                    RdcWebSocket_open_device(targetDevUrlForSendText, function (err, handle) {
-                      if (err) {
-                        send_by_ajax();
-                      } else {
-                        devHandle = handle;
-                        send_by_websocket();
-                      }
-                    }, {timeout: DEF_TIMEOUT});
-                  }
-                } else {
-                  send_by_ajax();
-                }
-
-                function send_by_websocket() {
-                  rdcWebSocket.__send(devHandle.toString(16) + '<' + t, function (err, res) {
-                    !err && res === '' && sendText();
-                  }, {timeout: DEF_TIMEOUT});
-                }
-
-                function send_by_ajax() {
-                  $.ajax(targetDevUrlForSendText + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT})
-                      .done(sendText)
-                }
-              }
-            });
-      } //end of initialization for sendKey and sentText
+      init_keyboard_handler();
 
       function isMultiTouch(_e) {
         return _e && (_e.changedTouches && _e.changedTouches.length > 1 || _e.touches && _e.touches.length > 1);
       }
 
-      function saveOrSendMouseAction(e) {
+      function convertToTouchEventAndSend(e) {
         if (AscUtil.debug) {
           debugger;
         }
@@ -224,49 +136,34 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         if (AscUtil.showEventsOnly) {
           console.log(Date.now() + ' ' + e.type + ' ' + e.xPer.toFixed(5) + ' ' + e.yPer.toFixed(5));
         } else {
-          if (e.type === 'touchstart' && !touchstart_delaySendTimer) {
+          if (e.type === 'touchstart' && !touchstart_e) {
             touchstart_e = e;
-            touchstart_delaySendTimer = setTimeout(function () { //give me a chance to detect isMultiTouch
-              evtAry.length ? evtAry.push(e) : sendMouseAction(e);
+            touchstart_delaySendTimer = setTimeout(function () { //give me a chance to detect isMultiTouch, if is then cancel event
+              evtAry.push(e) && evtAry.length === 1 && sendTouchEvent();
             }, 20);
           } else {
-            if (touchstart_delaySendTimer) {
+            if (touchstart_e) {
               clearTimeout(touchstart_delaySendTimer);
-              touchstart_delaySendTimer = null;
-              evtAry.length ? evtAry.push(touchstart_e) : sendMouseAction(touchstart_e);
+              evtAry.push(touchstart_e) && evtAry.length === 1 && sendTouchEvent();
               touchstart_e = null;
             }
-            evtAry.length ? evtAry.push(e) : sendMouseAction(e);
+            evtAry.push(e) && evtAry.length === 1 && sendTouchEvent();
           }
         }
-      }
+      } //end of convertToTouchEventAndSend
 
-      function sendMouseAction(e) {
-        if (rdcWebSocket) {
-          if (devHandle) {
-            send_by_websocket();
-          } else {
-            RdcWebSocket_open_device(touchServerUrl, function (err, handle) {
-              if (err) {
-                send_by_ajax();
-              } else {
-                devHandle = handle;
-                send_by_websocket();
-              }
-            }, {timeout: DEF_TIMEOUT});
-          }
-        }
-        else {
-          send_by_ajax();
-        }
+      function sendTouchEvent() {
+        if (!evtAry.length) return;
+        var e = evtAry.shift(), touchType = touchTypeMap[e.type], ctx = liveImage.ctx_sendTouch;
+        send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
           var buf = new ArrayBuffer(13);
           var bv = new DataView(buf);
-          bv.setUint32(0, devHandle);
+          bv.setUint32(0, ctx.devHandle);
           bv.setFloat32(4, e.xPer);
           bv.setFloat32(8, e.yPer);
-          bv.setUint8(12, typeMap[e.type].charCodeAt(0));
+          bv.setUint8(12, touchType.charCodeAt(0));
 
           rdcWebSocket.__send(buf, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
@@ -274,34 +171,106 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         }
 
         function send_by_ajax() {
-          $.ajax(touchServerUrl + '&type=' + typeMap[e.type] + '&x=' + e.xPer.toFixed(5) + '&y=' + e.yPer.toFixed(5), {timeout: DEF_TIMEOUT})
+          $.ajax(ctx.url + '&type=' + touchType + '&x=' + e.xPer.toFixed(5) + '&y=' + e.yPer.toFixed(5), {timeout: DEF_TIMEOUT})
               .done(on_ok).fail(on_ng);
         }
 
         function on_ok() {
-          if ((e = evtAry.shift())) {
-            if (e.type === 'mousemove') {
-              //get latest mousemove
-              var _e = e;
-              do {
-                if (_e.type === 'mousemove') {
-                  e = _e;
-                } else {
-                  break;
-                }
-              }
-              while ((_e = evtAry.shift()));
-            }
-            sendMouseAction(e);
-          }
+          //remove continuous 'move' events except latest one
+          var i = 0, cnt = 0, _e;
+          while ((_e = evtAry[i++]) && touchTypeMap[_e.type] === 'm' /*move*/) cnt++;
+          cnt > 1 && evtAry.splice(0, cnt - 1);
+          sendTouchEvent();
         }
 
         function on_ng() {
-          evtAry = [];
+          evtAry.length = 0;
         }
       } //end of sendMouseAction
 
     }; //end of AscUtil.setTouchHandler
+
+    function init_keyboard_handler() {
+      if (init_keyboard_handler.called) return;
+      init_keyboard_handler.called = true;
+      var txtQueue = [], keyQueue = [];
+
+      $(document.body).unbind('keydown.live_input keypress.live_input')
+          .on('keydown.live_input', function (e) {
+            if (!focusedLiveImage) return; //do nothing if mouse is not inside some live image
+            var c = e.which === 0xd ? 66/*KEYCODE_ENTER*/ : e.which === 0x8 ? 67 /*KEYCODE_DEL*/ : e.which === 0x2e ? 112 /*KEYCODE_FORWARD_DEL*/ : 0;
+            if (!c) return;
+            keyQueue.push(c) && keyQueue.length === 1 && sendKey();
+            e.preventDefault();
+
+          })
+          .on('keypress.live_input', function (e) {
+            if (!focusedLiveImage) return; //do nothing if mouse is not inside some live image
+            if (e.metaKey || e.which < 0x20 || e.which > 0x7f) return;
+            var c = String.fromCharCode(e.which);
+            txtQueue.push(c) && txtQueue.length === 1 && sendText();
+            e.preventDefault();
+          });
+
+      function sendKey() {
+        if (!keyQueue.length) return;
+        var c = keyQueue.shift(), ctx = focusedLiveImage.ctx_sendKey;
+        send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
+
+        function send_by_websocket() {
+          rdcWebSocket.__send(ctx.devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
+            !err && res === '' ? sendKey() : on_ng();
+          });
+        }
+
+        function send_by_ajax() {
+          $.ajax(ctx.url + '&keyCode=' + c, {timeout: DEF_TIMEOUT})
+              .done(sendKey).fail(on_ng);
+        }
+
+        function on_ng() {
+          keyQueue.length = 0;
+        }
+      } //end of sendKey
+
+      function sendText() {
+        if (!txtQueue.length) return;
+        var t = txtQueue.join(''), ctx = focusedLiveImage.ctx_sendText;
+        txtQueue.length = 0;
+        send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
+
+        function send_by_websocket() {
+          rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
+            !err && res === '' && sendText();
+          });
+        }
+
+        function send_by_ajax() {
+          $.ajax(ctx.url + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT})
+              .done(sendText)
+        }
+      } //end of sendText
+
+    } //end of init_keyboard_handler
+
+    function send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax) {
+      if (rdcWebSocket) {
+        if (ctx.devHandle !== undefined) {
+          send_by_websocket();
+        } else {
+          RdcWebSocket_open_device(ctx.url, function (err, handle) {
+            if (err) {
+              send_by_ajax();
+            } else {
+              ctx.devHandle = handle;
+              send_by_websocket();
+            }
+          });
+        }
+      } else {
+        send_by_ajax();
+      }
+    }
 
     function RdcWebSocket_open_device(devUrl, callback/*(err, devHandle)*/, opt/*{timeout:}*/) {
       rdcWebSocket.__send(devUrl, function (err, res) {
@@ -310,13 +279,13 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           return;
         }
         res = JSON.parse(res);
-        if (res.err) {
-          console.log('[RdcWebSocket] open_device error: ' + res.err);
+        if (res.err || typeof(res.devHandle) !== 'number' || isNaN(res.devHandle) || res.devHandle < 0) {
+          console.log('[RdcWebSocket] open_device error: ' + (res.err || 'protocol error'));
           callback(res.err);
           return;
         }
-        console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.handle);
-        callback('', res.handle);
+        console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.devHandle);
+        callback('', res.devHandle);
       }, opt && opt.timeout || DEF_TIMEOUT);
     } //end of open_device
 
@@ -387,7 +356,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       }
     } //end of RdcWebSocket_init
 
-  })(); //end of RDC namespace
+  })(); //end of RDC namespace -----------------------------------------------
 
   AscUtil.rotateChildLocally = function (targetContainer) {
     var $c = $(targetContainer), $v = $c.children(0);
@@ -466,11 +435,11 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
 
             dev.chromeAppIPC.onMessage.addListener(function (info) {
               if (typeof(info) === 'object') {
-                clearNoResponseTimeout2(dev);
+                clearTimeout(dev.timer_close2);
                 dev.info = info;
                 notifyCallbacks(dev);
               } else { //i.e. "hello"
-                clearNoResponseTimeout1(dev);
+                clearTimeout(dev.timer_close1);
                 if (arguments.length === 0) {
                   AscUtil.debug && console.log(dev.tag + ' Chrome app error: ' + (chrome.runtime.lastError && chrome.runtime.lastError.message || ''));
                   cleanup(dev, 'Chrome app error, or ' + err_chrome_app_not_installed);
@@ -508,8 +477,8 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       if (!devMap[dev.url]) return;
       AscUtil.debug && console.log(dev.tag + ' cleanup. reason: ' + reason);
       delete devMap[dev.url];
-      clearNoResponseTimeout1(dev);
-      clearNoResponseTimeout2(dev);
+      clearTimeout(dev.timer_close1);
+      clearTimeout(dev.timer_close2);
       if (dev.chromeAppIPC) {
         try {
           dev.chromeAppIPC.disconnect();
@@ -520,21 +489,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       }
       dev.info = {conId: '', connected: false, status: reason};
       notifyCallbacks(dev);
-      dev.callbackAry = [];
-    }
-
-    function clearNoResponseTimeout1(dev) {
-      if (dev.timer_close1) {
-        clearTimeout(dev.timer_close1);
-        dev.timer_close1 = null;
-      }
-    }
-
-    function clearNoResponseTimeout2(dev) {
-      if (dev.timer_close2) {
-        clearTimeout(dev.timer_close2);
-        dev.timer_close2 = null;
-      }
+      dev.callbackAry.length = 0;
     }
 
     function notifyCallbacks(dev) {
@@ -548,7 +503,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       var match = url.match(/\bdevice=([^&]+)/), id = match ? decodeURIComponent(match[1]) : url;
       return '[VirtAdbDev ' + id + ']';
     }
-  })(); //end of Virtual ADB Device functions
+  })(); //end of Virtual ADB Device functions --------------------------------
 
   function getWebSocketURL(url) {
     if (url.slice(0, 5) === 'ws://') {
