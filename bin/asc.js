@@ -505,10 +505,10 @@ function turnOnScreen(dev) {
   dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
-  fastAdbExec('[SendKey]', dev, 'input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
+  fastAdbExec('[SendKey]', dev, 'exec input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function sendText(dev, text) {
-  fastAdbExec('[sendText]', dev, 'input text ' + text.replace(/ /g, '%s'), {timeout: cfg.adbSendKeyTimeout * 1000});
+  fastAdbExec('[sendText]', dev, 'exec input text ' + text.replace(/ /g, '%s'), {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function encryptSn(sn) {
   sn = sn || ' ';
@@ -598,7 +598,7 @@ function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[CAP ' + q._hash + ']', dev, [].concat('{ date >&2 && cd', cfg.androidWorkDir,
           '&& export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.', (cfg.logFfmpegDebugInfo ? '&& export ASC_LOG_ALL=1' : []), '&& export ASC_=' + encryptSn(dev.internalSN),
-          '&& ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : ''), '-nostdin -nostats -loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+          '&& exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : ''), '-nostdin -nostats -loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
           '-f androidgrab -probesize 32'/*min bytes for check*/, (q._reqSz ? ['-width', q._reqSz.w, '-height', q._reqSz.h] : []), '-i', q.fastCapture ? dev.fastLibPath : dev.libPath,
           (q._filter ? ['-vf', '\'' + q._filter + '\''] : []), '-f mjpeg -q:v 1 - ; } 2>', cfg.androidLogPath).join(' ') // "-" means stdout
       , function/*on_close*/() {
