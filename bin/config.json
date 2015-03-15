@@ -28,7 +28,7 @@
   //log settings
   "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
   "log_keepOldFileDays": 2, //0 means no old files to keep
-  "logAllAdbCommands": false,
+  "logAllProcCmd": false,
   "logAllHttpReqRes": false,
   "logHttpReqDetail": false,
   "logFfmpegDebugInfo": false,
