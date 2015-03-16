@@ -440,19 +440,6 @@ function prepareDeviceFile(dev, force/*optional*/) {
   }
 } //end of prepareDeviceFile
 
-function runCmdInOrderIgnoreResult(dev, cmd) {
-  if (!dev.shell || !dev.shell.stdin) {
-    dev.shell = spawn('[Shell ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
-      dev.shell = null;
-    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true});
-    if (!dev.shell || !dev.shell.stdin) return;
-    dev.shell.stdin.write('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"; alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh\n');
-  }
-  if (dev.shell && dev.shell.stdin) {
-    cfg.logAllProcCmd && log(cmd, {head: '[Shell ' + dev.id + ']' + '$ '});
-    dev.shell.stdin.write(cmd + '\n');
-  }
-}
 function sendTouchEvent(dev, type, _x, _y) {
   var x = (_x * dev.touch.w).toFixed(), y = (_y * dev.touch.h).toFixed(), cmd = '';
   if (!(type === 'm' && dev.touchLast_x === x && dev.touchLast_y === y)) { //ignore move event if at same position
@@ -495,11 +482,25 @@ function sendTouchEvent(dev, type, _x, _y) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    cmd && runCmdInOrderIgnoreResult(dev, cmd);
+    cmd && runCmd(dev, cmd);
 
     if (type === 'd' || type === 'm') { //down, move
       dev.touchLast_x = x;
       dev.touchLast_y = y;
+    }
+  }
+
+  function runCmd(dev, cmd) {
+    if (!dev.shellForTouch || !dev.shellForTouch.stdin) {
+      dev.shellForTouch = spawn('[ShellForTouch ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
+        dev.shellForTouch = null;
+      }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true});
+      if (!dev.shellForTouch || !dev.shellForTouch.stdin) return;
+      dev.shellForTouch.stdin.write('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"\n');
+    }
+    if (dev.shellForTouch && dev.shellForTouch.stdin) {
+      cfg.logAllProcCmd && log(cmd, {head: '[ShellForTouch ' + dev.id + ']' + '$ '});
+      dev.shellForTouch.stdin.write(cmd + '\n');
     }
   }
 }
@@ -518,10 +519,28 @@ function turnOnScreen(dev) {
   turnOnScreen.proc = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
-  runCmdInOrderIgnoreResult(dev, 'k ' + keyCode);
+  runCmdForSendKeyOrText(dev, 'k ' + keyCode);
 }
 function sendText(dev, text) {
-  runCmdInOrderIgnoreResult(dev, 't ' + text.slice(0, 10).replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~])/g, '\\$1'));
+  text.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
+    n && runCmdForSendKeyOrText(dev, 'k ' + 66/*enter*/);
+    for (var i = 0; i < ls.length; i += 10) {
+      runCmdForSendKeyOrText(dev, 't ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~])/g, '\\$1'));
+    }
+  });
+}
+function runCmdForSendKeyOrText(dev, cmd) {
+  if (!dev.shellForKeyText || !dev.shellForKeyText.stdin) {
+    dev.shellForKeyText = spawn('[ShellForKeyText ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
+      dev.shellForKeyText = null;
+    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true});
+    if (!dev.shellForKeyText || !dev.shellForKeyText.stdin) return;
+    dev.shellForKeyText.stdin.write('alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh\n');
+  }
+  if (dev.shellForKeyText && dev.shellForKeyText.stdin) {
+    cfg.logAllProcCmd && log(cmd, {head: '[ShellForKeyText ' + dev.id + ']' + '$ '});
+    dev.shellForKeyText.stdin.write(cmd + '\n');
+  }
 }
 function encryptSn(sn) {
   sn = sn || ' ';

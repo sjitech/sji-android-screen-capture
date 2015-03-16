@@ -261,7 +261,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
-          len = Math.min(txtQueue.length, 10);
+          len = Math.min(txtQueue.length, 2000);
           t = txtQueue.slice(0, len).join(''); //only get first MAX N chars
           rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
@@ -269,7 +269,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         }
 
         function send_by_ajax() {
-          len = Math.min(txtQueue.length, 10);
+          len = Math.min(txtQueue.length, 2000);
           t = txtQueue.slice(0, len).join(''); //only get first MAX N chars
           $.ajax(ctx.url + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT})
               .done(on_ok).fail(on_ng);
