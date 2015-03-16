@@ -77,7 +77,7 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   opt.logStderr === undefined && (opt.logStderr = true);
   opt.mergeStdout === undefined && (opt.mergeStdout = opt.logStdout || !!on_close);
   var tag = _tag.replace(/^(\[[^\] ]+)/, '$1 ' + dev.id);
-  opt.log && log(tag + '[FastADB] ' + cmd + ' with timeout(ms):' + (opt.timeout || 'No'));
+  opt.log && log(tag + '[FastADB] "' + cmd + '" with timeout(ms):' + (opt.timeout || 'No'));
   var adbCon = net.connect(dev.adbHost.port || 5037, dev.adbHost.host || '127.0.0.1', function /*on_connected*/() {
     adbCon.write(dev.buf_switchTransport);
     var ok = 0;
@@ -508,7 +508,7 @@ function sendKey(dev, keyCode) {
   fastAdbExec('[SendKey]', dev, 'exec input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function sendText(dev, text) {
-  fastAdbExec('[sendText]', dev, 'exec input text ' + text.replace(/ /g, '%s'), {timeout: cfg.adbSendKeyTimeout * 1000});
+  fastAdbExec('[sendText]', dev, 'exec input text ' + text.replace(/[\x00-\x20\s]/g, '%s').replace(/'/g, "\\'").replace(/"/g, '\\"'), {timeout: cfg.adbSendKeyTimeout * 1000});
 }
 function encryptSn(sn) {
   sn = sn || ' ';
