@@ -490,7 +490,7 @@ function sendTouchEvent(dev, type, _x, _y) {
       cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
     }
 
-    cmd && runCmdInOrderIgnoreResult(cmd);
+    cmd && runCmdInOrderIgnoreResult(dev, cmd);
 
     if (type === 'd' || type === 'm') { //down, move
       dev.touchLast_x = x;
