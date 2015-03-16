@@ -66,10 +66,10 @@
         <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
           Log
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
           L
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
           T
         </a>
         &nbsp;<span class="captureIndicator" id="captureParameter_$device" style="float: right"></span>
