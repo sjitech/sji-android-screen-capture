@@ -80,6 +80,7 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   opt.log && log(tag + '[FastADB] "' + cmd + '" with timeout(ms):' + (opt.timeout || 'No'));
 
   var adbCon = net.connect(dev.adbHost.port || 5037, dev.adbHost.host || '127.0.0.1', function /*on_connected*/() {
+    opt.log && log(tag + '[FastADB] connection OK');
     adbCon.write(dev.buf_switchTransport);
     var ok = 0;
     adbCon.on('data', function (buf) {
@@ -111,12 +112,6 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
     opt.logStderr && log(tag + '[FastADB] cleanup due to timeout(' + opt.timeout + 'ms)');
     cleanup('error: timeout');
   }, opt.timeout));
-
-  adbCon.__exec = function (cmd) {
-    if (!cmd) return;
-    cfg.logAllProcCmd && log(cmd, {head: tag + '$ '});
-    adbCon.write(cmd + '\n');
-  };
 
   adbCon.__cleanup = cleanup;
   adbCon.__tag = tag;
@@ -322,8 +317,7 @@ function scanAllDevices(mode/* 'checkPrepare', 'forcePrepare', undefined means r
         !mode && devList.forEach(function (dev) {
           if (dev.status === 'OK' && Date.now() - (dev.lastKeepAliveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000) {
             dev.lastKeepAliveDateMs = Date.now();
-            //fastAdbExec('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000});
-            runCmdInOrderIgnoreResult(dev, 'a=');
+            fastAdbExec('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000});
           }
         });
         adbHost.scanning = false;
@@ -397,9 +391,6 @@ function prepareDeviceFile(dev, force/*optional*/) {
         return setStatus('error: failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
       }
       setDeviceOrientation(dev, 'free');
-      if (!startCommonAdbShell()) {
-        return setStatus('failed to start adb shell');
-      }
       return setStatus('OK');
     }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
   } //end of FinishPrepareFile
@@ -446,23 +437,16 @@ function prepareDeviceFile(dev, force/*optional*/) {
     });
     log('[GetTouchDevInfo ' + dev.id + ']' + ' ' + dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
   }
-
-  function startCommonAdbShell() {
-    if (dev.shell) return true;
-    var adbCon = dev.shell = fastAdbExec('[Shell]', dev, '', function/*on_close*/() {
-      if (dev.shell !== adbCon) return;
-      if (dev.status === 'OK') {
-        log(adbCon.__tag + ' adb shell exited, retry after 10 seconds');
-        setTimeout(startCommonAdbShell, 10 * 1000);
-      }
-      dev.shell = null;
-    }, {log: true, logStdout: false, logStderr:true, mergeStdout: false, mergeStderr: false});
-    return !!adbCon;
-  }
 } //end of prepareDeviceFile
 
 function runCmdInOrderIgnoreResult(dev, cmd) {
-  dev.shell && dev.shell.__exec(cmd);
+  !dev.shell && (dev.shell = spawn('[Shell ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
+    dev.shell = null;
+  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
+  if (dev.shell.stdin) {
+    cfg.logAllProcCmd && log(cmd, {head: '[Shell ' + dev.id + ']' + '$ '});
+    dev.shell.stdin.write(cmd + '\n');
+  }
 }
 function sendTouchEvent(dev, type, _x, _y) {
   var x = (_x * dev.touch.w).toFixed(), y = (_y * dev.touch.h).toFixed(), cmd = '';
@@ -521,12 +505,12 @@ function errTouchArgs(dev, type, x, y) {
       || !chk('type', type, ['d', 'm', 'u', 'o']) || !chk('x', x, 0, 1) || !chk('y', y, 0, 1)
 }
 function setDeviceOrientation(dev, orientation) {
-  //fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
-  runCmdInOrderIgnoreResult(dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''));
+  setDeviceOrientation.proc && setDeviceOrientation.proc.__cleanup();
+  setDeviceOrientation.proc = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
 }
 function turnOnScreen(dev) {
-  //dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
-  dev.sysVer > 2.3 && runCmdInOrderIgnoreResult(dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)');
+  turnOnScreen.proc && turnOnScreen.proc.__cleanup();
+  turnOnScreen.proc = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
   //fastAdbExec('[SendKey]', dev, 'exec input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
