@@ -427,7 +427,8 @@ function prepareDeviceFile(dev, force/*optional*/) {
             (match['003a'] = devInfo.match(/\D*003a.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgPressure = Math.max(Math.ceil(match['003a'][1] / 2), 1)); //ABS_MT_PRESSURE
             (match['0032'] = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgFingerSize = Math.max(Math.ceil(match['0032'][1] / 2), 1)); //ABS_MT_WIDTH_MAJOR
             dev.touch.needBtnTouchEvent = /\n +KEY.*:.*014a/.test(devInfo); //BTN_TOUCH for sumsung devices
-            dev.touch.cmdHead = 'sendevent ' + devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
+            dev.touch.devPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
+            dev.touch.cmdHead = 'T';
             dev.touchStatus = 'OK';
             return true;
           }
@@ -440,10 +441,14 @@ function prepareDeviceFile(dev, force/*optional*/) {
 } //end of prepareDeviceFile
 
 function runCmdInOrderIgnoreResult(dev, cmd) {
-  !dev.shell && (dev.shell = spawn('[Shell ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
-    dev.shell = null;
-  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true}));
-  if (dev.shell.stdin) {
+  if (!dev.shell || !dev.shell.stdin) {
+    dev.shell = spawn('[Shell ' + dev.id + ']', cfg.adb, dev.adbArgs.concat('shell'), function/*on_close*/() {
+      dev.shell = null;
+    }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/], log: true});
+    if (!dev.shell || !dev.shell.stdin) return;
+    dev.shell.stdin.write('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"; alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh\n');
+  }
+  if (dev.shell && dev.shell.stdin) {
     cfg.logAllProcCmd && log(cmd, {head: '[Shell ' + dev.id + ']' + '$ '});
     dev.shell.stdin.write(cmd + '\n');
   }
@@ -513,12 +518,10 @@ function turnOnScreen(dev) {
   turnOnScreen.proc = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
-  //fastAdbExec('[SendKey]', dev, 'exec input keyevent ' + keyCode, {timeout: cfg.adbSendKeyTimeout * 1000});
-  runCmdInOrderIgnoreResult(dev, 'exec input keyevent ' + keyCode);
+  runCmdInOrderIgnoreResult(dev, 'k ' + keyCode);
 }
 function sendText(dev, text) {
-  //fastAdbExec('[sendText]', dev, 'exec input text ' + text.slice(0, 100).replace(/[\x00-\x20\s]/g, '%s').replace(/'/g, "\\'").replace(/"/g, '\\"'), {timeout: cfg.adbSendKeyTimeout * 1000});
-  runCmdInOrderIgnoreResult(dev, 'exec input text ' + text.slice(0, 100).replace(/[\x00-\x20\s]/g, '%s').replace(/'/g, "\\'").replace(/"/g, '\\"'));
+  runCmdInOrderIgnoreResult(dev, 't ' + text.slice(0, 10).replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~])/g, '\\$1'));
 }
 function encryptSn(sn) {
   sn = sn || ' ';
