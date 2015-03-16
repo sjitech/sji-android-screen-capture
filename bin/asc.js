@@ -80,10 +80,12 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   opt.log && log(tag + '[FastADB] "' + cmd + '" with timeout(ms):' + (opt.timeout || 'No'));
 
   var adbCon = net.connect(dev.adbHost.port || 5037, dev.adbHost.host || '127.0.0.1', function /*on_connected*/() {
+    if (cleanup.called) return;
     opt.log && log(tag + '[FastADB] connection OK');
     adbCon.write(dev.buf_switchTransport);
     var ok = 0;
     adbCon.on('data', function (buf) {
+      if (cleanup.called) return;
       if (ok < 2) {
         if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
           ok++;
@@ -101,7 +103,7 @@ function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
     });
   });
   adbCon.on('error', function (err) {
-    opt.logStderr && log(tag + '[FastADB] ' + err);
+    !cleanup.called && opt.logStderr && log(tag + '[FastADB] ' + err);
     cleanup('error: protocol fault');
   });
   adbCon.once('close', function () {
@@ -511,11 +513,11 @@ function errTouchArgs(dev, type, x, y) {
       || !chk('type', type, ['d', 'm', 'u', 'o']) || !chk('x', x, 0, 1) || !chk('y', y, 0, 1)
 }
 function setDeviceOrientation(dev, orientation) {
-  setDeviceOrientation.proc && setDeviceOrientation.proc.__cleanup();
+  setDeviceOrientation.proc && setDeviceOrientation.proc.__cleanup('kill old and run new request');
   setDeviceOrientation.proc = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
 }
 function turnOnScreen(dev) {
-  turnOnScreen.proc && turnOnScreen.proc.__cleanup();
+  turnOnScreen.proc && turnOnScreen.proc.__cleanup('kill old and run new request');
   turnOnScreen.proc = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
