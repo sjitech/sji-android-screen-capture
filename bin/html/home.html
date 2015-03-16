@@ -38,7 +38,7 @@
       <td style="border-right: 1px solid gray"></td>
       <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap">
-          <a href="@viewUrlBase/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
+          <a href="@viewUrlBase/liveViewer.html?device=@device&accessKey=@accessKey@debugBrowserScript" target="liveView_$device" title="Show Live View">
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
@@ -151,6 +151,11 @@
     <div>
       <a class="button @logRdcWebSocketDetail" href="set@adminUrlSuffix?logRdcWebSocketDetail=@logRdcWebSocketDetail_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logRdcWebSocketDetail/>Log RdcWebSocket Detail
+      </a>
+    </div>
+    <div>
+      <a class="button @debugBrowserScript" href="set@adminUrlSuffix?debugBrowserScript=@debugBrowserScript_negVal" target="resultIFrame">
+        <input type="checkbox" checkedIf_debugBrowserScript/>Debug Browser Script
       </a>
     </div>
     <div>

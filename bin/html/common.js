@@ -1,5 +1,4 @@
-var AscUtil = {debug: false, showEventsOnly: false};
-true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); //just to avoid compiler warning
+var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false};
 
 (function ($) {
   'use strict';
@@ -82,7 +81,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       }
 
       function convertToTouchEventAndSend(e) {
-        if (AscUtil.debug) {
+        if (AscUtil.debugBreak) {
           debugger;
         }
         if (e.offsetX === undefined) {
@@ -139,22 +138,22 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
           if (e.type === 'touchstart' && !touchstart_e) {
             touchstart_e = e;
             touchstart_delaySendTimer = setTimeout(function () { //give me a chance to detect isMultiTouch, if is then cancel event
-              evtAry.push(e) && evtAry.length === 1 && sendTouchEvent();
+              evtAry.push(e) === 1 && sendTouchEvent();
             }, 20);
           } else {
             if (touchstart_e) {
               clearTimeout(touchstart_delaySendTimer);
-              evtAry.push(touchstart_e) && evtAry.length === 1 && sendTouchEvent();
+              evtAry.push(touchstart_e) === 1 && sendTouchEvent();
               touchstart_e = null;
             }
-            evtAry.push(e) && evtAry.length === 1 && sendTouchEvent();
+            evtAry.push(e) === 1 && sendTouchEvent();
           }
         }
       } //end of convertToTouchEventAndSend
 
       function sendTouchEvent() {
         if (!evtAry.length) return;
-        var e = evtAry.shift(), touchType = touchTypeMap[e.type], ctx = liveImage.ctx_sendTouch;
+        var e = evtAry[0], touchType = touchTypeMap[e.type], ctx = liveImage.ctx_sendTouch;
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
@@ -167,7 +166,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
 
           rdcWebSocket.__send(buf, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
-          }, {timeout: DEF_TIMEOUT});
+          });
         }
 
         function send_by_ajax() {
@@ -176,6 +175,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         }
 
         function on_ok() {
+          evtAry.shift();
           //remove continuous 'move' events except latest one
           var i = 0, cnt = 0, _e;
           while ((_e = evtAry[i++]) && touchTypeMap[_e.type] === 'm' /*move*/) cnt++;
@@ -195,37 +195,59 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       init_keyboard_handler.called = true;
       var txtQueue = [], keyQueue = [];
 
-      $(document.body).unbind('keydown.live_input keypress.live_input')
+      $(document.body).unbind('keydown.live_input keypress.live_input paste.live_input')
           .on('keydown.live_input', function (e) {
-            if (!focusedLiveImage) return; //do nothing if mouse is not inside some live image
-            var c = e.which === 0xd ? 66/*KEYCODE_ENTER*/ : e.which === 0x8 ? 67 /*KEYCODE_DEL*/ : e.which === 0x2e ? 112 /*KEYCODE_FORWARD_DEL*/ : 0;
+            if (!focusedLiveImage) return;
+            var c = e.which === 0xd ? 66/*enter*/ : e.which === 0x8 ? 67 /*del*/ : e.which === 0x2e ? 112 /*forward_del*/ : 0;
             if (!c) return;
-            keyQueue.push(c) && keyQueue.length === 1 && sendKey();
+            keyQueue.push(c) === 1 && sendKey();
             e.preventDefault();
-
           })
           .on('keypress.live_input', function (e) {
-            if (!focusedLiveImage) return; //do nothing if mouse is not inside some live image
+            if (!focusedLiveImage) return;
             if (e.metaKey || e.which < 0x20 || e.which > 0x7f) return;
             var c = String.fromCharCode(e.which);
-            txtQueue.push(c) && txtQueue.length === 1 && sendText();
+            txtQueue.push(c) === 1 && sendText();
+            e.preventDefault();
+          })
+          .on("paste.live_input", function (e) {
+            if (!focusedLiveImage) return;
+            var clp = (e.originalEvent || e).clipboardData, text;
+            if (clp === undefined || clp === null) {
+              text = window.clipboardData.getData('text') || '';
+            } else {
+              text = clp.getData('text/plain') || '';
+            }
+            if (text) {
+              var i = 0, cnt = text.length, sendNow = !txtQueue.length;
+              for (; i < cnt; i++) {
+                txtQueue.push(text[i]);
+              }
+              sendNow && sendText();
+            }
             e.preventDefault();
           });
+      //end of event binding
 
       function sendKey() {
         if (!keyQueue.length) return;
-        var c = keyQueue.shift(), ctx = focusedLiveImage.ctx_sendKey;
+        var c = keyQueue[0], ctx = focusedLiveImage.ctx_sendKey;
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
           rdcWebSocket.__send(ctx.devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
-            !err && res === '' ? sendKey() : on_ng();
+            !err && res === '' ? on_ok() : on_ng();
           });
         }
 
         function send_by_ajax() {
           $.ajax(ctx.url + '&keyCode=' + c, {timeout: DEF_TIMEOUT})
-              .done(sendKey).fail(on_ng);
+              .done(on_ok).fail(on_ng);
+        }
+
+        function on_ok() {
+          keyQueue.shift(); //remove first items
+          sendKey();
         }
 
         function on_ng() {
@@ -235,19 +257,27 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
 
       function sendText() {
         if (!txtQueue.length) return;
-        var t = txtQueue.join(''), ctx = focusedLiveImage.ctx_sendText;
-        txtQueue.length = 0;
+        var len = Math.min(txtQueue.length, 100), t = txtQueue.slice(0, len).join('')/*only get first MAX 100 chars*/, ctx = focusedLiveImage.ctx_sendText;
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
           rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
-            !err && res === '' && sendText();
+            !err && res === '' ? on_ok() : on_ng();
           });
         }
 
         function send_by_ajax() {
           $.ajax(ctx.url + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT})
-              .done(sendText)
+              .done(on_ok).fail(on_ng);
+        }
+
+        function on_ok() {
+          txtQueue.splice(0, len); //remove first "len" items
+          sendText();
+        }
+
+        function on_ng() {
+          txtQueue.length = 0;
         }
       } //end of sendText
 
@@ -280,11 +310,11 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         }
         res = JSON.parse(res);
         if (res.err || typeof(res.devHandle) !== 'number' || isNaN(res.devHandle) || res.devHandle < 0) {
-          console.log('[RdcWebSocket] open_device error: ' + (res.err || 'protocol error'));
+          AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res.err || 'protocol error'));
           callback(res.err);
           return;
         }
-        console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.devHandle);
+        AscUtil.debug && console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.devHandle);
         callback('', res.devHandle);
       }, opt && opt.timeout || DEF_TIMEOUT);
     } //end of open_device
@@ -299,12 +329,12 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
 
       ws.addEventListener('open', function () {
         if (!ws) return;
-        console.log(wsTag + ' opened');
+        AscUtil.debug && console.log(wsTag + ' opened');
         rdcWebSocket = ws;
       });
       ws.addEventListener('close', function (e) {
         if (!rdcWebSocket) return;
-        console.log(wsTag + ' closed.' + (e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : ''));
+        AscUtil.debug && console.log(wsTag + ' closed.' + (e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : ''));
         rdcWebSocket = null;
         cleanup('RdcWebSocket is closed');
         if (e.code !== 403) {
@@ -313,7 +343,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
       });
       ws.addEventListener('error', function () {
         if (!rdcWebSocket) return;
-        console.log(wsTag + ' error');
+        AscUtil.debug && console.log(wsTag + ' error');
         cleanup('RdcWebSocket error');
       });
 
@@ -323,7 +353,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         var callback = callbackMap[seq];
         if (callback) {
           delete callbackMap[seq];
-          typeof(e.data) === 'string' && e.data !== '' && console.log(wsTag + ' recv "' + e.data + '"');
+          AscUtil.debug && typeof(e.data) === 'string' && e.data !== '' && console.log(wsTag + ' recv "' + e.data + '"');
           callback('', e.data);
         }
       });
@@ -333,7 +363,7 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
         ws.send(data);
         callbackMap[seq] = function (err, data) {
           clearTimeout(timer);
-          err && console.log(wsTag + ' notify: ' + err);
+          AscUtil.debug && err && console.log(wsTag + ' notify: ' + err);
           callback(err, data);
         };
         var timer = setTimeout(function () {
@@ -344,8 +374,8 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
 
       function cleanup(reason) {
         if (cleanup.called) return;
-        console.log(wsTag + ' cleanup. reason: ' + reason);
         cleanup.called = true;
+        AscUtil.debug && console.log(wsTag + ' cleanup. reason: ' + reason);
         if (rdcWebSocket) {
           rdcWebSocket.close();
           rdcWebSocket = null;
@@ -535,3 +565,5 @@ true === false && console.log({changedTouches: 0, touches: 0, setFloat32: 0}); /
     return url;
   }
 })($/*jQuery*/);
+
+true === false && console.log({debugBreak: 0, changedTouches: 0, touches: 0, setFloat32: 0}); //just to avoid compiler warning

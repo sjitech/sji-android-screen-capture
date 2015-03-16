@@ -68,6 +68,7 @@
   "adbCmdTimeout": 30,
   "adbScanPerHostDelay": 2,
   "ajaxAllowOrigin": "*",
+  "debugBrowserScript": false,
 
   "__end": 0
 }
