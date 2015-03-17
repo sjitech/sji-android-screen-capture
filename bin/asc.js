@@ -430,7 +430,6 @@ function prepareDeviceFile(dev, force/*optional*/) {
             (match['0032'] = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgFingerSize = Math.max(Math.ceil(match['0032'][1] / 2), 1)); //ABS_MT_WIDTH_MAJOR
             dev.touch.needBtnTouchEvent = /\n +KEY.*:.*014a/.test(devInfo); //BTN_TOUCH for sumsung devices
             dev.touch.devPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
-            dev.touch.cmdHead = 'T';
             dev.touchStatus = 'OK';
             return true;
           }
@@ -447,41 +446,41 @@ function sendTouchEvent(dev, type, _x, _y) {
   if (!(type === 'm' && dev.touchLast_x === x && dev.touchLast_y === y)) { //ignore move event if at same position
     if (dev.touch.maxTrackId === 65535) {
       if (type === 'd') { //down
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-        dev.touch.needBtnTouchEvent && (cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' 1; '); //BTN_TOUCH DOWN for sumsung devices
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        cmd += 'T 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+        dev.touch.needBtnTouchEvent && (cmd += 'T 1 ' + 0x014a + ' 1; '); //BTN_TOUCH DOWN for sumsung devices
+        cmd += 'T 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
         if (dev.touch.avgPressure) {
-          cmd += dev.touch.cmdHead + ' 3 ' + 0x3a + ' ' + dev.touch.avgPressure + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+          cmd += 'T 3 ' + 0x3a + ' ' + dev.touch.avgPressure + '; '; //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
         } else if (dev.touch.avgFingerSize) {
-          cmd += dev.touch.cmdHead + ' 3 ' + 0x32 + ' ' + dev.touch.avgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+          cmd += 'T 3 ' + 0x32 + ' ' + dev.touch.avgFingerSize + '; '; //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
         }
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+        cmd += 'T 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+        cmd += 'T 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
       } else if (type === 'm') { //move
-        x !== dev.touchLast_x && (cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-        y !== dev.touchLast_y && (cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+        x !== dev.touchLast_x && (cmd += 'T 3 ' + 0x35 + ' ' + x + '; '); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+        y !== dev.touchLast_y && (cmd += 'T 3 ' + 0x36 + ' ' + y + '; '); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
       } else { //up, out
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x39 + ' -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-        dev.touch.needBtnTouchEvent && (cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' 0; ');  //BTN_TOUCH UP for sumsung devices
+        cmd += 'T 3 ' + 0x39 + ' -1; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+        dev.touch.needBtnTouchEvent && (cmd += 'T 1 ' + 0x014a + ' 0; ');  //BTN_TOUCH UP for sumsung devices
       }
-      cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
+      cmd += 'T 0 0 0; '; //SYN_REPORT
     }
     else { //for some old devices such as galaxy SC-02B (android 2.2, 2.3)
-      cmd += dev.touch.cmdHead + ' 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      cmd += dev.touch.cmdHead + ' 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      cmd += dev.touch.cmdHead + ' 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      cmd += 'T 3 ' + 0x39 + ' 0; '; //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      cmd += 'T 3 ' + 0x35 + ' ' + x + '; '; //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      cmd += 'T 3 ' + 0x36 + ' ' + y + '; '; //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
       if (type === 'd' || type === 'm') { //down, move
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-        dev.touch.avgPressure && (cmd += dev.touch.cmdHead + ' 3 ' + 0x3a + ' ' + dev.touch.avgPressure + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+        cmd += 'T 3 ' + 0x30 + ' ' + dev.touch.avgContactSize + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        dev.touch.avgPressure && (cmd += 'T 3 ' + 0x3a + ' ' + dev.touch.avgPressure + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
       } else { //up, out
-        cmd += dev.touch.cmdHead + ' 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-        dev.touch.avgPressure && (cmd += dev.touch.cmdHead + ' 3 ' + 0x3a + ' ' + 0 + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+        cmd += 'T 3 ' + 0x30 + ' ' + 0 + '; '; //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+        dev.touch.avgPressure && (cmd += 'T 3 ' + 0x3a + ' ' + 0 + '; '); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
       }
-      cmd += dev.touch.cmdHead + ' 0 2 0; '; //SYN_MT_REPORT   this is very important
+      cmd += 'T 0 2 0; '; //SYN_MT_REPORT   this is very important
       if (dev.touch.needBtnTouchEvent && (type === 'd' || type === 'u' || type === 'o')) {
-        cmd += dev.touch.cmdHead + ' 1 ' + 0x014a + ' ' + (type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
+        cmd += 'T 1 ' + 0x014a + ' ' + (type === 'd' ? 1 : 0) + '; '; //BTN_TOUCH DOWN for sumsung devices
       }
-      cmd += dev.touch.cmdHead + ' 0 0 0; '; //SYN_REPORT
+      cmd += 'T 0 0 0; '; //SYN_REPORT
     }
 
     cmd && runCmd(dev, cmd);
@@ -500,10 +499,8 @@ function sendTouchEvent(dev, type, _x, _y) {
       if (!dev.shellForTouch || !dev.shellForTouch.stdin) return;
       dev.shellForTouch.stdin.write('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"\n');
     }
-    if (dev.shellForTouch && dev.shellForTouch.stdin) {
-      cfg.logAllProcCmd && log(cmd, {head: '[ShellForTouch ' + dev.id + ']' + '$ '});
-      dev.shellForTouch.stdin.write(cmd + '\n');
-    }
+    cfg.logAllProcCmd && log(cmd, {head: '[ShellForTouch ' + dev.id + ']' + '$ '});
+    dev.shellForTouch.stdin.write(cmd + '\n');
   }
 }
 function errTouchArgs(dev, type, x, y) {
@@ -513,12 +510,12 @@ function errTouchArgs(dev, type, x, y) {
       || !chk('type', type, ['d', 'm', 'u', 'o']) || !chk('x', x, 0, 1) || !chk('y', y, 0, 1)
 }
 function setDeviceOrientation(dev, orientation) {
-  setDeviceOrientation.proc && setDeviceOrientation.proc.__cleanup('kill old and run new request');
-  setDeviceOrientation.proc = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
+  dev.adbCon_setDeviceOrientation && dev.adbCon_setDeviceOrientation.__cleanup('new request comes');
+  dev.adbCon_setDeviceOrientation = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (echo install ScreenOrientation.apk; pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? '--user 0' : ''), {timeout: cfg.adbSetOrientationTimeout * 1000});
 }
 function turnOnScreen(dev) {
-  turnOnScreen.proc && turnOnScreen.proc.__cleanup('kill old and run new request');
-  turnOnScreen.proc = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
+  dev.adbCon_turnOnScreen && dev.adbCon_turnOnScreen.__cleanup('new request comes');
+  dev.adbCon_turnOnScreen = dev.sysVer > 2.3 && fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && (input keyevent 26; input keyevent 82)', {timeout: cfg.adbTurnScreenOnTimeout * 1000});
 }
 function sendKey(dev, keyCode) {
   runCmdForSendKeyOrText(dev, 'k ' + keyCode);
@@ -539,10 +536,8 @@ function runCmdForSendKeyOrText(dev, cmd) {
     if (!dev.shellForKeyText || !dev.shellForKeyText.stdin) return;
     dev.shellForKeyText.stdin.write('alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh\n');
   }
-  if (dev.shellForKeyText && dev.shellForKeyText.stdin) {
-    cfg.logAllProcCmd && log(cmd, {head: '[ShellForKeyText ' + dev.id + ']' + '$ '});
-    dev.shellForKeyText.stdin.write(cmd + '\n');
-  }
+  cfg.logAllProcCmd && log(cmd, {head: '[ShellForKeyText ' + dev.id + ']' + '$ '});
+  dev.shellForKeyText.stdin.write(cmd + '\n');
 }
 function encryptSn(sn) {
   sn = sn || ' ';
