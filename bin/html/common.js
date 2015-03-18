@@ -157,14 +157,14 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
+          if (ctx.devHandle === undefined) return on_ng();
           var buf = new ArrayBuffer(13);
           var bv = new DataView(buf);
           bv.setUint32(0, ctx.devHandle);
           bv.setFloat32(4, e.xPer);
           bv.setFloat32(8, e.yPer);
           bv.setUint8(12, touchType.charCodeAt(0));
-
-          rdcWebSocket.__send(buf, function (err, res) {
+          return rdcWebSocket.__send(buf, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
           });
         }
@@ -236,7 +236,8 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
-          rdcWebSocket.__send(ctx.devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
+          if (ctx.devHandle === undefined) return on_ng();
+          return rdcWebSocket.__send(ctx.devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
           });
         }
@@ -263,9 +264,10 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax);
 
         function send_by_websocket() {
+          if (ctx.devHandle === undefined) return on_ng();
           len = Math.min(txtQueue.length, 2000);
           t = txtQueue.slice(0, len).join(''); //only get first MAX N chars
-          rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
+          return rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
           });
         }
@@ -292,24 +294,24 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
 
     function send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax) {
       if (rdcWebSocket) {
-        if (ctx.devHandle !== undefined) {
-          send_by_websocket();
-        } else {
+        if (ctx.devHandle === undefined) {
           RdcWebSocket_open_device(ctx.url, function (err, handle) {
             if (err) {
               send_by_ajax();
             } else {
-              ctx.devHandle = handle;
+              ctx.devHandle = handle; //maybe still undefined
               send_by_websocket();
             }
           });
+        } else {
+          send_by_websocket();
         }
       } else {
         send_by_ajax();
       }
     }
 
-    function RdcWebSocket_open_device(devUrl, callback/*(err, devHandle)*/, opt/*{timeout:}*/) {
+    function RdcWebSocket_open_device(devUrl, callback/*(err, devHandle)*/, opt/*{timeout}*/) {
       rdcWebSocket.__send(devUrl, function (err, res) {
         if (err) {
           callback(err);
@@ -318,7 +320,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         res = JSON.parse(res);
         if (res.err || typeof(res.devHandle) !== 'number' || isNaN(res.devHandle) || res.devHandle < 0) {
           AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res.err || 'no valid devHandle returned'));
-          callback(res.err);
+          callback('', undefined);
           return;
         }
         AscUtil.debug && console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.devHandle);
