@@ -170,8 +170,9 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         }
 
         function send_by_ajax() {
-          $.ajax(ctx.url + '&type=' + touchType + '&x=' + e.xPer.toFixed(5) + '&y=' + e.yPer.toFixed(5), {timeout: DEF_TIMEOUT})
-              .done(on_ok).fail(on_ng);
+          $.ajax(ctx.url + '&type=' + touchType + '&x=' + e.xPer.toFixed(5) + '&y=' + e.yPer.toFixed(5), {timeout: DEF_TIMEOUT}).always(function (data) {
+            data === 'OK' ? on_ok() : on_ng();
+          });
         }
 
         function on_ok() {
@@ -241,8 +242,9 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         }
 
         function send_by_ajax() {
-          $.ajax(ctx.url + '&keyCode=' + c, {timeout: DEF_TIMEOUT})
-              .done(on_ok).fail(on_ng);
+          $.ajax(ctx.url + '&keyCode=' + c, {timeout: DEF_TIMEOUT}).always(function (data) {
+            data === 'OK' ? on_ok() : on_ng();
+          });
         }
 
         function on_ok() {
@@ -271,8 +273,9 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         function send_by_ajax() {
           len = Math.min(txtQueue.length, 2000);
           t = txtQueue.slice(0, len).join(''); //only get first MAX N chars
-          $.ajax(ctx.url + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT})
-              .done(on_ok).fail(on_ng);
+          $.ajax(ctx.url + '&text=' + encodeURIComponent(t), {timeout: DEF_TIMEOUT}).always(function (data) {
+            data === 'OK' ? on_ok() : on_ng();
+          });
         }
 
         function on_ok() {
@@ -314,7 +317,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         }
         res = JSON.parse(res);
         if (res.err || typeof(res.devHandle) !== 'number' || isNaN(res.devHandle) || res.devHandle < 0) {
-          AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res.err || 'protocol error'));
+          AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res.err || 'no valid devHandle returned'));
           callback(res.err);
           return;
         }
@@ -367,7 +370,6 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         ws.send(data);
         callbackMap[seq] = function (err, data) {
           clearTimeout(timer);
-          AscUtil.debug && err && console.log(wsTag + ' notify: ' + err);
           callback(err, data);
         };
         var timer = setTimeout(function () {
@@ -489,8 +491,8 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
             }, option && option.timeout || 5000);
           }
         }
-      } catch (err) {
-        AscUtil.debug && console.log(dev.tag + err);
+      } catch (e) {
+        AscUtil.debug && console.log(dev.tag + e);
       }
 
       !dev.chromeAppIPC && cleanup(dev, isChrome ? err_chrome_app_not_installed : 'you are not using Chrome browser');
@@ -517,8 +519,8 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         try {
           dev.chromeAppIPC.disconnect();
           dev.chromeAppIPC = null;
-        } catch (err) {
-          AscUtil.debug && console.log(dev.tag + err);
+        } catch (e) {
+          AscUtil.debug && console.log(dev.tag + e);
         }
       }
       dev.info = {conId: '', connected: false, status: reason};
