@@ -1,4 +1,4 @@
-var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false};
+var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSocket: !!WebSocket};
 
 (function ($) {
   'use strict';
@@ -9,8 +9,6 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
     var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
     var touchTypeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
     var DEF_TIMEOUT = 3000;
-
-    RdcWebSocket_init();
 
     AscUtil.setTouchHandler = function (liveImage/*htmlElement*/, urlForSendTouchEvent, rootRotator/*htmlElement, optional*/) {
       var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
@@ -237,7 +235,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
 
         function send_by_websocket() {
           if (ctx.devHandle === undefined) return on_ng();
-          return rdcWebSocket.__send(ctx.devHandle.toString(16) + ':' + String.fromCharCode(c), function (err, res) {
+          return rdcWebSocket.__send(ctx.devHandle + ':' + c, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
           });
         }
@@ -267,7 +265,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
           if (ctx.devHandle === undefined) return on_ng();
           len = Math.min(txtQueue.length, 2000);
           t = txtQueue.slice(0, len).join(''); //only get first MAX N chars
-          return rdcWebSocket.__send(ctx.devHandle.toString(16) + '<' + t, function (err, res) {
+          return rdcWebSocket.__send(ctx.devHandle + '<' + t, function (err, res) {
             !err && res === '' ? on_ok() : on_ng();
           });
         }
@@ -294,6 +292,18 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
 
     function send_by_websocket_or_ajax(ctx, send_by_websocket, send_by_ajax) {
       if (rdcWebSocket) {
+        send_if_websocket_inited();
+      } else {
+        if (AscUtil.useWebSocket) {
+          RdcWebSocket_init(ctx.url, function (err) {
+            err ? send_by_ajax() : send_if_websocket_inited();
+          });
+        } else {
+          send_by_ajax();
+        }
+      }
+
+      function send_if_websocket_inited() {
         if (ctx.devHandle === undefined) {
           RdcWebSocket_open_device(ctx.url, function (err, handle) {
             if (err) {
@@ -306,58 +316,55 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         } else {
           send_by_websocket();
         }
-      } else {
-        send_by_ajax();
-      }
-    }
+      } //end of send_if_websocket_inited
+    } //end of send_by_websocket_or_ajax
 
     function RdcWebSocket_open_device(devUrl, callback/*(err, devHandle)*/, opt/*{timeout}*/) {
       rdcWebSocket.__send(devUrl, function (err, res) {
         if (err) {
-          callback(err);
-          return;
+          return callback(err);
         }
-        res = JSON.parse(res);
-        if (res.err || typeof(res.devHandle) !== 'number' || isNaN(res.devHandle) || res.devHandle < 0) {
-          AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res.err || 'no valid devHandle returned'));
-          callback('', undefined);
-          return;
+        var devHandle = res && Number(res);
+        if (typeof(devHandle) !== 'number' || isNaN(devHandle) || devHandle < 0) {
+          AscUtil.debug && console.log('[RdcWebSocket] open_device error: ' + (res || 'no valid devHandle returned'));
+          return callback('', undefined);
         }
-        AscUtil.debug && console.log('[RdcWebSocket] open_device OK. devHandle: ' + res.devHandle);
-        callback('', res.devHandle);
+        AscUtil.debug && console.log('[RdcWebSocket] open_device OK. devHandle: ' + devHandle);
+        return callback('', devHandle);
       }, opt && opt.timeout || DEF_TIMEOUT);
-    } //end of open_device
+    } //end of RdcWebSocket_open_device
 
-    function RdcWebSocket_init() {
-      if (!WebSocket) return;
+    RdcWebSocket_init.callbackAry = [];
+
+    function RdcWebSocket_init(devUrl, callback) {
+      if (rdcWebSocket) return callback();
+      RdcWebSocket_init.callbackAry.push(callback);
+      if (rdcWebSocket === '')  return;
+      rdcWebSocket = '';
+
       var wsTag = '[RdcWebSocket]';
-      var ws = new WebSocket(getWebSocketURL('rdc'));
+      var ws = new WebSocket(getWebSocketURL(devUrl));
       ws.binaryType = 'arraybuffer'; //only affect type of e.data of on('message')
       delete ws.URL; //because chrome keep warning on it
-      var callbackMap = {}, clientSeq = 0, serverSeq = 0;
+      var callbackMap = {}, clientSeq = 0, serverSeq = 0, timer_connectionTimeout;
 
       ws.addEventListener('open', function () {
-        if (!ws) return;
-        AscUtil.debug && console.log(wsTag + ' opened');
+        AscUtil.debug && console.log(wsTag + ' OPENED');
         rdcWebSocket = ws;
+        clearTimeout(timer_connectionTimeout);
+        RdcWebSocket_init.callbackAry.forEach(function (callback) {
+          callback();
+        });
+        RdcWebSocket_init.callbackAry.length = 0;
       });
       ws.addEventListener('close', function (e) {
-        if (!rdcWebSocket) return;
-        AscUtil.debug && console.log(wsTag + ' closed.' + (e.code ? ' code: ' + e.code : '') + (e.reason ? ' reason: ' + e.reason : ''));
-        rdcWebSocket = null;
-        cleanup('RdcWebSocket is closed');
-        if (e.code !== 403) {
-          setTimeout(RdcWebSocket_init, 10000);
-        }
+        cleanup('CLOSED', (e.code || '') + (e.reason ? ' ' + e.reason : ''));
       });
       ws.addEventListener('error', function () {
-        if (!rdcWebSocket) return;
-        AscUtil.debug && console.log(wsTag + ' error');
-        cleanup('RdcWebSocket error');
+        cleanup('network error');
       });
 
       ws.addEventListener('message', function (e) {
-        if (!rdcWebSocket) return;
         var seq = serverSeq === 0xffffffff ? (serverSeq = 1) : (++serverSeq);
         var callback = callbackMap[seq];
         if (callback) {
@@ -380,24 +387,37 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
         }, opt && opt.timeout || DEF_TIMEOUT);
       };
 
-      function cleanup(reason) {
+      timer_connectionTimeout = setTimeout(function () {
+        cleanup('timeout');
+      }, 5000);
+
+      ws.__cleanup = cleanup;
+      return ws;
+
+      function cleanup(reason, detail) {
         if (cleanup.called) return;
         cleanup.called = true;
-        AscUtil.debug && console.log(wsTag + ' cleanup. reason: ' + reason);
-        if (rdcWebSocket) {
-          rdcWebSocket.close();
-          rdcWebSocket = null;
-        }
-        Object.keys(callbackMap).forEach(function (k) {
+        AscUtil.debug && console.log(wsTag + ' CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
+        reason !== 'CLOSED' && ws.close();
+        rdcWebSocket = null;
+        clearTimeout(timer_connectionTimeout);
+        ws.removeEventListener('message');
+        for (var k in callbackMap) { //noinspection JSUnfilteredForInLoop
           callbackMap[k](reason);
+        }
+        callbackMap = {};
+        RdcWebSocket_init.callbackAry.forEach(function (callback) {
+          callback(reason);
         });
+        RdcWebSocket_init.callbackAry.length = 0;
       }
     } //end of RdcWebSocket_init
 
   })(); //end of RDC namespace -----------------------------------------------
 
   AscUtil.rotateChildLocally = function (targetContainer) {
-    var $c = $(targetContainer), $v = $c.children(0);
+    //noinspection JSValidateTypes
+    var $c = $(targetContainer), $v = $c.children();
     if ($v.css('transform').indexOf('matrix') < 0) {
       targetContainer.oldCss = {
         width: targetContainer.style.width,
@@ -572,6 +592,7 @@ var AscUtil = {debug: /\bdebug=true\b/.test(document.URL), showEventsOnly: false
     }
     return url;
   }
-})($/*jQuery*/);
+})(jQuery);
 
-true === false && console.log({debugBreak: 0, changedTouches: 0, touches: 0, setFloat32: 0}); //just to avoid compiler warning
+//just to avoid compiler warning of some undefined properties/methods
+true === false && console.log({debugBreak: 0, changedTouches: 0, touches: 0, setFloat32: 0, lastError: ''});

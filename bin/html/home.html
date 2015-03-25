@@ -38,7 +38,7 @@
       <td style="border-right: 1px solid gray"></td>
       <td style="text-align: left; vertical-align: top; padding-left: 4px">
         <span style="white-space: nowrap">
-          <a href="@viewUrlBase/liveViewer.html?device=@device&accessKey=@accessKey@debugBrowserScript" target="liveView_$device" title="Show Live View">
+          <a href="@viewUrlBase/liveViewer.html?device=@device&accessKey=@accessKey" target="liveView_$device" title="Show Live View">
             View
           </a>
           <span class="captureIndicator" id="liveViewCount_$device"></span>
@@ -66,10 +66,10 @@
         <a class="internal SLog" href="getServerLog@adminUrlSuffix?device=@device&logHowManyDaysAgo=0&mode=tail&size=64000" target="log_$device" title="Server Log about this device">
           Log
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull" target="log_$device" title="Android-Side Utility Log">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20cat%20@androidLogPath%202%3E%20%2Fdev%2Fnull&log=false&size=1000000" target="log_$device" title="Android-Side Utility Log">
           L
         </a>
-        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200" target="top_$device" title="Android CPU/Memory Usage">
+        <a class="internal" href="cmd@adminUrlSuffix?device=@device&cmd=exec%20@androidWorkDir%2Fbusybox%20top%20-b%20-n%201%202%3E%2Fdev%2Fnull%20%7C%7C%20top%20-n%201%20-d%200&log=false&size=100000" target="top_$device" title="Android CPU/Memory Usage">
           T
         </a>
         &nbsp;<span class="captureIndicator" id="captureParameter_$device" style="float: right"></span>
@@ -104,19 +104,14 @@
       </div>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=checkPrepare" target="resultIFrame" title="prepare all device files">
-        Prepare
-      </a>
-      All Devices
-      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
-        forcibly
+      <a class="button" href="prepareAllDevices@adminUrlSuffix" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
+        Prepare All Devices Forcibly
       </a>
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <a class="button" href="reloadResource@adminUrlSuffix" target="resultIFrame">
-        Reload
+        Reload Internal Resources
       </a>
-      Internal Resources
     </div>
     <div>
       <a class="button @logFpsStatistic" href="set@adminUrlSuffix?logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">
@@ -151,11 +146,6 @@
     <div>
       <a class="button @logRdcWebSocketDetail" href="set@adminUrlSuffix?logRdcWebSocketDetail=@logRdcWebSocketDetail_negVal" target="resultIFrame">
         <input type="checkbox" checkedIf_logRdcWebSocketDetail/>Log RdcWebSocket Detail
-      </a>
-    </div>
-    <div>
-      <a class="button @debugBrowserScript" href="set@adminUrlSuffix?debugBrowserScript=@debugBrowserScript_negVal" target="resultIFrame">
-        <input type="checkbox" checkedIf_debugBrowserScript/>Debug Browser Script
       </a>
     </div>
     <div>
@@ -258,9 +248,9 @@
   }, []);
   console.log(JSON.stringify(devAry));
 
-  function adb(cmd, timeout, device) {
+  function adb(cmd, timeout, device, maxSize) {
     (Array.isArray(device) ? device : device ? [device] : devAry).forEach(function (device) {
-      $.ajax('cmd@adminUrlSuffix?device=' + encodeURIComponent(device) + '&cmd=' + encodeURIComponent(cmd) + (timeout ? '&timeout=' + encodeURIComponent(timeout) : ''))
+      $.ajax('cmd@adminUrlSuffix?device=' + encodeURIComponent(device) + '&cmd=' + encodeURIComponent(cmd) + (timeout ? '&timeout=' + encodeURIComponent(timeout) : '') + (maxSize ? '&size=' + maxSize : ''))
         .done(function (res) {
           console.log('-------------------Begin device: "' + device + '"-------------------\n' + res + '-------------------End   device: "' + device + '"-------------------\n');
         })

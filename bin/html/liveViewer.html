@@ -102,6 +102,7 @@
 <script src="jquery.js" type="text/javascript"></script>
 <script src="common.js" type="text/javascript"></script>
 <script>
+  if (!__server_using_websocket/*will be replaced by server*/) AscUtil.useWebSocket = false;
   AscUtil.setTouchHandler(document.getElementById('viewer'), 'touch?device=@device&accessKey=@accessKey');
   $('#lblBrowserAgentStr').text('Current browser agent string: ' + navigator.userAgent);
   if (!/chrome|firefox/i.test(navigator.userAgent) && (!/safari/i.test(navigator.userAgent) || /android/i.test(navigator.userAgent))) {

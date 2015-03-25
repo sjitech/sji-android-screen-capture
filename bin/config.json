@@ -19,7 +19,6 @@
 
   "outputDir": "../out", //dir to store recorded file
   "maxRecordTime": 7200, //max recorded time
-  "enableGetOutputFile": true, //false means you can not view recorded file and saved image without correct adminKey querystring
   "fastResize": true,
   "fastCapture": true,
   "checkDevTimeLimit": true,
@@ -68,7 +67,8 @@
   "adbCmdTimeout": 30,
   "adbScanPerHostDelay": 2,
   "ajaxAllowOrigin": "*",
-  "debugBrowserScript": false,
+  "defaultMaxRecentImageFiles": 50,
+  "defaultMaxAdminCmdOutputLength": 65536,
 
   "__end": 0
 }
