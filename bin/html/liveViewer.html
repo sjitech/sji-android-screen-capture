@@ -137,7 +137,7 @@
   var $btnAdb = $('#btnAdb'), $chkAdb = $btnAdb.find('input:checkbox'), $adbPort= $('#adbPort'), $lblAdbConId_want=$('#lblAdbConId_want'), $lblAdbConId_real=$('#lblAdbConId_real');
   $chkAdb.on('click', function (e) {
     e.preventDefault();
-    this.parentNode.click();
+    setTimeout(switchAdb, 0);
   });
 
   var adbBridgeWebSocketUrl = 'adbBridge?device=@device&accessKey=@accessKey';
@@ -164,6 +164,8 @@
             if (info.status === 'Chrome app is disconnected' || info.status.indexOf('not installed') >= 0) {
               $('#installAdbBridge').show();
               alert(info.status + '\n' + 'You have not installed Chrome app named "Sumatium ADB Bridge" or not allowed to use it. Please install it from the "Install Sumatium ADB Bridge"');
+            } else {
+              alert(info.status);
             }
           }
         }

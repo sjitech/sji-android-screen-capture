@@ -401,7 +401,6 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
         reason !== 'CLOSED' && ws.close();
         rdcWebSocket = null;
         clearTimeout(timer_connectionTimeout);
-        ws.removeEventListener('message');
         for (var k in callbackMap) { //noinspection JSUnfilteredForInLoop
           callbackMap[k](reason);
         }
