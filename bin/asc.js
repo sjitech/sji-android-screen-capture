@@ -34,14 +34,14 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
   childProc.pid && (procMap[childProc.pid] = childProc);
 
   log(tag, childProc.pid ? ('. OK: pid_' + childProc.pid) : '. FAILED');
-  childProc.__tag = tag = tag + (childProc.pid ? '[pid_' + childProc.pid + ']' : '');
+  childProc.__tag = tag = tag + (childProc.pid ? ' [pid_' + childProc.pid + ']' : '');
 
   childProc.stdout && childProc.stdout.on('data', function (buf) {
     log(tag + '>', buf, false);
     on_close.length >= 2 && stdout.push(buf);
   });
   childProc.stderr && childProc.stderr.on('data', function (buf) {
-    log(tag + '2>', buf, false);
+    log(tag + '!', buf, false);
     on_close.length >= 1 && stderr.push(buf);
   });
 
@@ -152,7 +152,7 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
     }
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString()) && _log && log(tag + '>', stdout);
-    (stderr = Buffer.concat(stderr).toString()) && _log && log(tag + '2>', stderr.slice(8) || stderr);
+    (stderr = Buffer.concat(stderr).toString()) && _log && log(tag + '!', stderr.slice(8) || stderr);
     on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + (stderr.slice(8) || stderr)), stdout);
   }
 }
@@ -562,7 +562,7 @@ function sendTouchEvent(dev, _type, _x, _y) {
       }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
       runCmd('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"');
     }
-    cfg.logAllProcCmd && log(dev.touchSrv.__tag + '[stdin]', cmd);
+    cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', cmd);
     dev.touchSrv.stdin.write(cmd + '\n');
   }
 }
@@ -591,7 +591,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
       }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
       runCmd('alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh');
     }
-    cfg.logAllProcCmd && log(dev.keybdSrv.__tag + '[stdin]', cmd);
+    cfg.logAllProcCmd && log(dev.keybdSrv.__tag + '<', cmd);
     dev.keybdSrv.stdin.write(cmd + '\n');
   }
 }
@@ -753,7 +753,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', cookie_id_head + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
-    (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + dev.capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
+    (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + ' ' + dev.capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
   q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
@@ -1154,7 +1154,7 @@ adminWeb_handlerMap['/status'] = function (req, res, q) {
 
 function createWebSocketServer() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), maxReceivedFrameSize: 8 * 1024, maxReceivedMessageSize: 8 * 1024}).on('request', function (wsConReq) {
-    var httpReq = wsConReq.httpRequest, httpTag = '[HTTP_' + (++httpSeq) + '][WebSocket]';
+    var httpReq = wsConReq.httpRequest, httpTag = '[HTTP_' + (++httpSeq) + '] [WebSocket]';
     var parsedUrl = Url.parse(httpReq.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev;
     log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddr(httpReq) + ']') + (cfg.logHttpReqDetail ? '[' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
     if (urlPath === '/adbBridge') {
@@ -1352,7 +1352,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
 
       dev = ws.devHandleMap[devHandle = Number(match[1])];
       var isKeyCode = match[2] === ':', keyCodeOrText = match[3];
-      cfg.logRdcWebSocketDetail && log(tag + '[' + (dev ? dev.id : '?#' + devHandle) + ']', 'input: ' + JSON.stringify(keyCodeOrText) + (isKeyCode ? ('(KeyCode ' + (keyNameMap[keyCodeOrText] || '?') + ')') : ''));
+      cfg.logRdcWebSocketDetail && log(tag + ' [' + (dev ? dev.id : '?#' + devHandle) + ']', 'input: ' + JSON.stringify(keyCodeOrText) + (isKeyCode ? ('(KeyCode ' + (keyNameMap[keyCodeOrText] || '?') + ')') : ''));
       if (!sendKeybdEvent(dev, keyCodeOrText, isKeyCode)) {
         return ws.send(chk.err);
       }
@@ -1363,7 +1363,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
       }
       dev = ws.devHandleMap[devHandle = msg.binaryData.readUInt32BE(0)];
       var type = String.fromCharCode(msg.binaryData.readUInt8(12)), x = msg.binaryData.readFloatBE(4), y = msg.binaryData.readFloatBE(8);
-      cfg.logRdcWebSocketDetail && log(tag + '[' + (dev ? dev.id : '?#' + devHandle) + ']', 'touch: ' + type + ' ' + x.toFixed(5) + ' ' + y.toFixed(5));
+      cfg.logRdcWebSocketDetail && log(tag + ' [' + (dev ? dev.id : '?#' + devHandle) + ']', 'touch: ' + type + ' ' + x.toFixed(5) + ' ' + y.toFixed(5));
       if (!sendTouchEvent(dev, type, x, y)) {
         return ws.send(chk.err);
       }
