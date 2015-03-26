@@ -22,7 +22,7 @@ var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatis
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllProcCmd: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: false, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: false, device: '', __end: 0});
+true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: false, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: false, device: '', retryDeviceTrackerInterval: 0, __end: 0});
 
 function dummyFunc() {
 }
@@ -75,7 +75,7 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
 
   var adbCon = net.connect(adbHost.port || 5037, adbHost.host || '127.0.0.1', function /*on_connected*/() {
     (adbCon.__everConnected = true) && _log && log(tag, 'connection OK. ' + (adbHost.host || '127.0.0.1') + ':' + (adbHost.port || 5037));
-    var ok = 0, wanted_ok = isDevCmd ? 2 : 1, wanted_payload_len = -1, tmpBuf = EMPTY_BUF;
+    var ok = 0, wanted_ok = isDevCmd ? 2 : 1, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
 
     isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer('host:' + cmd)));
 
@@ -109,15 +109,15 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
               tmpBuf.length = 0;
             }
             if (buf.length >= wanted_payload_len) {
-              stdout.push(buf.slice(0, wanted_payload_len));
+              tmpBufAry.push(buf.slice(0, wanted_payload_len));
               buf = buf.slice(wanted_payload_len);
               wanted_payload_len = -1;
-              var _stdout = Buffer.concat(stdout).toString();
-              stdout.length = 0;
-              adbCon.__on_host_stdout && adbCon.__on_host_stdout(_stdout);
+              stdout = tmpBufAry;
+              tmpBufAry = [];
+              adbCon.__on_host_stdout && adbCon.__on_host_stdout(Buffer.concat(stdout).toString());
             } else {
               wanted_payload_len -= buf.length;
-              return stdout.push(buf);
+              return tmpBufAry.push(buf);
             }
           } while (buf.length);
         } //end of !isDevCmd
@@ -151,7 +151,7 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
       }, 4 * 1000);
     }
     clearTimeout(timer);
-    (stdout = on_close.length >= 2 ? Buffer.concat(stdout).toString() : '') && _log && log(tag + '>', stdout);
+    (stdout = Buffer.concat(stdout).toString()) && _log && log(tag + '>', stdout);
     (stderr = Buffer.concat(stderr).toString()) && _log && log(tag + '2>', stderr.slice(8) || stderr);
     on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + (stderr.slice(8) || stderr)), stdout);
   }
@@ -217,8 +217,8 @@ function getHttpSourceAddr(req) {
   return (ip ? (ip + ' ') : '') + directIp + ':' + req.connection.remotePort;
 }
 function writeMultipartImage(res, buf, doNotCount) { //Note: this will write next content-type earlier to force Chrome draw image immediately
-  return (doNotCount || (res.__framesWritten = (res.__framesWritten || 0) + 1))
-      && res.write(Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, buf, CrLfBoundTypeCrLf2]));
+  (doNotCount || (res.__framesWritten = (res.__framesWritten || 0) + 1))
+  && res.write(Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, buf, CrLfBoundTypeCrLf2]));
 }
 function end(res/*HttpResponse or FileOutput*/, data/*optional*/, type) {
   if (data && res.setHeader && !res.headersSent) { //for unsent http response
@@ -282,16 +282,20 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 }
 
 function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port, maybe same on different host*/, adbHost) {
-  var foundDev = null, devGrp = devGrpMap[conId] || (devGrpMap[conId] = []);
-  return (!adbHost ? devGrp[0] : devGrp.some(function (dev) {
-        return (dev.adbHost ? (dev.adbHost === adbHost) : ((dev.adbHost = adbHost) && (dev.adbArgs = adbHost.adbArgs.concat('-s', conId)))) && (foundDev = dev);
-      }) && foundDev) || setDevId((devAry[devAry.length] = {
-        conId: conId, sn: conId, status: '', i: devAry.length, info: [], info_htm: '', touchStatus: '', touch: {},
-        adbHost: adbHost, adbArgs: (adbHost ? adbHost.adbArgs : []).concat('-s', conId),
-        consumerMap: {}, rdcWebSocketMap: {}, adbBridge: true, adbBridgeWebSocket: undefined,
-        buf_switchTransport: adbHost_makeBuf(new Buffer('host:transport:' + conId)),
-        masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
-      }));
+  var devGrp = devGrpMap[conId] || (devGrpMap[conId] = []), dev = devGrp[0];
+  adbHost && devGrp.some(function (_dev) { //choose device with same adbHost or occupy the empty adbHost
+    return (_dev.adbHost ? (_dev.adbHost === adbHost) : ((_dev.adbHost = adbHost) && (_dev.adbArgs = adbHost.adbArgs.concat('-s', conId)))) && (dev = _dev);
+  });
+  if (dev) return dev;
+  dev = devAry[devAry.length] = {
+    i: devAry.length, conId: conId, sn: conId,
+    adbHost: adbHost, adbArgs: (adbHost ? adbHost.adbArgs : []).concat('-s', conId),
+    status: '', touchStatus: '', touch: {}, info: [], info_htm: '',
+    consumerMap: {}, rdcWebSocketMap: {}, adbBridge: true,
+    buf_switchTransport: adbHost_makeBuf(new Buffer('host:transport:' + conId)),
+    masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
+  };
+  setDevId(dev);
 }
 function setDevId(dev) {
   scheduleUpdateWholeUI();
@@ -362,7 +366,7 @@ function initDeviceTrackers() {
     fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
       setTimeout(function () {
         _initDeviceTracker(adbHost);
-      }, 5 * 1000);
+      }, cfg.retryDeviceTrackerInterval * 1000);
     }).__on_host_stdout = function (stdout) {
       var devList = [];
       stdout.split('\n').slice(1/*from second line*/).forEach(function (desc) {
@@ -602,6 +606,9 @@ function setDeviceOrientation(dev, orientation) {
   }, {timeout: cfg.adbSetOrientationTimeout * 1000}));
 }
 function turnOnScreen(dev) {
+  if (!chkDev(dev, {connected: true})) {
+    return false;
+  }
   dev.adbCon_turnOnScreen && dev.adbCon_turnOnScreen.__cleanup('new request comes');
   return (dev.adbCon_turnOnScreen = fastAdbExec('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && input keyevent 26 && input keyevent 82', function/*on_close*/() {
     dev.adbCon_turnOnScreen = null;
@@ -1398,12 +1405,12 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr) {
-    stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can record video in H264/MP4 format. Please install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file\n');
+    stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file\n');
     try {
       websocket = require('websocket')
     } catch (e) {
     }
-    !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser). You can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node"\n');
+    !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser, fast touch/keyboard).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node"\n');
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, web_handler) : require('http').createServer(web_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       if (cfg.streamWeb_port) {

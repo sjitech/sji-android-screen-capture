@@ -69,6 +69,7 @@
   "ajaxAllowOrigin": "*",
   "defaultMaxRecentImageFiles": 50,
   "defaultMaxAdminCmdOutputLength": 65536,
+  "retryDeviceTrackerInterval": 5,
 
   "__end": 0
 }
