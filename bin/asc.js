@@ -70,11 +70,11 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
 function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
   var isDevCmd = !!devGrpMap[devOrHost.sn], dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
-  var tag = (isDevCmd ? _tag.replace(']', ' ' + dev.id + ']') : _tag) + ' [ADB]', _log = cfg.logAllProcCmd || opt.log;
+  var tag = _tag.replace(']', ' ' + (isDevCmd ? dev.id : ((adbHost.host || 'localhost') + ':' + (adbHost.port || 5037)) )) + '] [ADB]', _log = cfg.logAllProcCmd || opt.log;
   _log && log(tag, 'RUN ' + JSON.stringify(cmd) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
 
   var adbCon = net.connect(adbHost.port || 5037, adbHost.host || '127.0.0.1', function /*on_connected*/() {
-    (adbCon.__everConnected = true) && _log && log(tag, 'connection OK. ' + (adbHost.host || '127.0.0.1') + ':' + (adbHost.port || 5037));
+    (adbCon.__everConnected = true) && _log && log(tag, 'connection OK');
     var ok = 0, wanted_ok = isDevCmd ? 2 : 1, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
 
     isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer('host:' + cmd)));
@@ -364,11 +364,19 @@ function initDeviceTrackers() {
   }, Math.max(1, cfg.adbKeepDeviceAliveInterval / 2) * 1000);
 
   function _initDeviceTracker(adbHost) {
-    fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
+    var adbCon = fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
+      devAry.forEach(function (dev) {
+        if (dev.adbHost === adbHost && dev.status !== ERR_DEV_NOT_FOUND) {
+          dev.status && log(adbCon.__tag, 'device disconnected: ' + dev.id + ' (can not connect to adb host daemon)');
+          dev.status = ERR_DEV_NOT_FOUND;
+          scheduleUpdateWholeUI();
+        }
+      });
       setTimeout(function () {
         _initDeviceTracker(adbHost);
       }, cfg.retryDeviceTrackerInterval * 1000);
-    }).__on_host_stdout = function (stdout) {
+    });
+    adbCon.__on_host_stdout = function (stdout) {
       var devList = [];
       stdout.split('\n').forEach(function (desc) {
         if ((desc = desc.split('\t')).length < 2 || desc[0] === '????????????') return;
@@ -383,7 +391,7 @@ function initDeviceTrackers() {
       });
       devAry.forEach(function (dev) {
         if (dev.adbHost === adbHost && devList.indexOf(dev) < 0 && dev.status !== ERR_DEV_NOT_FOUND) {
-          dev.status && log('[TrackDevices]', 'device disconnected: ' + dev.id);
+          dev.status && log(adbCon.__tag, 'device disconnected: ' + dev.id);
           dev.status = ERR_DEV_NOT_FOUND;
           scheduleUpdateWholeUI();
         }
