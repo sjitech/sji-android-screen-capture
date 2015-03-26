@@ -296,6 +296,7 @@ function getOrCreateDevCtx(conId/*device serial no or WiFi Adb address:port, may
     masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
   };
   setDevId(dev);
+  return dev;
 }
 function setDevId(dev) {
   scheduleUpdateWholeUI();
@@ -305,7 +306,7 @@ function setDevId(dev) {
     return ('_' + match.charCodeAt(0).toString(16) + '_');
   }) + (devGrp.length === 0 ? '' : '_' + (devGrp.length + 1));
   dev.re_lastViewId_cookie = new RegExp('\\b' + cookie_id_head + 'viewId_' + dev.var + '=([^;]+)');
-  return (devGrp[devGrp.length] = dev);
+  devGrp[devGrp.length] = dev;
 }
 function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
   if (!chk('device', q.device)) {
