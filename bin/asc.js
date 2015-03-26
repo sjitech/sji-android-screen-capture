@@ -903,7 +903,7 @@ function web_handler(req, res) {
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
-  if (cfg.adminKey && q.adminKey !== dev.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
+  if (cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
       || !chkDev(dev, {connected: true, capturing: true})) {
     return end(res, chk.err);
   }
