@@ -369,7 +369,7 @@ function initDeviceTrackers() {
       }, cfg.retryDeviceTrackerInterval * 1000);
     }).__on_host_stdout = function (stdout) {
       var devList = [];
-      stdout.split('\n').slice(1/*from second line*/).forEach(function (desc) {
+      stdout.split('\n').forEach(function (desc) {
         if ((desc = desc.split('\t')).length < 2 || desc[0] === '????????????') return;
         var conId = desc[0], _status = desc[1], dev = devList[devList.length] = getOrCreateDevCtx(conId, adbHost);
         (dev.status === ERR_DEV_NOT_FOUND || !dev.status) && log('[TrackDevices]', 'device connected: ' + dev.id);
