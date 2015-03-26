@@ -861,7 +861,7 @@ function web_handler(req, res) {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname;
-  var streamWeb_handler = streamWeb_handlerMap[urlPath], handler = streamWeb_handler || adminWeb_handlerMap[urlPath];
+  var streamWeb_handler = streamWeb_handlerMap[urlPath], handler = streamWeb_handler || req.connection.server === adminWeb && adminWeb_handlerMap[urlPath];
   if (!handler) {
     return end(res);
   }
@@ -896,7 +896,7 @@ function web_handler(req, res) {
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
-  if (cfg.adminKey && q.adminKey !== dev.adminKey && !dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
+  if (cfg.adminKey && q.adminKey !== dev.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
       || !chkDev(dev, {connected: true, capturing: true})) {
     return end(res, chk.err);
   }
@@ -1410,13 +1410,14 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
         streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, web_handler) : require('http').createServer(web_handler);
         streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
           process.stderr.write('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : '') + '\n');
+          websocket && createWebSocketServer();
         });
       } else {
         process.stderr.write('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : '') + '\n');
+        websocket && createWebSocketServer();
       }
+      initAdbHosts();
+      initDeviceTrackers();
     });
-    initAdbHosts();
-    initDeviceTrackers();
-    websocket && createWebSocketServer();
   }, {timeout: 10 * 1000});
 }, {timeout: 30 * 1000});
