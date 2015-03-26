@@ -70,7 +70,7 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
 function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
   var isDevCmd = !!devGrpMap[devOrHost.sn], dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
-  var tag = (isDevCmd ? _tag.replace(']', ' ' + dev.id + ']') : _tag) + '[ADB]', _log = cfg.logAllProcCmd || opt.log;
+  var tag = (isDevCmd ? _tag.replace(']', ' ' + dev.id + ']') : _tag) + ' [ADB]', _log = cfg.logAllProcCmd || opt.log;
   _log && log(tag, 'RUN ' + JSON.stringify(cmd) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
 
   var adbCon = net.connect(adbHost.port || 5037, adbHost.host || '127.0.0.1', function /*on_connected*/() {
@@ -211,10 +211,10 @@ function chk(name, value /*, next parameters: candidateArray | candidateValue | 
   return true;
 }
 
-function getHttpSourceAddr(req) {
-  var ip = req.headers['x-real-ip'] /*reported by nginx reverse proxy*/, directIp = req.connection.remoteAddress;
-  directIp = directIp === '::ffff:127.0.0.1' ? 'localhost' : directIp === '127.0.0.1' ? 'localhost' : directIp;
-  return (ip ? (ip + ' ') : '') + directIp + ':' + req.connection.remotePort;
+function getHttpSourceAddresses(req) {
+  var directIp = req.connection.remoteAddress, origIp = req.headers['x-real-ip'] /*reported by nginx reverse proxy*/;
+  (directIp === '::ffff:127.0.0.1' || directIp === '127.0.0.1' || directIp === '::1') && (directIp = 'localhost');
+  return (origIp ? (origIp + ' ') : '') + directIp;
 }
 function writeMultipartImage(res, buf, doNotCount) { //Note: this will write next content-type earlier to force Chrome draw image immediately
   (doNotCount || (res.__framesWritten = (res.__framesWritten || 0) + 1))
@@ -880,7 +880,7 @@ function web_handler(req, res) {
     return end(res, chk.err);
   }
   res.__log = cfg.logAllHttpReqRes || (handler.option && (handler.option.log || handler.option.logCondition && handler.option.logCondition(req, res, q)));
-  res.__log && log((res.__tag = '[HTTP_' + (++httpSeq) + ']'), 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddr(req) + ']') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
+  res.__log && log((res.__tag = '[HTTP_' + (++httpSeq) + ']'), 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddresses(req) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
   res.__log && res.once('close', function () {
     log(res.__tag, 'CLOSED') && (res.__log = false);
   });
@@ -1156,7 +1156,7 @@ function createWebSocketServer() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), maxReceivedFrameSize: 8 * 1024, maxReceivedMessageSize: 8 * 1024}).on('request', function (wsConReq) {
     var httpReq = wsConReq.httpRequest, httpTag = '[HTTP_' + (++httpSeq) + '] [WebSocket]';
     var parsedUrl = Url.parse(httpReq.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev;
-    log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddr(httpReq) + ']') + (cfg.logHttpReqDetail ? '[' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
+    log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? '[' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
     if (urlPath === '/adbBridge') {
       if (!(dev = getDev(q, {chkAccessKey: true, connected: true, adbBridge: true}))) {
         log(httpTag, 'Rejected. Reason: ' + chk.err);
