@@ -104,14 +104,19 @@
       </div>
     </form>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
-      <a class="button" href="prepareAllDevices@adminUrlSuffix" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
-        Prepare All Devices Forcibly
+      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=checkPrepare" target="resultIFrame" title="prepare all device files">
+        Prepare
+      </a>
+      All Devices
+      <a class="button" href="prepareAllDevices@adminUrlSuffix?mode=forcePrepare" target="resultIFrame" onclick="return confirm('Sure?')"  title="prepare all device files forcibly">
+        forcibly
       </a>
     </div>
     <div style="border-bottom: 1px solid lightgray; margin-bottom: 4px">
       <a class="button" href="reloadResource@adminUrlSuffix" target="resultIFrame">
-        Reload Internal Resources
+        Reload
       </a>
+      Internal Resources
     </div>
     <div>
       <a class="button @logFpsStatistic" href="set@adminUrlSuffix?logFpsStatistic=@logFpsStatistic_negVal" target="resultIFrame">

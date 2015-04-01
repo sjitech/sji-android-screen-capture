@@ -1043,9 +1043,9 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
   q.orientation && setDeviceOrientation(dev, q.orientation);
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 }).option = {log: true};
-(adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res) {
+(adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res, q) {
   devAry.forEach(function (dev) {
-    dev.adbHost && dev.status !== ERR_DEV_NOT_FOUND && prepareDeviceFile(dev, /*force:*/true);
+    dev.adbHost && dev.status !== ERR_DEV_NOT_FOUND && prepareDeviceFile(dev, q.mode === 'forcePrepare');
   });
   end(res, 'OK');
 }).option = {log: true};
