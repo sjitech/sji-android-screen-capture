@@ -893,7 +893,7 @@ function web_handler(req, res) {
     return end(res);
   }
   var parsedUrl = Url.parse(req.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname;
-  var streamWeb_handler = streamWeb_handlerMap[urlPath], handler = streamWeb_handler || req.connection.server === adminWeb && adminWeb_handlerMap[urlPath];
+  var streamWeb_handler = streamWeb_handlerMap[urlPath], handler = streamWeb_handler || (req.connection.server || req.connection.socket && req.connection.socket.server) === adminWeb && adminWeb_handlerMap[urlPath];
   if (!handler) {
     return end(res);
   }
@@ -1432,7 +1432,7 @@ spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr) {
     stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file\n');
     try {
-      websocket = require('websocket')
+      websocket = require('websocket');
     } catch (e) {
     }
     !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser, fast touch/keyboard).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node"\n');
