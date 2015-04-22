@@ -21,7 +21,7 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllProcCmd: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllProcCmd: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, enableGetFileFromStreamWeb: false});
 true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: false, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: false, device: '', retryDeviceTrackerInterval: 0, __end: 0});
 
 function dummyFunc() {
@@ -928,7 +928,7 @@ function web_handler(req, res) {
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
-  if (cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
+  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
       || !chkDev(dev, {connected: true, capturing: true})) {
     return end(res, chk.err);
   }
@@ -968,7 +968,7 @@ streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) 
       , 'text/html');
 };
 streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.html'] = function (req, res, q, urlPath, dev) {
-  if (cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
+  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
   return fs.readdir(cfg.outputDir, function (e, filenameAry) {
@@ -1003,7 +1003,7 @@ streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.h
   });
 };
 streamWeb_handlerMap['/getFile'] = function (req, res, q, urlPath, dev) {
-  if (cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
+  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
       || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
     return end(res, chk.err);
   }
