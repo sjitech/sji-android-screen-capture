@@ -301,7 +301,7 @@ function createDev(conId/*serial_no or ip:port, maybe same on different host*/, 
   createDev.statusChanged = true;
   dev = devAry[devAry.length] = {
     i: devAry.length, conId: conId, sn: conId,
-    adbHost: adbHost, connected: adbHost && connectionStatus, adbConMap: {},
+    adbHost: adbHost, connectionStatus: adbHost && connectionStatus, adbConMap: {},
     status: '', touchStatus: '', touch: {}, info: [], info_htm: '',
     consumerMap: {}, rdcWebSocketMap: {}, adbBridge: true,
     buf_switchTransport: adbHost_makeBuf(new Buffer('host:transport:' + conId)),
