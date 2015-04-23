@@ -13,7 +13,8 @@ process.on('uncaughtException', function (e) {
 });
 var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer;
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
-var REALLY_USABLE_STATUS = 'device', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]);
+var REALLY_USABLE_STATUS = 'device', REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]),
+    touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
@@ -21,8 +22,8 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: false, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: false, logFpsStatistic: false, logHttpReqDetail: false, showDisconnectedDevices: false, logAllProcCmd: false, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, enableGetFileFromStreamWeb: false});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: false, logAdbBridgeDetail: false, logRdcWebSocketDetail: false, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: false, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: false, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: false, device: '', retryDeviceTrackerInterval: 0, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, enableGetFileFromStreamWeb: 0});
+true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', retryDeviceTrackerInterval: 0, useSlowTouchSrv: 0, __end: 0});
 
 function dummyFunc() {
 }
@@ -68,16 +69,19 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
   }
 }
 function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) {
+  return fastAdbOpen(_tag, devOrHost, (devOrHost.adbHost ? 'shell:' : 'host:') + cmd, _on_close, _opt);
+}
+function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
-  var isDevCmd = !!devGrpMap[devOrHost.sn], dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
+  var isDevCmd = !!devOrHost.adbHost, dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
   var tag = _tag.replace(']', ' ' + (isDevCmd ? dev.id : (adbHost.host + ':' + adbHost.port))) + '] [ADB]', _log = cfg.logAllProcCmd || opt.log;
-  _log && log(tag, 'RUN ' + JSON.stringify(cmd) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
+  _log && log(tag, 'OPEN ' + JSON.stringify(service) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
 
   var adbCon = net.connect(adbHost, function /*on_connected*/() {
     (adbCon.__everConnected = true) && _log && log(tag, 'connection OK');
     var ok = 0, wanted_ok = isDevCmd ? 2 : 1, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
 
-    isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer('host:' + cmd)));
+    isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer(service)));
 
     adbCon.on('data', function (buf) {
       if (cleanup.called) return;
@@ -87,7 +91,7 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
       if (ok < wanted_ok) {
         if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
           ok++;
-          ok === 1 && isDevCmd && adbCon.write(adbHost_makeBuf(new Buffer('shell:' + cmd)));
+          ok === 1 && isDevCmd && adbCon.write(adbHost_makeBuf(new Buffer(service)));
           buf = buf.slice(4);
         } else {
           return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
@@ -581,7 +585,22 @@ function sendTouchEvent(dev, _type, _x, _y) {
   return true;
 
   function touch(type, code, value) {
-    runCmd('T ' + type + ' ' + code + ' ' + value);
+    if (cfg.useSlowTouchSrv) {
+      runCmd('T ' + type + ' ' + code + ' ' + value);
+    } else {
+      touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
+      touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
+      touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
+      if (!dev.touchSrv) {
+        dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+          dev.touchSrv = null;
+        }, {log: true});
+      }
+      cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', 'TOUCH ' + type + ' ' + code + ' ' + value);
+      dev.touchSrv.__everConnected ? dev.touchSrv.write(touchEventBuf) : dev.touchSrv.once('connect', function () {
+        dev.touchSrv.write(touchEventBuf);
+      });
+    }
   }
 
   function runCmd(cmd) {
@@ -602,12 +621,12 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
     return false;
   }
   if (isKeyCode) {
-    runCmd('k ' + keyCodeOrText);
+    runCmd('K ' + keyCodeOrText);
   } else {
     keyCodeOrText.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
-      n && runCmd('k ' + 66/*enter*/);
+      n && runCmd('K ' + 66/*enter*/);
       for (var i = 0; i < ls.length; i += 10) {
-        runCmd('t ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
+        runCmd('K ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
       }
     });
   }
@@ -618,7 +637,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
       dev.keybdSrv = spawn('[KeybdSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
         dev.keybdSrv = null;
       }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-      runCmd('alias k="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh');
+      runCmd('alias K="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh');
     }
     cfg.logAllProcCmd && log(dev.keybdSrv.__tag + '<', cmd);
     dev.keybdSrv.stdin.write(cmd + '\n');
