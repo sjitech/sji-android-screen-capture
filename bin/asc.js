@@ -538,41 +538,41 @@ function sendTouchEvent(dev, _type, _x, _y) {
   if (isMove && dev.touchLast_x === x && dev.touchLast_y === y) return true; //ignore move event if at same position
   if (dev.touch.maxTrackId === 65535) { //normal case
     if (isStart) { //down
-      runCmd(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      dev.touch.needBtnTouchEvent && runCmd(1, 0x014a, 1); //BTN_TOUCH DOWN for sumsung devices
-      runCmd(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      touch(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      dev.touch.needBtnTouchEvent && touch(1, 0x014a, 1); //BTN_TOUCH DOWN for sumsung devices
+      touch(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
       if (dev.touch.avgPressure) {
-        runCmd(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+        touch(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
       } else if (dev.touch.avgFingerSize) {
-        runCmd(3, 0x32, dev.touch.avgFingerSize); //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+        touch(3, 0x32, dev.touch.avgFingerSize); //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
       }
-      runCmd(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      runCmd(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else if (isMove) { //move
-      x !== dev.touchLast_x && runCmd(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      y !== dev.touchLast_y && runCmd(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      x !== dev.touchLast_x && touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      y !== dev.touchLast_y && touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else { //up, out
-      runCmd(3, 0x39, -1); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      dev.touch.needBtnTouchEvent && runCmd(1, 0x014a, 0);  //BTN_TOUCH UP for sumsung devices
+      touch(3, 0x39, -1); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      dev.touch.needBtnTouchEvent && touch(1, 0x014a, 0);  //BTN_TOUCH UP for sumsung devices
     }
-    runCmd(0, 0, 0); //SYN_REPORT
+    touch(0, 0, 0); //SYN_REPORT
   }
   else { //for some old devices such as galaxy SC-02B (android 2.2, 2.3)
-    runCmd(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-    runCmd(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-    runCmd(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+    touch(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+    touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+    touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     if (isStart || isMove) { //down, move
-      runCmd(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      dev.touch.avgPressure && runCmd(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      touch(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      dev.touch.avgPressure && touch(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
     } else { //up, out
-      runCmd(3, 0x30, 0); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      dev.touch.avgPressure && runCmd(3, 0x3a, 0); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      touch(3, 0x30, 0); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      dev.touch.avgPressure && touch(3, 0x3a, 0); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
     }
-    runCmd(0, 2, 0); //SYN_MT_REPORT   this is very important
+    touch(0, 2, 0); //SYN_MT_REPORT   this is very important
     if (dev.touch.needBtnTouchEvent && (isStart || isEnd)) {
-      runCmd(1, 0x014a, (isStart ? 1 : 0)); //BTN_TOUCH DOWN for sumsung devices
+      touch(1, 0x014a, (isStart ? 1 : 0)); //BTN_TOUCH DOWN for sumsung devices
     }
-    runCmd(0, 0, 0); //SYN_REPORT
+    touch(0, 0, 0); //SYN_REPORT
   }
   if (isStart || isMove) { //down, move
     dev.touchLast_x = x;
@@ -580,16 +580,16 @@ function sendTouchEvent(dev, _type, _x, _y) {
   }
   return true;
 
-  function runCmd(type, code, value) {
-    _runCmd('T ' + type + ' ' + code + ' ' + value);
+  function touch(type, code, value) {
+    runCmd('T ' + type + ' ' + code + ' ' + value);
   }
 
-  function _runCmd(cmd) {
+  function runCmd(cmd) {
     if (!dev.touchSrv) {
       dev.touchSrv = spawn('[TouchSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
         dev.touchSrv = null;
       }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-      _runCmd('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"');
+      runCmd('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"');
     }
     cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', cmd);
     dev.touchSrv.stdin.write(cmd + '\n');
