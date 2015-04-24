@@ -23,7 +23,7 @@ var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatis
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, enableGetFileFromStreamWeb: 0});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', retryDeviceTrackerInterval: 0, useSlowTouchSrv: 0, __end: 0});
+true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', retryDeviceTrackerInterval: 0, __end: 0});
 
 function dummyFunc() {
 }
@@ -97,10 +97,11 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
           return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
         }
       }
+      (adbCon.__isServiceStreamOpened = (ok === wanted_ok)) && adbCon.emit('__isServiceStreamOpened');
       if (ok === wanted_ok && buf.length) {
         if (isDevCmd) {
           on_close.length >= 2 && stdout.push(buf);
-          adbCon.__on_device_data && adbCon.__on_device_data(buf);
+          adbCon.__on_device_data && adbCon.__on_device_data(buf); //todo: emit
         }
         else if (on_close.length >= 2 || adbCon.__on_host_stdout) {
           do {
@@ -431,7 +432,9 @@ var cmd_getExtraInfo_Rest = ' { echo ===; ./dlopen ./sc-???; echo ===; ./dlopen 
 var cmd_getExtraInfo_Rest_500 = ' { echo ===; ./dlopen.pie ./sc-???; echo ===; ./dlopen.pie ./fsc-???; } 2>' + cfg.androidLogPath + ';';
 
 function prepareDeviceFile(dev, force/*optional*/) {
-  if ((dev.status === 'OK' && !force || dev.status === 'preparing') || dev.connectionStatus !== REALLY_USABLE_STATUS) return;
+  if (dev.connectionStatus !== REALLY_USABLE_STATUS) return;
+  dev.status === 'OK' && prepareFastTouchSrv();
+  if ((dev.status === 'OK' && !force || dev.status === 'preparing')) return;
   log('[Prepare ' + dev.id + ']', 'BEGIN');
   (dev.status = 'preparing') && scheduleUpdateWholeUI();
   fastAdbExec('[CheckBasicInfo]', dev, cmd_getBaseInfo + (force ? ' rm -r ' + cfg.androidWorkDir + ' 2>/dev/null;' : ''), function/*on_close*/(stderr, stdout) {
@@ -521,15 +524,29 @@ function prepareDeviceFile(dev, force/*optional*/) {
             (match['0032'] = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgFingerSize = Math.max(Math.ceil(match['0032'][1] / 2), 1)); //ABS_MT_WIDTH_MAJOR
             dev.touch.needBtnTouchEvent = /\n +KEY.*:.*014a/.test(devInfo); //BTN_TOUCH for sumsung devices
             dev.touch.devPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
-            dev.touchStatus = 'OK';
+            prepareFastTouchSrv();
             return true;
           }
         }
       }
       return false;
     }); //end of processing each line of stdout
-    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
+    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'preparing touch server' ? JSON.stringify(dev.touch) : ''));
   } //end of chkTouchDev
+
+  function prepareFastTouchSrv() {
+    dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/(stderr) {
+      dev.touchSrv = null;
+      dev.touchStatus = 'touch server ' + stderr;
+      scheduleUpdateWholeUI();
+    }, {log: true});
+    dev.touchSrv.once('__isServiceStreamOpened', function () {
+      dev.touchStatus = 'OK';
+      scheduleUpdateWholeUI();
+    });
+    dev.touchStatus = 'preparing touch server';
+    scheduleUpdateWholeUI();
+  }
 } //end of prepareDeviceFile
 
 function sendTouchEvent(dev, _type, _x, _y) {
@@ -585,33 +602,11 @@ function sendTouchEvent(dev, _type, _x, _y) {
   return true;
 
   function touch(type, code, value) {
-    if (cfg.useSlowTouchSrv) {
-      runCmd('T ' + type + ' ' + code + ' ' + value);
-    } else {
-      touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
-      touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
-      touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
-      if (!dev.touchSrv) {
-        dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
-          dev.touchSrv = null;
-        }, {log: true});
-      }
-      cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', 'TOUCH ' + type + ' ' + code + ' ' + value);
-      dev.touchSrv.__everConnected ? dev.touchSrv.write(touchEventBuf) : dev.touchSrv.once('connect', function () {
-        dev.touchSrv.write(touchEventBuf);
-      });
-    }
-  }
-
-  function runCmd(cmd) {
-    if (!dev.touchSrv) {
-      dev.touchSrv = spawn('[TouchSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
-        dev.touchSrv = null;
-      }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-      runCmd('alias T="/system/bin/sendevent ' + dev.touch.devPath + '"');
-    }
-    cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', cmd);
-    dev.touchSrv.stdin.write(cmd + '\n');
+    touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
+    touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
+    touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
+    cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', 'TOUCH ' + type + ' ' + code + ' ' + value);
+    dev.touchSrv.write(touchEventBuf);
   }
 }
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
@@ -852,9 +847,8 @@ function endRemoteDesktopServer(dev, reason) {
   clearInterval(dev.capture.timer_resentImageForSafari);
   clearInterval(dev.capture.timer_resentUnchangedImage);
   dev.capture.adbCon && dev.capture.adbCon.__cleanup(reason);
-  dev.touchSrv && dev.touchSrv.__cleanup('capturer closed');
   dev.keybdSrv && dev.keybdSrv.__cleanup('capturer closed');
-  dev.capture = dev.touchSrv = dev.keybdSrv = null;
+  dev.capture = dev.keybdSrv = null;
   forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
     delete rdcWebSocket.devHandleMap[dev.i];
     !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
@@ -1084,7 +1078,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
 }).option = {log: true};
 (adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res, q) {
   devAry.forEach(function (dev) {
-    dev.connectionStatus && prepareDeviceFile(dev, q.mode === 'forcePrepare');
+    prepareDeviceFile(dev, q.mode === 'forcePrepare');
   });
   end(res, 'OK');
 }).option = {log: true};
