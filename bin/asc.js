@@ -79,55 +79,51 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
 
   var adbCon = net.connect(adbHost, function /*on_connected*/() {
     (adbCon.__everConnected = true) && _log && log(tag, 'connection OK');
-    var ok = 0, wanted_ok = isDevCmd ? 2 : 1, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
+    var total_matched_len = 0, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
 
     isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer(service)));
 
     adbCon.on('data', function (buf) {
       if (cleanup.called) return;
-      if (stderr.length) {
-        return stderr.push(buf);
+      if (stderr.length) return stderr.push(buf);
+      if (total_matched_len < (isDevCmd ? 8 : 4)) {
+        var match_len = Math.min(buf.length, 4 - total_matched_len % 4), i;
+        for (i = 0; i < match_len; i++, total_matched_len++)
+          if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
+        if (total_matched_len !== 4 && total_matched_len !== 8) return;
+
+        if (total_matched_len === 4 && isDevCmd) return adbCon.write(adbHost_makeBuf(new Buffer(service)));
+
+        adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
+        if ((buf = buf.slice(match_len)).length === 0) return;
       }
-      if (ok < wanted_ok) {
-        if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
-          ok++;
-          ok === 1 && isDevCmd && adbCon.write(adbHost_makeBuf(new Buffer(service)));
-          buf = buf.slice(4);
-        } else {
-          return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
-        }
+      if (isDevCmd) {
+        on_close.length >= 2 && stdout.push(buf);
+        adbCon.__on_adb_stream_data && adbCon.__on_adb_stream_data(buf);
       }
-      (adbCon.__isServiceStreamOpened = (ok === wanted_ok)) && adbCon.emit('__isServiceStreamOpened');
-      if (ok === wanted_ok && buf.length) {
-        if (isDevCmd) {
-          on_close.length >= 2 && stdout.push(buf);
-          adbCon.__on_device_data && adbCon.__on_device_data(buf); //todo: emit
-        }
-        else if (on_close.length >= 2 || adbCon.__on_host_stdout) {
-          do {
-            if (wanted_payload_len === -1) {
-              tmpBuf = Buffer.concat([tmpBuf, buf]);
-              if (tmpBuf.length < 4) return 0;
-              wanted_payload_len = parseInt(tmpBuf.slice(0, 4).toString(), 16); //maybe 0
-              if (isNaN(wanted_payload_len)) return cleanup('protocol error(data length)');
-              buf = tmpBuf.slice(4);
-              tmpBuf.length = 0;
-            }
-            if (buf.length >= wanted_payload_len) {
-              tmpBufAry.push(buf.slice(0, wanted_payload_len));
-              buf = buf.slice(wanted_payload_len);
-              wanted_payload_len = -1;
-              stdout = tmpBufAry;
-              tmpBufAry = [];
-              adbCon.__on_host_stdout && adbCon.__on_host_stdout(Buffer.concat(stdout).toString());
-            } else {
-              wanted_payload_len -= buf.length;
-              return tmpBufAry.push(buf);
-            }
-          } while (buf.length);
-        } //end of !isDevCmd
-      } //end of ok === wanted_ok && buf.length
-      return 0;
+      else if (on_close.length >= 2 || adbCon.__on_adb_stream_data) {
+        do {
+          if (wanted_payload_len === -1) {
+            tmpBuf = Buffer.concat([tmpBuf, buf]);
+            if (tmpBuf.length < 4) return;
+            wanted_payload_len = parseInt(tmpBuf.slice(0, 4).toString(), 16); //maybe 0
+            if (isNaN(wanted_payload_len)) return cleanup('protocol error(data length)');
+            buf = tmpBuf.slice(4);
+            tmpBuf.length = 0;
+          }
+          if (buf.length >= wanted_payload_len) {
+            tmpBufAry.push(buf.slice(0, wanted_payload_len));
+            buf = buf.slice(wanted_payload_len);
+            wanted_payload_len = -1;
+            stdout = [Buffer.concat(tmpBufAry)];
+            tmpBufAry = [];
+            adbCon.__on_adb_stream_data && adbCon.__on_adb_stream_data(stdout[0]);
+          } else {
+            wanted_payload_len -= buf.length;
+            return tmpBufAry.push(buf);
+          }
+        } while (buf.length);
+      } //end of !isDevCmd
     });
   });
 
@@ -382,14 +378,14 @@ function initDeviceTrackers() {
 
   function _initDeviceTracker(adbHost) {
     var adbCon = fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
-      adbCon.__on_host_stdout('');
+      adbCon.__on_adb_stream_data(EMPTY_BUF);
       setTimeout(function () {
         _initDeviceTracker(adbHost);
       }, cfg.retryDeviceTrackerInterval * 1000);
     });
-    adbCon.__on_host_stdout = function (stdout) {
+    adbCon.__on_adb_stream_data = function (buf) {
       var devList = [];
-      stdout.split('\n').forEach(function (desc) {
+      buf.toString().split('\n').forEach(function (desc) { //noinspection JSValidateTypes
         if ((desc = desc.split('\t')).length !== 2 || desc[0] === '????????????' || !desc[1]) return;
         var dev = devList[devList.length] = createDev(/*conId*/desc[0], /*connectionStatus*/desc[1], adbHost);
         createDev.statusChanged && log('[TrackDevices] ' + dev.id, dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS ? 'connected' : ('status changed to: ' + dev.connectionStatus));
@@ -417,7 +413,7 @@ function initDeviceTrackers() {
           scheduleUpdateWholeUI();
         }
       });
-    }; //end of __on_host_stdout
+    }; //end of __on_adb_stream_data
   } //end of _trackDevices
 } //end of trackDevices
 
@@ -540,10 +536,10 @@ function prepareDeviceFile(dev, force/*optional*/) {
       dev.touchStatus = 'touch server ' + stderr;
       scheduleUpdateWholeUI();
     }, {log: true});
-    dev.touchSrv.once('__isServiceStreamOpened', function () {
+    dev.touchSrv.__on_adb_stream_open = function () {
       dev.touchStatus = 'OK';
       scheduleUpdateWholeUI();
-    });
+    };
     dev.touchStatus = 'preparing touch server';
     scheduleUpdateWholeUI();
   }
@@ -753,7 +749,7 @@ function _startNewCaptureProcess(dev, q) {
       , function/*on_close*/(stderr) {
         capture === dev.capture && endRemoteDesktopServer(dev, stderr || 'CLOSED');
       }, {log: true});
-  adbCon.__on_device_data = function (buf) {
+  adbCon.__on_adb_stream_data = function (buf) {
     capture === dev.capture && convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
       var pos = 0, unsavedStart = 0, endPos = buf.length;
       for (; pos < endPos; pos++) {
@@ -1162,7 +1158,7 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
     var adbCon = fastAdbExec('[cmd]', dev, q.cmd, function/*on_close*/(stderr) {
       end(res, !stderr ? '' : ((res.headersSent ? '\n' : '') + stderr));
     }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, log: q.log !== 'false'});
-    adbCon.__on_device_data = function (buf) {
+    adbCon.__on_adb_stream_data = function (buf) {
       res.write(buf.slice(0, Math.min(buf.length, restLen)));
       (restLen -= buf.length) <= 0 && adbCon.__cleanup('too much output');
     };
@@ -1259,34 +1255,30 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
       bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.productName + ';ro.product.model=' + dev.productModel + ';ro.product.device=' + dev.productDevice + ';'));
     }
     else if (cmd === 'OPEN') {
-      var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1));
+      var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)), total_matched_len = 0;
       arg1/*as localId*/ = (nextBackendId === 0xffffffff ? (nextBackendId = 1) : ++nextBackendId);
 
       backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
 
       backend_write(backend, dev.buf_switchTransport);
 
-      var ok = 0;
       backend.on('data', function (buf) {
         cfg.logAdbBridgeDetail && log(backend.__tag, 'read  ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
-        if (ok < 2) {
-          if (buf.length >= 4 && buf.slice(0, 4).toString() === 'OKAY') {
-            ok++;
-            ok === 1 && backend_write(backend, adbHost_makeBuf(serviceBuf));
-            ok === 2 && bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
-            buf = buf.slice(4);
-          } else {
-            backend_cleanup(backend, 'FAIL');
-            return;
-          }
+        if (total_matched_len < 8) {
+          var match_len = Math.min(buf.length, 4 - total_matched_len % 4), i;
+          for (i = 0; i < match_len; i++, total_matched_len++)
+            if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return backend_cleanup(backend, 'FAIL');
+          if (total_matched_len !== 4 && total_matched_len !== 8) return;
+
+          if (total_matched_len === 4) return backend_write(backend, adbHost_makeBuf(serviceBuf));
+
+          bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
+          if ((buf = buf.slice(match_len)).length === 0) return;
         }
-        if (ok === 2) {
-          while (buf.length) {
-            var len = Math.min(4096, buf.length);
-            bridge_write('WRTE', /*localId:*/arg1, /*remoteId:*/arg0, buf.slice(0, len));
-            buf = buf.slice(len);
-          }
-        }
+        do {
+          var len = Math.min(4096, buf.length);
+          bridge_write('WRTE', /*localId:*/arg1, /*remoteId:*/arg0, buf.slice(0, len));
+        } while ((buf = buf.slice(len)).length);
       });
     } //end of OPEN
     else {
