@@ -22,8 +22,8 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbDeviceListUpdateInterval: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckDeviceTimeout: 0, enableGetFileFromStreamWeb: 0});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', retryDeviceTrackerInterval: 0, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0});
+true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
 
 function dummyFunc() {
 }
@@ -95,7 +95,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
         if (total_matched_len === 4 && isDevCmd) return adbCon.write(adbHost_makeBuf(new Buffer(service)));
 
         adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
-        if ((buf = buf.slice(match_len)).length === 0) return;
+        if (!(buf = buf.slice(match_len)).length) return;
       }
       if (isDevCmd) {
         on_close.length >= 2 && stdout.push(buf);
@@ -314,10 +314,10 @@ function createDev(conId/*serial_no or ip:port, maybe same on different host*/, 
 function setDevId(dev) {
   if (dev.connectionStatus || cfg.showDisconnectedDevices) scheduleUpdateWholeUI();
   var devGrp = devGrpMap[dev.sn] || (devGrpMap[dev.sn] = []);
-  dev.id = dev.sn + (devGrp.length === 0 ? '' : '~' + (devGrp.length + 1));
+  dev.id = dev.sn + (!devGrp.length ? '' : '~' + (devGrp.length + 1));
   dev.var = dev.sn.replace(/[^0-9a-zA-Z]/g, function (match) {
     return ('_' + match.charCodeAt(0).toString(16) + '_');
-  }) + (devGrp.length === 0 ? '' : '_' + (devGrp.length + 1));
+  }) + (!devGrp.length ? '' : '_' + (devGrp.length + 1));
   dev.re_lastViewId_cookie = new RegExp('\\b' + cookie_id_head + 'viewId_' + dev.var + '=([^;]+)');
   devGrp[devGrp.length] = dev;
 }
@@ -371,51 +371,56 @@ function initDeviceTrackers() {
 
   setInterval(function () {
     devAry.forEach(function (dev) {
-      if (dev.adbHost && dev.status === 'OK' && Date.now() - (dev.lastActiveDateMs || 0) >= cfg.adbKeepDeviceAliveInterval * 1000)
-        fastAdbExec('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000});
+      dev.status === 'OK' && !Object.keys(dev.adbConMap).length && fastAdbExec('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000});
     });
-  }, Math.max(1, cfg.adbKeepDeviceAliveInterval / 2) * 1000);
+  }, cfg.adbKeepDeviceAliveInterval * 1000);
+
+  setInterval(function () {
+    devAry.forEach(function (dev) {
+      dev.isOsStartingUp && prepareDevice(dev);
+      dev.status === 'OK' && dev.touchStatus === 'touch server internal error' && prepareTouchServer(dev);
+    });
+  }, cfg.adbRetryPrepareDeviceInterval * 1000);
 
   function _initDeviceTracker(adbHost) {
     var adbCon = fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
       adbCon.__on_adb_stream_data(EMPTY_BUF);
       setTimeout(function () {
         _initDeviceTracker(adbHost);
-      }, cfg.retryDeviceTrackerInterval * 1000);
+      }, cfg.adbRetryDeviceTrackerInterval * 1000);
     });
     adbCon.__on_adb_stream_data = function (buf) {
       var devList = [];
       buf.toString().split('\n').forEach(function (desc) { //noinspection JSValidateTypes
         if ((desc = desc.split('\t')).length !== 2 || desc[0] === '????????????' || !desc[1]) return;
         var dev = devList[devList.length] = createDev(/*conId*/desc[0], /*connectionStatus*/desc[1], adbHost);
-        createDev.statusChanged && log('[TrackDevices] ' + dev.id, dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS ? 'connected' : ('status changed to: ' + dev.connectionStatus));
-        if (dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS) {
-          if (createDev.statusChanged || dev.isOsStartingUp) {
-            prepareDeviceFile(dev);
-          }
-        } else if (createDev.statusChanged) {
-          forEachValueIn(dev.adbConMap, function (adbCon) {
-            adbCon.__cleanup('device unusable');
-          });
-          endRemoteDesktopServer(dev, 'device unusable');
-          dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('device unusable');
+        if (createDev.statusChanged) {
+          log('[TrackDevices] ' + dev.id, dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS ? 'connected' : ('status changed to: ' + dev.connectionStatus));
+          dev.connectionStatus === REALLY_USABLE_STATUS ? prepareDevice(dev) : unprepareDevice(dev, 'device unusable');
         }
       });
       devAry.forEach(function (dev) {
         if (dev.adbHost === adbHost && dev.connectionStatus && devList.indexOf(dev) < 0) {
-          log(adbCon.__tag + ' ' + dev.id, 'disconnected');
+          log('[TrackDevices] ' + dev.id, 'disconnected');
           dev.connectionStatus = ''; //means disconnected
-          forEachValueIn(dev.adbConMap, function (adbCon) {
-            adbCon.__cleanup('device disconnected');
-          });
-          endRemoteDesktopServer(dev, 'device disconnected');
-          dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('device disconnected');
-          scheduleUpdateWholeUI();
+          unprepareDevice(dev, 'device disconnected');
         }
       });
     }; //end of __on_adb_stream_data
   } //end of _trackDevices
 } //end of trackDevices
+
+function unprepareDevice(dev, reason) {
+  forEachValueIn(dev.adbConMap, function (adbCon) {
+    adbCon.__cleanup(reason);
+  });
+  endRemoteDesktopServer(dev, reason);
+  dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup(reason);
+  dev.status = dev.touchStatus = '';
+  dev.touchSrv = null; //already called cleanup in dev.adbConMap loop
+  dev.isOsStartingUp = false;
+  scheduleUpdateWholeUI();
+}
 
 var cmd_getBaseInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device;'
     + ' echo ===; getevent -pS;'
@@ -427,9 +432,7 @@ var cmd_getExtraInfo = ' cd ' + cfg.androidWorkDir + ' && chmod 700 . * && umask
 var cmd_getExtraInfo_Rest = ' { echo ===; ./dlopen ./sc-???; echo ===; ./dlopen ./fsc-???; } 2>' + cfg.androidLogPath + ';';
 var cmd_getExtraInfo_Rest_500 = ' { echo ===; ./dlopen.pie ./sc-???; echo ===; ./dlopen.pie ./fsc-???; } 2>' + cfg.androidLogPath + ';';
 
-function prepareDeviceFile(dev, force/*optional*/) {
-  if (dev.connectionStatus !== REALLY_USABLE_STATUS) return;
-  dev.status === 'OK' && prepareFastTouchSrv();
+function prepareDevice(dev, force/*optional*/) {
   if ((dev.status === 'OK' && !force || dev.status === 'preparing')) return;
   log('[Prepare ' + dev.id + ']', 'BEGIN');
   (dev.status = 'preparing') && scheduleUpdateWholeUI();
@@ -445,15 +448,9 @@ function prepareDeviceFile(dev, force/*optional*/) {
     dev.info = parts[0].split(/\r*\n/);
     dev.sysVer = Number((dev.info[2] + '.0.0').split('.').slice(0, 3).join('.').replace(/\.([^.]+)$/, '$1')); //4.1.2 -> 4.12
     dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
-    dev.info[3] = (dev.info[3] = dev.info[3].replace(/^armeabi-|^arm64-/, '')) == 'v7a' ? '' : dev.info[3];
+    dev.conId.match(/^.+:\d+$/)/*wifi ip:port*/ && dev.info[4] && (dev.sn = dev.info[4]) && setDevId(dev);
+
     chkTouchDev(dev, parts[1]);
-    dev.internalSN = dev.info[4]; //maybe different with external sn
-    dev.productModel = dev.info[1];
-    dev.productName = dev.info[5];
-    dev.productDevice = dev.info[6];
-    dev.info.splice(4, 3); //remove last 3 items
-    dev.conId.match(/^.+:\d+$/)/*wifi ip:port*/ && dev.internalSN && (dev.sn = dev.internalSN) && setDevId(dev);
-    dev.info_htm = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
 
     if (!force && parts[2] === fileVer) {
       return finishPrepare();
@@ -464,11 +461,14 @@ function prepareDeviceFile(dev, force/*optional*/) {
       }
       return finishPrepare();
     }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000}); //end of PushFileToDevice
-  }, {timeout: cfg.adbCheckDeviceTimeout * 1000, log: true}); //end of CheckBasicInfo
+  }, {timeout: cfg.adbCheckBasicInfoTimeout * 1000, log: true}); //end of CheckBasicInfo
 
   function setStatus(status) {
     log('[Prepare ' + dev.id + ']', 'END: ' + status);
-    dev.status !== status && (dev.status = status) && scheduleUpdateWholeUI();
+    dev.info && (dev.info_htm = htmlEncode(dev.info[0]/*manufacturer*/ + ' ' + dev.info[1]/*model*/ + ' ' + dev.info[2]/*release*/ + ' ' + ((dev.info[3] === 'armeabi-v7a' || dev.info[3] === 'arm64-v7a') ? '' : dev.info[3])
+    + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
+    (dev.status = status) && scheduleUpdateWholeUI();
+    dev.status === 'OK' && dev.touchStatus === 'touch device found' && prepareTouchServer(dev);
   }
 
   function finishPrepare() {
@@ -496,14 +496,14 @@ function prepareDeviceFile(dev, force/*optional*/) {
     (ary[3] = ary[3].match(/\d+/)) && (dev.memSize = Number(ary[3][0]));
     dev.libPath = ary[4].split(/\r*\n/).sort().pop();
     dev.fastLibPath = ary[5].split(/\r*\n/).sort().pop();
-    dev.info_htm = htmlEncode(dev.info.join(' ') + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h));
     return dev.libPath && dev.disp;
   }
 
   function chkTouchDev(dev, stdout) {
-    dev.touchStatus = 'touch device not found';
+    dev.touchSrv && dev.touchSrv.__cleanup('force prepare');
+    dev.touchSrv && (dev.touchSrv = null);
     dev.touch.modernStyle = stdout.indexOf('INPUT_PROP_DIRECT') >= 0;
-    stdout.split(/add device \d+: /).some(function (devInfo) {
+    dev.touchStatus = stdout.split(/add device \d+: /).some(function (devInfo) {
       var match = {};
       if ((match['0035'] = devInfo.match(/\D*0035.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_X*/ && (match['0036'] = devInfo.match(/\D*0036.*value.*min.*max\D*(\d+)/)) /*ABS_MT_POSITION_Y*/) {
         if ((dev.touch.modernStyle && devInfo.indexOf('INPUT_PROP_DIRECT') >= 0) || (!dev.touch.modernStyle && !devInfo.match(/\n +name: +.*pen/))) {
@@ -520,30 +520,29 @@ function prepareDeviceFile(dev, force/*optional*/) {
             (match['0032'] = devInfo.match(/\D*0032.*value.*min.*max\D*(\d+)/)) && (dev.touch.avgFingerSize = Math.max(Math.ceil(match['0032'][1] / 2), 1)); //ABS_MT_WIDTH_MAJOR
             dev.touch.needBtnTouchEvent = /\n +KEY.*:.*014a/.test(devInfo); //BTN_TOUCH for sumsung devices
             dev.touch.devPath = devInfo.match(/.*/)[0]; //get first line: /dev/input/eventN
-            prepareFastTouchSrv();
             return true;
           }
         }
       }
       return false;
-    }); //end of processing each line of stdout
-    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'preparing touch server' ? JSON.stringify(dev.touch) : ''));
+    }) ? 'touch device found' : 'touch device not found';
+    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'touch device not found' ? '' : JSON.stringify(dev.touch)));
   } //end of chkTouchDev
+} //end of prepareDevice
 
-  function prepareFastTouchSrv() {
-    dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/(stderr) {
-      dev.touchSrv = null;
-      dev.touchStatus = 'touch server ' + stderr;
-      scheduleUpdateWholeUI();
-    }, {log: true});
-    dev.touchSrv.__on_adb_stream_open = function () {
-      dev.touchStatus = 'OK';
-      scheduleUpdateWholeUI();
-    };
-    dev.touchStatus = 'preparing touch server';
+function prepareTouchServer(dev) {
+  dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+    dev.touchSrv = null;
+    dev.touchStatus = 'touch server internal error';
     scheduleUpdateWholeUI();
-  }
-} //end of prepareDeviceFile
+  }, {log: true});
+  dev.touchSrv.__on_adb_stream_open = function () {
+    dev.touchStatus = 'OK';
+    scheduleUpdateWholeUI();
+  };
+  dev.touchStatus = 'preparing touch server';
+  scheduleUpdateWholeUI();
+}
 
 function sendTouchEvent(dev, _type, _x, _y) {
   if (!chkDev(dev, {connected: true, capturing: true, touchable: true})
@@ -742,15 +741,15 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[CAP]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
-      + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.internalSN)
+      + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
       , function/*on_close*/(stderr) {
-        capture === dev.capture && endRemoteDesktopServer(dev, stderr || 'CLOSED');
+        endRemoteDesktopServer(dev, stderr || 'CLOSED');
       }, {log: true});
   adbCon.__on_adb_stream_data = function (buf) {
-    capture === dev.capture && convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
+    convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
       var pos = 0, unsavedStart = 0, endPos = buf.length;
       for (; pos < endPos; pos++) {
         if (foundMark && buf[pos] === 0xD9) {
@@ -1074,7 +1073,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
 }).option = {log: true};
 (adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res, q) {
   devAry.forEach(function (dev) {
-    prepareDeviceFile(dev, q.mode === 'forcePrepare');
+    dev.connectionStatus === REALLY_USABLE_STATUS && prepareDevice(dev, q.mode === 'forcePrepare');
   });
   end(res, 'OK');
 }).option = {log: true};
@@ -1252,7 +1251,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
     (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(tag, 'read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
 
     if (cmd === 'CNXN') {
-      bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.productName + ';ro.product.model=' + dev.productModel + ';ro.product.device=' + dev.productDevice + ';'));
+      bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.info[5] + ';ro.product.model=' + dev.info[1] + ';ro.product.device=' + dev.info[6] + ';'));
     }
     else if (cmd === 'OPEN') {
       var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)), total_matched_len = 0;
@@ -1273,7 +1272,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
           if (total_matched_len === 4) return backend_write(backend, adbHost_makeBuf(serviceBuf));
 
           bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
-          if ((buf = buf.slice(match_len)).length === 0) return;
+          if (!(buf = buf.slice(match_len)).length) return;
         }
         do {
           var len = Math.min(4096, buf.length);

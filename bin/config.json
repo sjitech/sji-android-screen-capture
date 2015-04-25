@@ -35,8 +35,6 @@
   "logAdbBridgeDetail": false,
   "logRdcWebSocketDetail": false,
 
-  "adbDeviceListUpdateInterval": 5, //get device list repeatedly at this interval
-  "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
   "fpsStatisticInterval": 10, //output Fps statistic at this interval
   "videoFileFrameRate": 15,
   "resentImageForSafariAfter": 0.25,
@@ -56,9 +54,12 @@
   "androidLogPath": "/data/local/tmp/sji-asc.log",
   "adbGetDeviceListTimeout": 60,
   "adbEchoTimeout": 10,
-  "adbCheckDeviceTimeout": 300,
+  "adbRetryDeviceTrackerInterval": 5,
+  "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
+  "adbCheckBasicInfoTimeout": 300,
   "adbPushFileToDeviceTimeout": 600,
   "adbFinishPrepareFileTimeout": 120,
+  "adbRetryPrepareDeviceInterval": 5,
   "adbCaptureExitDelayTime": 2,
   "adbTouchTimeout": 3000,
   "adbSendKeyTimeout": 10,
@@ -69,7 +70,6 @@
   "ajaxAllowOrigin": "*",
   "defaultMaxRecentImageFiles": 50,
   "defaultMaxAdminCmdOutputLength": 65536,
-  "retryDeviceTrackerInterval": 5,
 
   "__end": 0
 }
