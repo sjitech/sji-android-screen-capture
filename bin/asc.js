@@ -611,7 +611,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
     return false;
   }
   if (isKeyCode) {
-    runCmd('K ' + keyCodeOrText);
+    runCmd('k ' + keyCodeOrText);
   } else {
     keyCodeOrText.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
       n && runCmd('K ' + 66/*enter*/);
@@ -627,7 +627,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
       dev.keybdSrv = spawn('[KeybdSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
         dev.keybdSrv = null;
       }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-      runCmd('alias K="/system/bin/input keyevent"; alias t=' + cfg.androidWorkDir + '/input_text.sh');
+      runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
     }
     cfg.logAllProcCmd && log(dev.keybdSrv.__tag + '<', cmd);
     dev.keybdSrv.stdin.write(cmd + '\n');
