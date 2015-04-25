@@ -917,7 +917,7 @@ function web_handler(req, res) {
     return end(res, chk.err);
   }
   res.__log = cfg.logAllHttpReqRes || (handler.option && (handler.option.log || handler.option.logCondition && handler.option.logCondition(req, res, q)));
-  res.__log && log((res.__tag = '[HTTP_' + (++httpSeq) + ']'), 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddresses(req) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? '[' + req.headers['user-agent'] + ']' : ''));
+  res.__log && log((res.__tag = '[HTTP_' + (++httpSeq) + ']'), 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddresses(req) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + req.headers['user-agent'] + ']' : ''));
   res.__log && res.once('close', function () {
     log(res.__tag, 'CLOSED') && (res.__log = false);
   });
@@ -1193,7 +1193,7 @@ function createWebSocketServer() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), maxReceivedFrameSize: 8 * 1024, maxReceivedMessageSize: 8 * 1024}).on('request', function (wsConReq) {
     var httpReq = wsConReq.httpRequest, httpTag = '[HTTP_' + (++httpSeq) + '] [WebSocket]';
     var parsedUrl = Url.parse(httpReq.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev;
-    log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? '[' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
+    log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
     if (urlPath === '/adbBridge') {
       if (!(dev = getDev(q, {chkAccessKey: true, connected: true, adbBridge: true}))) {
         log(httpTag, 'Rejected. Reason: ' + chk.err);
