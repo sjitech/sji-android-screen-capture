@@ -94,7 +94,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
 
         if (total_matched_len === 4 && isDevCmd) return adbCon.write(adbHost_makeBuf(new Buffer(service)));
 
-        adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
+        adbCon.__adb_stream_opened = true;
         if (!(buf = buf.slice(match_len)).length) return;
       }
       if (isDevCmd) {
@@ -350,8 +350,8 @@ function chkDev(dev, opt) {
       || opt.connected && !(dev.connectionStatus === REALLY_USABLE_STATUS) && (chk.err = 'device not connected')
       || opt.capturing && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started')
       || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
-      || opt.capturable && dev.status !== 'OK' && (chk.err = 'device not ready for capturing screen')
-      || opt.touchable && dev.touchStatus !== 'OK' && (chk.err = 'device not ready for touch');
+      || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
+      || opt.touchable && !(dev.capture && dev.capture.touchSrv && dev.capture.touchSrv.__adb_stream_opened) && (chk.err = 'device not ready for touch');
   return !failed;
 }
 function newAutoAccessKey() {
@@ -378,7 +378,6 @@ function initDeviceTrackers() {
   setInterval(function () {
     devAry.forEach(function (dev) {
       dev.isOsStartingUp && prepareDevice(dev);
-      dev.status === 'OK' && dev.touchStatus === 'touch server internal error' && prepareTouchServer(dev);
     });
   }, cfg.adbRetryPrepareDeviceInterval * 1000);
 
@@ -414,10 +413,9 @@ function unprepareDevice(dev, reason) {
   forEachValueIn(dev.adbConMap, function (adbCon) {
     adbCon.__cleanup(reason);
   });
-  endRemoteDesktopServer(dev, reason);
+  dev.capture && dev.capture.__cleanup(reason);
   dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup(reason);
   dev.status = dev.touchStatus = '';
-  dev.touchSrv = null; //already called cleanup in dev.adbConMap loop
   dev.isOsStartingUp = false;
   scheduleUpdateWholeUI();
 }
@@ -468,7 +466,6 @@ function prepareDevice(dev, force/*optional*/) {
     dev.info && (dev.info_htm = htmlEncode(dev.info[0]/*manufacturer*/ + ' ' + dev.info[1]/*model*/ + ' ' + dev.info[2]/*release*/ + ' ' + ((dev.info[3] === 'armeabi-v7a' || dev.info[3] === 'arm64-v7a') ? '' : dev.info[3])
     + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
     (dev.status = status) && scheduleUpdateWholeUI();
-    dev.status === 'OK' && dev.touchStatus === 'touch device found' && prepareTouchServer(dev);
   }
 
   function finishPrepare() {
@@ -500,8 +497,6 @@ function prepareDevice(dev, force/*optional*/) {
   }
 
   function chkTouchDev(dev, stdout) {
-    dev.touchSrv && dev.touchSrv.__cleanup('force prepare');
-    dev.touchSrv && (dev.touchSrv = null);
     dev.touch.modernStyle = stdout.indexOf('INPUT_PROP_DIRECT') >= 0;
     dev.touchStatus = stdout.split(/add device \d+: /).some(function (devInfo) {
       var match = {};
@@ -525,24 +520,10 @@ function prepareDevice(dev, force/*optional*/) {
         }
       }
       return false;
-    }) ? 'touch device found' : 'touch device not found';
-    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'touch device not found' ? '' : JSON.stringify(dev.touch)));
+    }) ? 'OK' : 'touch device not found';
+    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
   } //end of chkTouchDev
 } //end of prepareDevice
-
-function prepareTouchServer(dev) {
-  dev.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
-    dev.touchSrv = null;
-    dev.touchStatus = 'touch server internal error';
-    scheduleUpdateWholeUI();
-  }, {log: true});
-  dev.touchSrv.__on_adb_stream_open = function () {
-    dev.touchStatus = 'OK';
-    scheduleUpdateWholeUI();
-  };
-  dev.touchStatus = 'preparing touch server';
-  scheduleUpdateWholeUI();
-}
 
 function sendTouchEvent(dev, _type, _x, _y) {
   if (!chkDev(dev, {connected: true, capturing: true, touchable: true})
@@ -551,7 +532,7 @@ function sendTouchEvent(dev, _type, _x, _y) {
     return false;
   }
   var x = (_x * dev.touch.w).toFixed(), y = (_y * dev.touch.h).toFixed(), isStart = _type === 'd', isEnd = _type === 'u' || _type === 'o', isMove = _type === 'm';
-  if (isMove && dev.touchLast_x === x && dev.touchLast_y === y) return true; //ignore move event if at same position
+  if (isMove && dev.capture.touchSrv.__last_x === x && dev.capture.touchSrv.__last_y === y) return true; //ignore move event if at same position
   if (dev.touch.maxTrackId === 65535) { //normal case
     if (isStart) { //down
       touch(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
@@ -565,8 +546,8 @@ function sendTouchEvent(dev, _type, _x, _y) {
       touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
       touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else if (isMove) { //move
-      x !== dev.touchLast_x && touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      y !== dev.touchLast_y && touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      x !== dev.capture.touchSrv.__last_x && touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      y !== dev.capture.touchSrv.__last_y && touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else { //up, out
       touch(3, 0x39, -1); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
       dev.touch.needBtnTouchEvent && touch(1, 0x014a, 0);  //BTN_TOUCH UP for sumsung devices
@@ -591,8 +572,8 @@ function sendTouchEvent(dev, _type, _x, _y) {
     touch(0, 0, 0); //SYN_REPORT
   }
   if (isStart || isMove) { //down, move
-    dev.touchLast_x = x;
-    dev.touchLast_y = y;
+    dev.capture.touchSrv.__last_x = x;
+    dev.capture.touchSrv.__last_y = y;
   }
   return true;
 
@@ -600,8 +581,8 @@ function sendTouchEvent(dev, _type, _x, _y) {
     touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
     touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
     touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
-    cfg.logAllProcCmd && log(dev.touchSrv.__tag + '<', 'TOUCH ' + type + ' ' + code + ' ' + value);
-    dev.touchSrv.write(touchEventBuf);
+    cfg.logAllProcCmd && log(dev.capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
+    dev.capture.touchSrv.write(touchEventBuf);
   }
 }
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
@@ -623,14 +604,8 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   return true;
 
   function runCmd(cmd) {
-    if (!dev.keybdSrv) {
-      dev.keybdSrv = spawn('[KeybdSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
-        dev.keybdSrv = null;
-      }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-      runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
-    }
-    cfg.logAllProcCmd && log(dev.keybdSrv.__tag + '<', cmd);
-    dev.keybdSrv.stdin.write(cmd + '\n');
+    cfg.logAllProcCmd && log(dev.capture.keybdSrv.__tag + '<', cmd);
+    dev.capture.keybdSrv.stdin.write(cmd + '\n');
   }
 }
 function setDeviceOrientation(dev, orientation) {
@@ -727,7 +702,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
     q._disp = (q.fastCapture ? (q.fastResize ? 'F30' : 'F15') : q.fastResize ? 'f10' : 'f4') + ' ' + w + (q._reqSz ? 'X' : 'x') + h + ' ' + q.timestamp.slice(8, 10) + ':' + q.timestamp.slice(10, 12) + ':' + q.timestamp.slice(12, 14);
 
     if (dev.capture && q._hash !== dev.capture.q._hash && q._priority >= dev.capture.q._priority && !dev.masterMode && !forRecording)
-      endRemoteDesktopServer(dev, 'incompatible capture requested'); //stop incompatible capture process immediately if necessary
+      dev.capture.__cleanup('incompatible capture requested'); //stop incompatible capture process immediately if necessary
 
     if (!forRecording && req.headers.cookie && (q._lastViewId = req.headers.cookie.match(dev.re_lastViewId_cookie)) && (q._lastViewId = q._lastViewId[1]))
       forEachValueIn(dev.consumerMap, function (res) {
@@ -739,14 +714,14 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
-  var capture = dev.capture = {q: q}, bufAry = [], foundMark = false;
+  var capture = dev.capture = {q: q, __cleanup: cleanup}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[CAP]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
       , function/*on_close*/(stderr) {
-        endRemoteDesktopServer(dev, stderr || 'CLOSED');
+        cleanup(stderr || 'CLOSED');
       }, {log: true});
   adbCon.__on_adb_stream_data = function (buf) {
     convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
@@ -777,6 +752,34 @@ function _startNewCaptureProcess(dev, q) {
       writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg.resentUnchangedImageInterval * 1000);
+
+  capture.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+    capture.touchSrv = null;
+  }, {log: true});
+
+  capture.keybdSrv = spawn('[KeybdSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
+    capture.keybdSrv = null;
+  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
+  capture.keybdSrv.stdin.write('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh\n');
+
+  function cleanup(reason) {
+    if (cleanup.called) return;
+    cleanup.called = true;
+    forEachValueIn(dev.consumerMap, endCaptureConsumer);
+    clearTimeout(dev.capture.delayKillTimer);
+    clearInterval(dev.capture.timer_resentImageForSafari);
+    clearInterval(dev.capture.timer_resentUnchangedImage);
+    dev.capture.adbCon && dev.capture.adbCon.__cleanup(reason);
+    dev.capture.touchSrv && dev.capture.touchSrv.__cleanup('capturer closed');
+    dev.capture.keybdSrv && dev.capture.keybdSrv.__cleanup('capturer closed');
+    dev.capture = null;
+    forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
+      delete rdcWebSocket.devHandleMap[dev.i];
+      !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
+    });
+    dev.rdcWebSocketMap = {};
+    scheduleUpdateLiveUI();
+  }
 }
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
   !dev.capture && _startNewCaptureProcess(dev, q);
@@ -832,24 +835,8 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/)
   clearInterval(res.__statTimer);
   clearInterval(res.__feedConvertTimer);
   !Object.keys(dev.consumerMap).length && (dev.capture.delayKillTimer = setTimeout(function () {
-    endRemoteDesktopServer(dev, 'no more consumer');
+    dev.capture.__cleanup('no more consumer');
   }, cfg.adbCaptureExitDelayTime * 1000));
-}
-function endRemoteDesktopServer(dev, reason) {
-  if (!dev.capture) return;
-  forEachValueIn(dev.consumerMap, endCaptureConsumer);
-  clearTimeout(dev.capture.delayKillTimer);
-  clearInterval(dev.capture.timer_resentImageForSafari);
-  clearInterval(dev.capture.timer_resentUnchangedImage);
-  dev.capture.adbCon && dev.capture.adbCon.__cleanup(reason);
-  dev.keybdSrv && dev.keybdSrv.__cleanup('capturer closed');
-  dev.capture = dev.keybdSrv = null;
-  forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
-    delete rdcWebSocket.devHandleMap[dev.i];
-    !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
-  });
-  dev.rdcWebSocketMap = {};
-  scheduleUpdateLiveUI();
 }
 
 function scheduleUpdateLiveUI() {
@@ -1057,7 +1044,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
   }
   if (q.accessKey !== undefined && q.accessKey !== dev.accessKey && q.accessKey !== dev.accessKey.slice(11)) {
     dev.accessKey = (dev.masterMode = !!q.accessKey) ? (getTimestamp().slice(4, 14) + '_' + q.accessKey) : newAutoAccessKey();
-    endRemoteDesktopServer(dev, 'access removed');
+    dev.capture && dev.capture.__cleanup('access removed');
     dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('access removed');
     scheduleUpdateWholeUI();
   }
@@ -1065,7 +1052,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
     forEachValueIn(dev.consumerMap, function (res) {
       if (q.action === 'stopLiveView' ? res.__tag !== REC_TAG : res.__tag === REC_TAG) endCaptureConsumer(res);
     });
-    !Object.keys(dev.consumerMap).length && endRemoteDesktopServer(dev, 'on demand'); //end capture process immediately if no any consumer exists
+    !Object.keys(dev.consumerMap).length && dev.capture && dev.capture.__cleanup('on demand'); //end capture process immediately if no any consumer exists
   }
   q.adbBridge && (dev.adbBridge = (q.adbBridge === 'true'));
   q.orientation && setDeviceOrientation(dev, q.orientation);
