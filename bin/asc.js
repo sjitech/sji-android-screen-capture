@@ -614,7 +614,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
     runCmd('k ' + keyCodeOrText);
   } else {
     keyCodeOrText.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
-      n && runCmd('K ' + 66/*enter*/);
+      n && runCmd('k ' + 66/*enter*/);
       for (var i = 0; i < ls.length; i += 10) {
         runCmd('K ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
       }
