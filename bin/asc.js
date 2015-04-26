@@ -307,7 +307,7 @@ function createDev(conId/*serial_no or ip:port, maybe same on different host*/, 
     i: devAry.length, conId: conId, sn: conId,
     adbHost: adbHost, connectionStatus: adbHost && connectionStatus, adbConMap: {},
     status: '', touchStatus: '', touch: {}, info: [], info_htm: '',
-    consumerMap: {}, rdcWebSocketMap: {}, adbBridge: true,
+    rdcWebSocketMap: {}, adbBridge: true,
     buf_switchTransport: adbHost_makeBuf(new Buffer('host:transport:' + conId)),
     masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
   };
@@ -695,8 +695,8 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
     if (dev.capture && q._hash !== dev.capture.q._hash && q._priority >= dev.capture.q._priority && !dev.masterMode && !forRecording)
       dev.capture.__cleanup('incompatible capture requested'); //stop incompatible capture process immediately if necessary
 
-    if (!forRecording && req.headers.cookie && (q._lastViewId = req.headers.cookie.match(dev.re_lastViewId_cookie)) && (q._lastViewId = q._lastViewId[1]))
-      forEachValueIn(dev.consumerMap, function (res) {
+    if (dev.capture && !forRecording && req.headers.cookie && (q._lastViewId = req.headers.cookie.match(dev.re_lastViewId_cookie)) && (q._lastViewId = q._lastViewId[1]))
+      forEachValueIn(dev.capture.consumerMap, function (res) {
         (res.q.timestamp === q._lastViewId) && endCaptureConsumer(res);
       });
 
@@ -705,7 +705,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   return true;
 }
 function _startNewCaptureProcess(dev, q) {
-  var capture = dev.capture = {q: q, __cleanup: cleanup}, bufAry = [], foundMark = false;
+  var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[CAP]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
@@ -722,7 +722,7 @@ function _startNewCaptureProcess(dev, q) {
           capture.image = {buf: Buffer.concat(bufAry.push(buf.slice(unsavedStart, pos + 1)) && bufAry), i: capture.image ? capture.image.i + 1 : 1};
           bufAry = [];
           unsavedStart = pos + 1;
-          forEachValueIn(dev.consumerMap, function (res) {
+          forEachValueIn(capture.consumerMap, function (res) {
             res.setHeader/*isHttp*/ && (res.q.type === 'ajpg' ? writeMultipartImage : endCaptureConsumer)(res, capture.image.buf);
           });//end of consumer enum
         }
@@ -734,19 +734,19 @@ function _startNewCaptureProcess(dev, q) {
   turnOnScreen(dev);
   scheduleUpdateLiveUI();
   q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
-    capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(dev.consumerMap, function (res) {
+    capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.oldImageIndex = capture.image.i));
   }, cfg.resentImageForSafariAfter * 1000));
   capture.timer_resentUnchangedImage = setInterval(function () {
-    capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(dev.consumerMap, function (res) { //resend image to keep image tag alive
+    capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(capture.consumerMap, function (res) { //resend image to keep image tag alive
       writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg.resentUnchangedImageInterval * 1000);
 
   capture.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
-  }, {log: true});
+  });
   capture.touchSrv.__sendEvent = function (type, code, value) {
     touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
     touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
@@ -757,7 +757,7 @@ function _startNewCaptureProcess(dev, q) {
 
   capture.keybdSrv = fastAdbOpen('[KeybdSrv ' + dev.id + ']', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
-  }, {log: true});
+  });
   capture.keybdSrv.__on_adb_stream_open = function () {
     capture.keybdSrv.__runCmd('exec 2> /dev/null > /dev/null');
     capture.keybdSrv.__runCmd(cfg.androidWorkDir + '/busybox stty -echo -onlcr; PS1=');
@@ -771,18 +771,20 @@ function _startNewCaptureProcess(dev, q) {
     cfg.logAllProcCmd && log(capture.keybdSrv.__tag, '> ' + JSON.stringify(buf.toString()));
   };
 
+  return capture;
+
   function cleanup(reason) {
     if (cleanup.called) return;
     cleanup.called = true;
-    forEachValueIn(dev.consumerMap, endCaptureConsumer);
-    clearTimeout(dev.capture.delayKillTimer);
-    clearInterval(dev.capture.timer_resentImageForSafari);
-    clearInterval(dev.capture.timer_resentUnchangedImage);
-    dev.capture.adbCon && dev.capture.adbCon.__cleanup(reason);
-    dev.capture.touchSrv && dev.capture.touchSrv.__cleanup('capturer closed');
-    dev.capture.keybdSrv && dev.capture.keybdSrv.__cleanup('capturer closed');
+    forEachValueIn(capture.consumerMap, endCaptureConsumer);
+    clearTimeout(capture.delayKillTimer);
+    clearInterval(capture.timer_resentImageForSafari);
+    clearInterval(capture.timer_resentUnchangedImage);
+    capture.adbCon && capture.adbCon.__cleanup(reason);
+    capture.touchSrv && capture.touchSrv.__cleanup('capturer closed');
+    capture.keybdSrv && capture.keybdSrv.__cleanup('capturer closed');
     dev.capture = null;
-    forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
+    forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) { //todo: reserve
       delete rdcWebSocket.devHandleMap[dev.i];
       !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
     });
@@ -791,10 +793,10 @@ function _startNewCaptureProcess(dev, q) {
   }
 }
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
-  !dev.capture && _startNewCaptureProcess(dev, q);
-  dev.consumerMap[res.__tag] = res;
+  var capture = dev.capture || _startNewCaptureProcess(dev, q);
+  capture.consumerMap[res.__tag] = res;
   scheduleUpdateLiveUI();
-  clearTimeout(dev.capture.delayKillTimer);
+  clearTimeout(capture.delayKillTimer);
   res.q = q;
   res.once('close', function () {
     endCaptureConsumer(res);
@@ -803,12 +805,12 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   res.setHeader && q.type === 'ajpg' && res.setHeader('Set-Cookie', cookie_id_head + 'viewId_' + dev.var + '=' + q.timestamp + '; HttpOnly');
   res.setHeader/*http*/ && q.type === 'ajpg' && (res.__statTimer = setInterval(function () {
     res.output.length >= 30 && !res.__didResend && (res.__framesDropped = 28) && (res.output.length = res.outputEncodings.length = res.output.length - res.__framesDropped);
-    (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + ' ' + dev.capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
+    (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + ' ' + capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
-  q.fastCapture && dev.capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, dev.capture.image.buf);
-  q.type === 'jpg' && dev.capture.image && endCaptureConsumer(res, dev.capture.image.buf);
-  q.type === 'jpg' && dev.capture.image && dev.capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
+  q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
+  q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
+  q.type === 'jpg' && capture.image && capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
 }
 function doRecord(dev, q/*same as capture*/) {
   var filename = querystring.escape(dev.sn) + '~rec_' + q._promise_q._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
@@ -835,45 +837,44 @@ function doRecord(dev, q/*same as capture*/) {
   return 'OK: ' + filename;
 }
 function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/) {
-  var dev = devAry[res.q._dev_i];
-  if (dev.consumerMap[res.__tag] !== res) return;
-  delete dev.consumerMap[res.__tag];
+  var capture = devAry[res.q._dev_i].capture;
+  if (!capture || capture.consumerMap[res.__tag] !== res) return;
+  delete capture.consumerMap[res.__tag];
   scheduleUpdateLiveUI();
   end(res, imageBuf);
   clearTimeout(res.__recordTimer);
   clearInterval(res.__statTimer);
   clearInterval(res.__feedConvertTimer);
-  !Object.keys(dev.consumerMap).length && (dev.capture.delayKillTimer = setTimeout(function () {
-    dev.capture.__cleanup('no more consumer');
+  !Object.keys(capture.consumerMap).length && (capture.delayKillTimer = setTimeout(function () {
+    capture.__cleanup('no more consumer');
   }, cfg.adbCaptureExitDelayTime * 1000));
 }
 
 function scheduleUpdateLiveUI() {
-  if (Object.keys(status.consumerMap).length) {
-    clearTimeout(status.updateLiveUITimer);
-    status.updateLiveUITimer = setTimeout(function () {
-      var sd = {}, json;
-      devAry.forEach(function (dev) {
-        if (dev.connectionStatus || cfg.showDisconnectedDevices) {
-          var liveViewCount = Object.keys(dev.consumerMap).length - (dev.consumerMap[REC_TAG] ? 1 : 0);
-          sd['liveViewCount_' + dev.var] = liveViewCount ? '(' + liveViewCount + ')' : '';
-          sd['recordingCount_' + dev.var] = dev.consumerMap[REC_TAG] ? '(1)' : '';
-          sd['captureParameter_' + dev.var] = dev.capture ? dev.capture.q._disp : '';
-        }
-      });
-      if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
-        status.lastDataJson = json;
-        status.ver = getTimestamp();
+  if (!Object.keys(status.consumerMap).length) return;
+  clearTimeout(status.updateLiveUITimer);
+  status.updateLiveUITimer = setTimeout(function () {
+    var sd = {}, json;
+    devAry.forEach(function (dev) {
+      if (dev.connectionStatus || cfg.showDisconnectedDevices) {
+        var liveViewCount = !dev.capture ? 0 : Object.keys(dev.capture.consumerMap).length - (dev.capture.consumerMap[REC_TAG] ? 1 : 0);
+        sd['liveViewCount_' + dev.var] = liveViewCount ? '(' + liveViewCount + ')' : '';
+        sd['recordingCount_' + dev.var] = dev.capture && dev.capture.consumerMap[REC_TAG] ? '(1)' : '';
+        sd['captureParameter_' + dev.var] = dev.capture ? dev.capture.q._disp : '';
       }
-      json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
-      forEachValueIn(status.consumerMap, function (res) {
-        if (res.__previousVer !== status.ver || res.__previousAppVer !== status.appVer) {
-          end(res, json, 'text/json');
-          delete status.consumerMap[res.__tag];
-        }
-      });
-    }, 0);
-  }
+    });
+    if ((json = JSON.stringify(sd)) !== status.lastDataJson) {
+      status.lastDataJson = json;
+      status.ver = getTimestamp();
+    }
+    json = '{"appVer":"' + status.appVer + '", "ver":"' + status.ver + '","data":' + json + '}';
+    forEachValueIn(status.consumerMap, function (res) {
+      if (res.__previousVer !== status.ver || res.__previousAppVer !== status.appVer) {
+        end(res, json, 'text/json');
+        delete status.consumerMap[res.__tag];
+      }
+    });
+  }, 0);
 }
 function scheduleUpdateWholeUI() {
   clearTimeout(status.updateWholeUITimer);
@@ -1057,11 +1058,11 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
     dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('access removed');
     scheduleUpdateWholeUI();
   }
-  else if (q.action) {
-    forEachValueIn(dev.consumerMap, function (res) {
+  else if (q.action && dev.capture) {
+    forEachValueIn(dev.capture.consumerMap, function (res) {
       if (q.action === 'stopLiveView' ? res.__tag !== REC_TAG : res.__tag === REC_TAG) endCaptureConsumer(res);
     });
-    !Object.keys(dev.consumerMap).length && dev.capture && dev.capture.__cleanup('on demand'); //end capture process immediately if no any consumer exists
+    !Object.keys(dev.capture.consumerMap).length && dev.capture.__cleanup('on demand'); //end capture process immediately if no any consumer exists
   }
   q.adbBridge && (dev.adbBridge = (q.adbBridge === 'true'));
   q.orientation && setDeviceOrientation(dev, q.orientation);
