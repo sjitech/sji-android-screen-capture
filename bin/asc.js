@@ -759,6 +759,8 @@ function _startNewCaptureProcess(dev, q) {
     capture.keybdSrv = null;
   }, {log: true});
   capture.keybdSrv.__on_adb_stream_open = function () {
+    capture.keybdSrv.__runCmd('exec 2> /dev/null > /dev/null');
+    capture.keybdSrv.__runCmd(cfg.androidWorkDir + '/busybox stty -echo -onlcr; PS1=');
     capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
   };
   capture.keybdSrv.__runCmd = function (cmd) {
@@ -766,7 +768,7 @@ function _startNewCaptureProcess(dev, q) {
     capture.keybdSrv.write(cmd + '\n');
   };
   capture.keybdSrv.__on_adb_stream_data = function (buf) {
-    log(capture.keybdSrv.__tag, '> ' + buf.toString('ascii'));
+    cfg.logAllProcCmd && log(capture.keybdSrv.__tag, '> ' + JSON.stringify(buf.toString()));
   };
 
   function cleanup(reason) {
