@@ -173,7 +173,7 @@ function htmlEncode(text) {
 }
 function forEachValueIn(map, callback) {
   for (var k in map) { //noinspection JSUnfilteredForInLoop
-    callback(map[k], k, map);
+    callback(map[k]);
   }
 }
 function pad234(d, len/*2~4*/) {
