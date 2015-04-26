@@ -92,9 +92,12 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
           if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
         if (total_matched_len !== 4 && total_matched_len !== 8) return;
 
-        if (total_matched_len === 4 && isDevCmd) return adbCon.write(adbHost_makeBuf(new Buffer(service)));
-
+        if (total_matched_len === 4 && isDevCmd) {
+          return adbCon.write(adbHost_makeBuf(new Buffer(service)));
+        }
         adbCon.__adb_stream_opened = true;
+        adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
+
         if (!(buf = buf.slice(match_len)).length) return;
       }
       if (isDevCmd) {
@@ -351,7 +354,8 @@ function chkDev(dev, opt) {
       || opt.capturing && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started')
       || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
       || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
-      || opt.touchable && !(dev.capture && dev.capture.touchSrv && dev.capture.touchSrv.__adb_stream_opened) && (chk.err = 'device not ready for touch');
+      || opt.touchable && !(dev.capture && dev.capture.touchSrv && dev.capture.touchSrv.__adb_stream_opened) && (chk.err = 'device not ready for touch')
+      || opt.keybdable && !(dev.capture && dev.capture.keybdSrv && dev.capture.keybdSrv.__adb_stream_opened) && (chk.err = 'device not ready for keyboard');
   return !failed;
 }
 function newAutoAccessKey() {
@@ -446,7 +450,7 @@ function prepareDevice(dev, force/*optional*/) {
     dev.info = parts[0].split(/\r*\n/);
     dev.sysVer = Number((dev.info[2] + '.0.0').split('.').slice(0, 3).join('.').replace(/\.([^.]+)$/, '$1')); //4.1.2 -> 4.12
     dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
-    dev.conId.match(/^.+:\d+$/)/*wifi ip:port*/ && dev.info[4] && (dev.sn = dev.info[4]) && setDevId(dev);
+    /^.+:\d+$//*wifi ip:port*/.test(dev.conId) && dev.info[4] && (dev.sn = dev.info[4]) && setDevId(dev);
 
     chkTouchDev(dev, parts[1]);
 
@@ -531,82 +535,69 @@ function sendTouchEvent(dev, _type, _x, _y) {
       || !chk('x', _x, 0, 1) && chk('y', _y, 0, 1)) {
     return false;
   }
-  var x = (_x * dev.touch.w).toFixed(), y = (_y * dev.touch.h).toFixed(), isStart = _type === 'd', isEnd = _type === 'u' || _type === 'o', isMove = _type === 'm';
-  if (isMove && dev.capture.touchSrv.__last_x === x && dev.capture.touchSrv.__last_y === y) return true; //ignore move event if at same position
-  if (dev.touch.maxTrackId === 65535) { //normal case
+  var touch = dev.touch, touchSrv = dev.capture.touchSrv, x = (_x * touch.w).toFixed(), y = (_y * touch.h).toFixed(), isStart = _type === 'd', isEnd = _type === 'u' || _type === 'o', isMove = _type === 'm';
+  if (isMove && touchSrv.__last_x === x && touchSrv.__last_y === y) return true; //ignore move event if at same position
+  if (touch.maxTrackId === 65535) { //normal case
     if (isStart) { //down
-      touch(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      dev.touch.needBtnTouchEvent && touch(1, 0x014a, 1); //BTN_TOUCH DOWN for sumsung devices
-      touch(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      if (dev.touch.avgPressure) {
-        touch(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
-      } else if (dev.touch.avgFingerSize) {
-        touch(3, 0x32, dev.touch.avgFingerSize); //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
+      touchSrv.__sendEvent(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      touch.needBtnTouchEvent && touchSrv.__sendEvent(1, 0x014a, 1); //BTN_TOUCH DOWN for sumsung devices
+      touchSrv.__sendEvent(3, 0x30, touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      if (touch.avgPressure) {
+        touchSrv.__sendEvent(3, 0x3a, touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      } else if (touch.avgFingerSize) {
+        touchSrv.__sendEvent(3, 0x32, touch.avgFingerSize); //ABS_MT_WIDTH_MAJOR 0x32 /* Major axis of approaching ellipse */
       }
-      touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      touchSrv.__sendEvent(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      touchSrv.__sendEvent(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else if (isMove) { //move
-      x !== dev.capture.touchSrv.__last_x && touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-      y !== dev.capture.touchSrv.__last_y && touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+      x !== touchSrv.__last_x && touchSrv.__sendEvent(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+      y !== touchSrv.__last_y && touchSrv.__sendEvent(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     } else { //up, out
-      touch(3, 0x39, -1); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-      dev.touch.needBtnTouchEvent && touch(1, 0x014a, 0);  //BTN_TOUCH UP for sumsung devices
+      touchSrv.__sendEvent(3, 0x39, -1); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+      touch.needBtnTouchEvent && touchSrv.__sendEvent(1, 0x014a, 0);  //BTN_TOUCH UP for sumsung devices
     }
-    touch(0, 0, 0); //SYN_REPORT
+    touchSrv.__sendEvent(0, 0, 0); //SYN_REPORT
   }
   else { //for some old devices such as galaxy SC-02B (android 2.2, 2.3)
-    touch(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
-    touch(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
-    touch(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
+    touchSrv.__sendEvent(3, 0x39, 0); //ABS_MT_TRACKING_ID 0x39 /* Unique ID of initiated contact */
+    touchSrv.__sendEvent(3, 0x35, x); //ABS_MT_POSITION_X 0x35 /* Center X ellipse position */
+    touchSrv.__sendEvent(3, 0x36, y); //ABS_MT_POSITION_Y 0x36 /* Center Y ellipse position */
     if (isStart || isMove) { //down, move
-      touch(3, 0x30, dev.touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      dev.touch.avgPressure && touch(3, 0x3a, dev.touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      touchSrv.__sendEvent(3, 0x30, touch.avgContactSize); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      touch.avgPressure && touchSrv.__sendEvent(3, 0x3a, touch.avgPressure); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
     } else { //up, out
-      touch(3, 0x30, 0); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
-      dev.touch.avgPressure && touch(3, 0x3a, 0); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
+      touchSrv.__sendEvent(3, 0x30, 0); //ABS_MT_TOUCH_MAJOR 0x30 /* Major axis of touching ellipse */
+      touch.avgPressure && touchSrv.__sendEvent(3, 0x3a, 0); //ABS_MT_PRESSURE 0x3a /* Pressure on contact area */
     }
-    touch(0, 2, 0); //SYN_MT_REPORT   this is very important
-    if (dev.touch.needBtnTouchEvent && (isStart || isEnd)) {
-      touch(1, 0x014a, (isStart ? 1 : 0)); //BTN_TOUCH DOWN for sumsung devices
+    touchSrv.__sendEvent(0, 2, 0); //SYN_MT_REPORT   this is very important
+    if (touch.needBtnTouchEvent && (isStart || isEnd)) {
+      touchSrv.__sendEvent(1, 0x014a, (isStart ? 1 : 0)); //BTN_TOUCH DOWN for sumsung devices
     }
-    touch(0, 0, 0); //SYN_REPORT
+    touchSrv.__sendEvent(0, 0, 0); //SYN_REPORT
   }
   if (isStart || isMove) { //down, move
-    dev.capture.touchSrv.__last_x = x;
-    dev.capture.touchSrv.__last_y = y;
+    touchSrv.__last_x = x;
+    touchSrv.__last_y = y;
   }
   return true;
-
-  function touch(type, code, value) {
-    touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
-    touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
-    touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
-    cfg.logAllProcCmd && log(dev.capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
-    dev.capture.touchSrv.write(touchEventBuf);
-  }
 }
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
-  if (!chkDev(dev, {connected: true, capturing: true})
+  if (!chkDev(dev, {connected: true, capturing: true, keybdable: true})
       || isKeyCode && !keyNameMap[keyCodeOrText] && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMap)) )
       || !isKeyCode && !chk('text', keyCodeOrText)) {
     return false;
   }
   if (isKeyCode) {
-    runCmd('k ' + keyCodeOrText);
+    dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
   } else {
     keyCodeOrText.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
-      n && runCmd('k ' + 66/*enter*/);
+      n && dev.capture.keybdSrv.__runCmd('k ' + 66/*enter*/);
       for (var i = 0; i < ls.length; i += 10) {
-        runCmd('K ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
+        dev.capture.keybdSrv.__runCmd('K ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
       }
     });
   }
   return true;
-
-  function runCmd(cmd) {
-    cfg.logAllProcCmd && log(dev.capture.keybdSrv.__tag + '<', cmd);
-    dev.capture.keybdSrv.stdin.write(cmd + '\n');
-  }
 }
 function setDeviceOrientation(dev, orientation) {
   if (!chkDev(dev, {connected: true, capturing: true})
@@ -756,11 +747,27 @@ function _startNewCaptureProcess(dev, q) {
   capture.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
   }, {log: true});
+  capture.touchSrv.__sendEvent = function (type, code, value) {
+    touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
+    touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
+    touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
+    cfg.logAllProcCmd && log(capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
+    capture.touchSrv.write(touchEventBuf);
+  };
 
-  capture.keybdSrv = spawn('[KeybdSrv ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'shell'], function/*on_close*/() {
+  capture.keybdSrv = fastAdbOpen('[KeybdSrv ' + dev.id + ']', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
-  }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
-  capture.keybdSrv.stdin.write('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh\n');
+  }, {log: true});
+  capture.keybdSrv.__on_adb_stream_open = function () {
+    capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
+  };
+  capture.keybdSrv.__runCmd = function (cmd) {
+    cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '<', cmd);
+    capture.keybdSrv.write(cmd + '\n');
+  };
+  capture.keybdSrv.__on_adb_stream_data = function (buf) {
+    log(capture.keybdSrv.__tag, '> ' + buf.toString('ascii'));
+  };
 
   function cleanup(reason) {
     if (cleanup.called) return;
@@ -1071,7 +1078,7 @@ adminWeb_handlerMap['/getAdbHost'] = function (req, res, q, urlPath, dev) {
   end(res, JSON.stringify(chkDev(dev, {connected: true}) ? {host: dev.adbHost.host, port: dev.adbHost.port, conId: dev.conId} : chk.err), 'text/json');
 };
 adminWeb_handlerMap['/'] = function (req, res, q) {
-  q.viewUrlBase && (q.viewUrlBase = Url.parse((q.viewUrlBase.match(/^https?[:][/][/]/) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase).format());
+  q.viewUrlBase && (q.viewUrlBase = Url.parse((/^https?[:][/][/]/.test(q.viewUrlBase) ? '' : (cfg.streamWeb_protocol || cfg.adminWeb_protocol) + '://' ) + q.viewUrlBase).format());
   var html = htmlCache['/home.html'].replace(/@appVer\b/g, status.appVer).replace(/@adminUrlSuffix\b/g, cfg.adminUrlSuffix && q.adminUrlSuffix || '')
       .replace(/@viewUrlBase\//g, q.viewUrlBase || '').replace(/#viewUrlBase\b/g, htmlEncode(q.viewUrlBase || '')).replaceShowIf('isStreamWebSeparated', cfg.streamWeb_port)
       .replace(/@androidLogPath\b/g, querystring.escape(cfg.androidLogPath)).replace(/@androidWorkDir\b/g, querystring.escape(cfg.androidWorkDir))
@@ -1256,9 +1263,11 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
             if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return backend_cleanup(backend, 'FAIL');
           if (total_matched_len !== 4 && total_matched_len !== 8) return;
 
-          if (total_matched_len === 4) return backend_write(backend, adbHost_makeBuf(serviceBuf));
-
+          if (total_matched_len === 4) {
+            return backend_write(backend, adbHost_makeBuf(serviceBuf));
+          }
           bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
+
           if (!(buf = buf.slice(match_len)).length) return;
         }
         do {
@@ -1361,7 +1370,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
       if (!match) { //treat as open_device request
         cfg.logRdcWebSocketDetail && log(tag, 'open device: ' + JSON.stringify(msg.utf8Data));
         var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname;
-        if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: urlPath.slice(-5) === 'touch'}))) {
+        if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: /\/?touch$/.test(urlPath), keybdable: /\/?(sendKey|sendText)$/.test(urlPath)}))) {
           return ws.send(chk.err);
         }
         ws.devHandleMap[dev.i] = dev;
@@ -1414,7 +1423,7 @@ function reloadResource() {
     (filename = new FilenameInfo(filename)).isValid && createDev(filename.sn);
   });
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
-    return hash.update(filename.match(/^\./) ? '' : fs.readFileSync(cfg.binDir + '/' + filename));
+    return hash.update(/^\./.test(filename) ? '' : fs.readFileSync(cfg.binDir + '/' + filename));
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
 }
 
