@@ -74,7 +74,7 @@ function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) 
 function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
   var isDevCmd = !!devOrHost.adbHost, dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
-  var tag = _tag.replace(']', ' ' + (isDevCmd ? dev.id : (adbHost.host + ':' + adbHost.port))) + '] [ADB]', _log = cfg.logAllProcCmd || opt.log;
+  var tag = _tag + ' {' + (isDevCmd ? dev.id : (adbHost.host + ':' + adbHost.port)) + '} [ADB]', _log = cfg.logAllProcCmd || opt.log;
   _log && log(tag, 'OPEN ' + JSON.stringify(service) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
 
   var adbCon = net.connect(adbHost, function /*on_connected*/() {
@@ -95,6 +95,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
         if (total_matched_len === 4 && isDevCmd) {
           return adbCon.write(adbHost_makeBuf(new Buffer(service)));
         }
+        _log && log(tag, 'adb stream opened');
         adbCon.__adb_stream_opened = true;
         adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
 
@@ -148,7 +149,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
 
   function cleanup(reason, detail) {
     if (cleanup.called) return;
-    (cleanup.called = true) && reason && _log && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
+    (cleanup.called = true) && _log && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && adbCon.end();
     isDevCmd && (delete dev.adbConMap[adbCon.__id]);
     if (reason === 'network error') {
@@ -304,7 +305,7 @@ function createDev(conId/*serial_no or ip:port, maybe same on different host*/, 
   }
   createDev.statusChanged = true;
   dev = devAry[devAry.length] = {
-    i: devAry.length, conId: conId, sn: conId,
+    i: devAry.length, conId: conId, sn: conId/*temp*/,
     adbHost: adbHost, connectionStatus: adbHost && connectionStatus, adbConMap: {},
     status: '', touchStatus: '', touch: {}, info: [], info_htm: '',
     rdcWebSocketMap: {}, adbBridge: true,
@@ -341,8 +342,8 @@ function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
       return _dev.connectionStatus && (dev = _dev);
     });
   }
-  if (opt.chkAccessKey && dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')
-      || !chkDev(dev, opt)) {
+  if (opt && opt.chkAccessKey && dev.accessKey && q.accessKey !== dev.accessKey.slice(11) && (chk.err = 'access denied')
+      || opt && !chkDev(dev, opt)) {
     return null;
   }
   q._dev_i = dev.i;
@@ -398,13 +399,13 @@ function initDeviceTrackers() {
         if ((desc = desc.split('\t')).length !== 2 || desc[0] === '????????????' || !desc[1]) return;
         var dev = devList[devList.length] = createDev(/*conId*/desc[0], /*connectionStatus*/desc[1], adbHost);
         if (createDev.statusChanged) {
-          log('[TrackDevices] ' + dev.id, dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS ? 'connected' : ('status changed to: ' + dev.connectionStatus));
+          log('[TrackDevices] {' + dev.id + '}', dev.connectionStatus/*desc[1]*/ === REALLY_USABLE_STATUS ? 'connected' : ('status changed to: ' + dev.connectionStatus));
           dev.connectionStatus === REALLY_USABLE_STATUS ? prepareDevice(dev) : unprepareDevice(dev, 'device unusable');
         }
       });
       devAry.forEach(function (dev) {
         if (dev.adbHost === adbHost && dev.connectionStatus && devList.indexOf(dev) < 0) {
-          log('[TrackDevices] ' + dev.id, 'disconnected');
+          log('[TrackDevices] {' + dev.id + '}', 'disconnected');
           dev.connectionStatus = ''; //means disconnected
           unprepareDevice(dev, 'device disconnected');
         }
@@ -436,7 +437,7 @@ var cmd_getExtraInfo_Rest_500 = ' { echo ===; ./dlopen.pie ./sc-???; echo ===; .
 
 function prepareDevice(dev, force/*optional*/) {
   if ((dev.status === 'OK' && !force || dev.status === 'preparing')) return;
-  log('[Prepare ' + dev.id + ']', 'BEGIN');
+  log('[PrepareDevice] {' + dev.id + '}', 'BEGIN');
   (dev.status = 'preparing') && scheduleUpdateWholeUI();
   fastAdbExec('[CheckBasicInfo]', dev, cmd_getBaseInfo + (force ? ' rm -r ' + cfg.androidWorkDir + ' 2>/dev/null;' : ''), function/*on_close*/(stderr, stdout) {
     if (stderr) {
@@ -450,14 +451,19 @@ function prepareDevice(dev, force/*optional*/) {
     dev.info = parts[0].split(/\r*\n/);
     dev.sysVer = Number((dev.info[2] + '.0.0').split('.').slice(0, 3).join('.').replace(/\.([^.]+)$/, '$1')); //4.1.2 -> 4.12
     dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
-    /^.+:\d+$//*wifi ip:port*/.test(dev.conId) && dev.info[4] && (dev.sn = dev.info[4]) && setDevId(dev);
+
+    //for wifi adb device, set dev.id = sn or sn~? instead of old ip:port
+    if (/^.+:\d+$//*wifi ip:port*/.test(dev.conId) && dev.info[4]) {
+      (dev.oldId = dev.id) && (dev.sn = dev.info[4]) && setDevId(dev);
+      log('[PrepareDevice] {' + dev.oldId + '}', 'changed to {' + dev.id + '}');
+    }
 
     chkTouchDev(dev, parts[1]);
 
     if (!force && parts[2] === fileVer) {
       return finishPrepare();
     }
-    return spawn('[PushFile ' + dev.id + ']', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'push', cfg.binDir, cfg.androidWorkDir], function/*on_close*/(stderr) {
+    return spawn('[PushFile] {' + dev.id + '}', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'push', cfg.binDir, cfg.androidWorkDir], function/*on_close*/(stderr) {
       if ((stderr = stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '').replace(/\r*\n/g, ''))) {
         return setStatus(stderr);
       }
@@ -466,7 +472,7 @@ function prepareDevice(dev, force/*optional*/) {
   }, {timeout: cfg.adbCheckBasicInfoTimeout * 1000, log: true}); //end of CheckBasicInfo
 
   function setStatus(status) {
-    log('[Prepare ' + dev.id + ']', 'END: ' + status);
+    log('[PrepareDevice] {' + dev.id + '}', 'END: ' + status);
     dev.info && (dev.info_htm = htmlEncode(dev.info[0]/*manufacturer*/ + ' ' + dev.info[1]/*model*/ + ' ' + dev.info[2]/*release*/ + ' ' + ((dev.info[3] === 'armeabi-v7a' || dev.info[3] === 'arm64-v7a') ? '' : dev.info[3])
     + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
     (dev.status = status) && scheduleUpdateWholeUI();
@@ -509,7 +515,7 @@ function prepareDevice(dev, force/*optional*/) {
           dev.touch.w = Math.floor((Number(match['0035'][1]) + 1) / 2) * 2;
           dev.touch.h = Math.floor((Number(match['0036'][1]) + 1) / 2) * 2;
           if (!dev.touch.w || !dev.touch.h) {
-            log('[CheckTouchDev ' + dev.id + ']', 'strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
+            log('[CheckTouchDev] {' + dev.id + '}', 'strange: max_x=' + match['0035'][1] + ' max_y=' + match['0036'][1]);
           } else {
             match['0030'] = devInfo.match(/\D*0030.*value.*min.*max\D*(\d+)/) || {1: 32}; //ABS_MT_TOUCH_MAJOR
             match['0039'] = devInfo.match(/\D*0039.*value.*min.*max\D*(\d+)/) || {1: 1}; //ABS_MT_TRACKING_ID
@@ -525,7 +531,7 @@ function prepareDevice(dev, force/*optional*/) {
       }
       return false;
     }) ? 'OK' : 'touch device not found';
-    log('[CheckTouchDev ' + dev.id + ']', dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
+    log('[CheckTouchDev] {' + dev.id + '}', dev.touchStatus + ' ' + (dev.touchStatus === 'OK' ? JSON.stringify(dev.touch) : ''));
   } //end of chkTouchDev
 } //end of prepareDevice
 
@@ -706,7 +712,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 }
 function _startNewCaptureProcess(dev, q) {
   var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
-  var adbCon = capture.adbCon = fastAdbExec('[CAP]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
+  var adbCon = capture.adbCon = fastAdbExec('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
@@ -744,7 +750,7 @@ function _startNewCaptureProcess(dev, q) {
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg.resentUnchangedImageInterval * 1000);
 
-  capture.touchSrv = fastAdbOpen('[TouchSrv ' + dev.id + ']', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+  capture.touchSrv = fastAdbOpen('[TouchSrv]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
   });
   capture.touchSrv.__sendEvent = function (type, code, value) {
@@ -755,7 +761,7 @@ function _startNewCaptureProcess(dev, q) {
     capture.touchSrv.write(touchEventBuf);
   };
 
-  capture.keybdSrv = fastAdbOpen('[KeybdSrv ' + dev.id + ']', dev, 'shell:', function/*on_close*/() {
+  capture.keybdSrv = fastAdbOpen('[KeybdSrv]', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
   });
   capture.keybdSrv.__on_adb_stream_open = function () {
@@ -784,7 +790,7 @@ function _startNewCaptureProcess(dev, q) {
     capture.touchSrv && capture.touchSrv.__cleanup('capturer closed');
     capture.keybdSrv && capture.keybdSrv.__cleanup('capturer closed');
     dev.capture = null;
-    forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) { //todo: reserve
+    forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
       delete rdcWebSocket.devHandleMap[dev.i];
       !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
     });
@@ -814,12 +820,12 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
 }
 function doRecord(dev, q/*same as capture*/) {
   var filename = querystring.escape(dev.sn) + '~rec_' + q._promise_q._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
-  var childProc = spawn('[REC ' + dev.id + ']', cfg.ffmpeg, [].concat(
+  var childProc = spawn('[Record] {' + dev.id + '}', cfg.ffmpeg, [].concat(
       '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
       '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
   ), function/*on_close*/() {
     dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + dev.subOutputDir + '/' + filename, function (e) {
-      e && log('[REC ' + dev.id + ']', 'failed to create dir link. ' + e);
+      e && log(childProc.__tag, 'failed to create dir link. ' + e);
     });
   }, {stdio: ['pipe'/*stdin*/, 'ignore'/*stdout*/, 'pipe'/*stderr*/]});
   childProc.stdin.on('error', function (e) {
@@ -914,7 +920,8 @@ function web_handler(req, res) {
     return end(res, chk.err);
   }
   res.__log = cfg.logAllHttpReqRes || (handler.option && (handler.option.log || handler.option.logCondition && handler.option.logCondition(req, res, q)));
-  res.__log && log((res.__tag = '[HTTP_' + (++httpSeq) + ']'), 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddresses(req) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + req.headers['user-agent'] + ']' : ''));
+  res.__log && (res.__tag = '[HTTP_' + (++httpSeq) + ']' + (q.device ? (' {' + q.device + '}') : ''));
+  res.__log && log(res.__tag, 'REQ: ' + req.url + (req.headers.range ? ' range:' + req.headers.range : '') + (' [from ' + getHttpSourceAddresses(req) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + req.headers['user-agent'] + ']' : ''));
   res.__log && res.once('close', function () {
     log(res.__tag, 'CLOSED') && (res.__log = false);
   });
@@ -943,8 +950,8 @@ function web_handler(req, res) {
   }
   q.filename = querystring.escape(dev.sn) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
   fs.writeFile(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, dev.capture.image.buf, function (e) {
-    e ? log('[SaveImage ' + dev.id + ']', e) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, function (e) {
-      e && log('[SaveImage ' + dev.id + ']', 'failed to create file link. ' + e);
+    e ? log('[SaveImage] {' + dev.id + '}', e) : (dev.subOutputDir && fs.link(cfg.outputDir + '/' + dev.subOutputDir + '/' + q.filename, cfg.outputDir + '/' + q.filename, function (e) {
+      e && log('[SaveImage] {' + dev.id + '}', 'failed to create file link. ' + e);
     }));
   });
   return end(res, 'OK: ' + q.filename);
@@ -1111,10 +1118,10 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
   q.device && (res.__oldWrite = res.write) && (res.write = function (buf) {
     Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
-      (buf = (s.indexOf(q.device) >= 0 || q.qdevice && s.indexOf(q.qdevice) >= 0)) && res.__oldWrite(s + '\n', 'binary');
-      i === lineAry.length - 1 && !buf && (res.__orphanBuf = new Buffer(s, 'binary'));
+      (q._matched = s.indexOf(q._filter1) >= 0 || q._filter2 && s.indexOf(q._filter2) >= 0) && res.__oldWrite(s + '\n', 'binary');
+      i === lineAry.length - 1 && !q._matched && (res.__orphanBuf = new Buffer(s, 'binary'));
     });
-  }) && (res.__orphanBuf = EMPTY_BUF) && (q.qdevice = querystring.escape(q.device)) === q.device && (q.qdevice = '');
+  }) && (res.__orphanBuf = EMPTY_BUF) && (q._filter1 = '{' + q.device + '}') && (q._filter2 = (getDev(q) && devAry[q._dev_i].oldId ? ('{' + devAry[q._dev_i].oldId + '}') : ''));
   return fs.createReadStream(q._logFilePath, {
     start: q.mode === 'tail' ? Math.max(0, Math.min(q._fileSize - 1, q._fileSize - q.size)) : 0,
     end: q.mode === 'head' ? Math.max(0, Math.min(q._fileSize - 1, q.size - 1)) : (q._fileSize - 1)
@@ -1190,23 +1197,25 @@ function createWebSocketServer() {
   new websocket.server({httpServer: (streamWeb ? [adminWeb, streamWeb] : [adminWeb]), maxReceivedFrameSize: 8 * 1024, maxReceivedMessageSize: 8 * 1024}).on('request', function (wsConReq) {
     var httpReq = wsConReq.httpRequest, httpTag = '[HTTP_' + (++httpSeq) + '] [WebSocket]';
     var parsedUrl = Url.parse(httpReq.url, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname, dev;
-    log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
+    q.device && (httpTag += ' {' + q.device + '}');
     if (urlPath === '/adbBridge') {
+      log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
       if (!(dev = getDev(q, {chkAccessKey: true, connected: true, adbBridge: true}))) {
         log(httpTag, 'Rejected. Reason: ' + chk.err);
         return wsConReq.reject();
       }
-      log(httpTag, 'Accepted as [ADBB ' + dev.id + ']');
+      log(httpTag, 'Accepted as [AdbBridge.WEBSOCK] {' + dev.id + '}');
       dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('new adbBridge is requested');
       dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
-      return handle_adbBridgeWebSocket_connection(dev, '[ADBB ' + dev.id + ']');
+      return handle_adbBridgeWebSocket_connection(dev, '[AdbBridge.WEBSOCK] {' + dev.id + '}');
     }
     else if (urlPath === '/touch' || urlPath === '/sendKey' || urlPath === '/sendText') {
-      if (!(dev = getDev(q, {chkAccessKey: true, connected: true}))) {
-        log(httpTag, 'Rejected. Reason: ' + chk.err);
+      cfg.logRdcWebSocketDetail && log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
+      if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: urlPath == '/touch', keybdable: urlPath === '/sendKey' || urlPath === '/sendText'}))) {
+        cfg.logRdcWebSocketDetail && log(httpTag, 'Rejected. Reason: ' + chk.err);
         return wsConReq.reject();
       }
-      log(httpTag, 'Accepted as [RDC__' + httpSeq + ']');
+      cfg.logRdcWebSocketDetail && log(httpTag, 'Accepted as [RDC__' + httpSeq + ']');
       var rdcWebSocket = wsConReq.accept(null, wsConReq.origin);
       rdcWebSocket.devHandleMap = {};
       rdcWebSocket.devHandleMap[dev.i] = dev;
@@ -1214,7 +1223,7 @@ function createWebSocketServer() {
       return handle_rdcWebSocket_connection(rdcWebSocket, '[RDC__' + httpSeq + ']');
     }
     else {
-      log(httpTag, 'Rejected');
+      cfg.logAllHttpReqRes && log(httpTag, 'Rejected REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
       return wsConReq.reject();
     }
   });
@@ -1255,8 +1264,10 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
       arg1/*as localId*/ = (nextBackendId === 0xffffffff ? (nextBackendId = 1) : ++nextBackendId);
 
       backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
-
-      backend_write(backend, dev.buf_switchTransport);
+      backend.on('connect', function () {
+        cfg.logAdbBridgeDetail && log(backend.__tag, 'connection OK. ' + dev.adbHost.host + ':' + dev.adbHost.port + ' as backend ' + hexUint32(backend.__id));
+        backend_write(backend, dev.buf_switchTransport);
+      });
 
       backend.on('data', function (buf) {
         cfg.logAdbBridgeDetail && log(backend.__tag, 'read  ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
@@ -1313,10 +1324,8 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
   }
 
   function backend_create(backendId, frontendId/*for peer id*/) {
-    var tag = '[ADBH ' + dev.id + ']';
-    var backend = net.connect(dev.adbHost, function () {
-      cfg.logAdbBridgeDetail && log(tag, 'connection OK. ' + dev.adbHost.host + ':' + dev.adbHost.port + ' as backend ' + hexUint32(backendId));
-    });
+    var tag = '[AdbBridge.BACKEND] {' + dev.id + '}';
+    var backend = net.connect(dev.adbHost);
 
     backend.__id = backendId;
     backend.__frontendId = frontendId;
@@ -1348,7 +1357,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
 
   function cleanup(reason, detail) {
     if (cleanup.called) return;
-    (cleanup.called = true) && reason && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
+    (cleanup.called = true) && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && ws.drop();
 
     forEachValueIn(backendMap, function (backend) {
@@ -1367,27 +1376,33 @@ function handle_rdcWebSocket_connection(ws, tag) {
   });
 
   ws.on('message', function (msg) {
-    var devHandle, dev;
+    var devHandle, dev, _tag = tag;
     if (msg.type === 'utf8') {
       var match = msg.utf8Data.match(/^(\d+)([:<])([\s\S]+)$/);
       if (!match) { //treat as open_device request
-        cfg.logRdcWebSocketDetail && log(tag, 'open device: ' + JSON.stringify(msg.utf8Data));
-        var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname;
-        if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: /\/?touch$/.test(urlPath), keybdable: /\/?(sendKey|sendText)$/.test(urlPath)}))) {
+        cfg.logRdcWebSocketDetail && log(_tag, 'open device: ' + JSON.stringify(msg.utf8Data));
+        var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname.replace(/^\/?/, '/') /*prepend slash*/;
+        q.device && (_tag += ' {' + q.device + '}');
+        if (!(urlPath === '/touch' || urlPath === '/sendKey' || urlPath === '/sendText') && (chk.err = 'invalid request')
+            || !(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: urlPath == '/touch', keybdable: urlPath === '/sendKey' || urlPath === '/sendText'}))) {
+          cfg.logRdcWebSocketDetail && log(_tag, chk.err);
           return ws.send(chk.err);
         }
         ws.devHandleMap[dev.i] = dev;
         dev.rdcWebSocketMap[ws.__id] = ws;
 
+        cfg.logRdcWebSocketDetail && log(_tag, 'OK');
         return ws.send(String(dev.i));
       } //end of open_device request
 
       dev = ws.devHandleMap[devHandle = Number(match[1])];
       var isKeyCode = match[2] === ':', keyCodeOrText = match[3];
-      cfg.logRdcWebSocketDetail && log(tag + ' [' + (dev ? dev.id : '?#' + devHandle) + ']', 'input: ' + JSON.stringify(keyCodeOrText) + (isKeyCode ? ('(KeyCode ' + (keyNameMap[keyCodeOrText] || '?') + ')') : ''));
+      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'keybd: ' + JSON.stringify(keyCodeOrText) + (isKeyCode ? ('(KeyCode ' + (keyNameMap[keyCodeOrText] || '?') + ')') : ''));
       if (!sendKeybdEvent(dev, keyCodeOrText, isKeyCode)) {
+        cfg.logRdcWebSocketDetail && log(_tag, chk.err);
         return ws.send(chk.err);
       }
+      cfg.logRdcWebSocketDetail && log(_tag, 'OK');
     }
     else { //binary
       if (msg.binaryData.length !== 13) {
@@ -1395,10 +1410,12 @@ function handle_rdcWebSocket_connection(ws, tag) {
       }
       dev = ws.devHandleMap[devHandle = msg.binaryData.readUInt32BE(0)];
       var type = String.fromCharCode(msg.binaryData.readUInt8(12)), x = msg.binaryData.readFloatBE(4), y = msg.binaryData.readFloatBE(8);
-      cfg.logRdcWebSocketDetail && log(tag + ' [' + (dev ? dev.id : '?#' + devHandle) + ']', 'touch: ' + type + ' ' + x.toFixed(5) + ' ' + y.toFixed(5));
+      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'touch: ' + type + ' ' + x.toFixed(5) + ' ' + y.toFixed(5));
       if (!sendTouchEvent(dev, type, x, y)) {
+        cfg.logRdcWebSocketDetail && log(_tag, chk.err);
         return ws.send(chk.err);
       }
+      cfg.logRdcWebSocketDetail && log(_tag, 'OK');
     }
     return ws.send(''/*OK*/);
   });
@@ -1407,7 +1424,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
 
   function cleanup(reason, detail) {
     if (cleanup.called) return;
-    (cleanup.called = true) && reason && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
+    (cleanup.called = true) && cfg.logRdcWebSocketDetail && log(tag + ' {' + Object.keys(ws.devHandleMap).join('}, {') + '}', 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && ws.drop();
 
     forEachValueIn(ws.devHandleMap, function (dev) {
