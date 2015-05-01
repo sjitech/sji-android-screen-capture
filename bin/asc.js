@@ -11,7 +11,7 @@ process.on('uncaughtException', function (e) {
   process.stderr.write(e + "\n" + e.stack + '\n');
   throw e;
 });
-var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer;
+var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer, uploadContentMap = {/*filename:*/};
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]),
     touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
@@ -173,9 +173,8 @@ function htmlEncode(text) {
   });
 }
 function forEachValueIn(map, callback) {
-  for (var k in map) { //noinspection JSUnfilteredForInLoop
+  for (var k in map) //noinspection JSUnfilteredForInLoop
     callback(map[k]);
-  }
 }
 function pad234(d, len/*2~4*/) {
   return len === 2 ? ((d < 10) ? '0' + d : d.toString()) : len === 3 ? ((d < 10) ? '00' + d : (d < 100) ? '0' + d : d.toString()) : len === 4 ? ((d < 10) ? '000' + d : (d < 100) ? '00' + d : (d < 1000) ? '0' + d : d.toString()) : d;
@@ -197,8 +196,8 @@ function getTimestamp() {
 function stringifyTimestampShort(ts) {
   return ts.slice(4, 6) + '/' + ts.slice(6, 8) + ' ' + ts.slice(8, 10) + ':' + ts.slice(10, 12) + ':' + ts.slice(12, 14);
 }
-function buf2ascii(buf) {
-  return buf.toString('ascii').replace('\0', '\\0');
+function callFunc() {
+  for (var i = 0; i < arguments.length; i++) (typeof(arguments[i]) === 'function') && arguments[i]();
 }
 
 function chk(name, value /*, next parameters: candidateArray | candidateValue | candidateMinValue, candidateMaxValue*/) {
@@ -378,14 +377,19 @@ function AdbHost(adbHostStr) {
   var host = adbHostStr.replace(/:\d+$/, ''), port = adbHostStr.slice(host.length + 1);
   this.host = host || 'localhost';
   this.port = port || 5037;
-  this.autoStartLocalAdbDaemon = !host;
+  (this.autoStartLocalAdbDaemon = !host) && (initAdbHosts.needLocalAdb = true);
 }
 AdbHost.prototype.toString = function () {
   return this.host + ':' + this.port;
 };
-function initDeviceTrackers() {
+function initAdbHosts() {
   cfg.adbHosts.forEach(function (adbHostStr, i) {
-    _initDeviceTracker(cfg.adbHosts[i] = new AdbHost(adbHostStr));
+    cfg.adbHosts[i] = new AdbHost(adbHostStr);
+  });
+}
+function initDeviceTrackers() {
+  cfg.adbHosts.forEach(function (adbHost) {
+    _initDeviceTracker(adbHost);
   });
 
   setInterval(function () {
@@ -447,7 +451,7 @@ function unprepareDevice(dev, conStatus, reason) {
 var cmd_getBaseInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device;'
     + ' echo ===; getevent -pS;'
     + ' echo ===; cd ' + cfg.androidWorkDir + ' && cat version || exit;';
-var cmd_getExtraInfo = ' cd ' + cfg.androidWorkDir + ' && chmod 700 . * && umask 077 && echo $FILE_VER>version || exit; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;'
+var cmd_getExtraInfo = ' cd ' + cfg.androidWorkDir + ' && umask 077 && echo $FILE_VER>version || exit; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.;'
     + ' echo ===; dumpsys window policy | ./busybox grep -E \'mUnrestrictedScreen=|DisplayWidth=\';'
     + ' echo ===; ./busybox grep -Ec \'^processor\' /proc/cpuinfo;'
     + ' echo ===; ./busybox head -n 1 /proc/meminfo;';
@@ -477,12 +481,22 @@ function prepareDevice(dev, force/*optional*/) {
     if (!force && parts[2] === fileVer) {
       return finishPrepare();
     }
-    return spawn('[PushFile] {' + dev.id + '}', cfg.adb, ['-H', dev.adbHost.host, '-P', dev.adbHost.port, '-s', dev.conId, 'push', cfg.binDir, cfg.androidWorkDir], function/*on_close*/(stderr) {
-      if ((stderr = stderr.replace(/push: .*|\d+ files pushed.*|.*KB\/s.*/g, '').replace(/\r*\n/g, ''))) {
-        return setStatus(stderr);
+    var adbCon = fastAdbOpen('[PushFile]', dev, 'sync:', function/*on_close*/(stderr, stdout) {
+      if (stderr || (stdout = stdout.replace(/OKAY/g, '').split(/FAIL/)).length > 1) {
+        return setStatus(stderr || stdout[0].slice(4) || stdout[0]);
       }
       return finishPrepare();
-    }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000}); //end of PushFileToDevice
+    }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
+    adbCon.__on_adb_stream_open = function () {
+      for (var _filename in uploadContentMap) { //noinspection JSUnfilteredForInLoop
+        var name = _filename, sysVer = parseInt(name.slice(name.replace(/-\d+$/, '').length + 1)) / 100, armv = parseInt(name.slice(name.replace(/\.armv\d+$/, '').length + 5));
+        (!sysVer || sysVer <= dev.sysVer) && (!armv || dev.armv === armv)
+        && (dev.sysVer < 5 ? !/\.pie$/.test(name) : !uploadContentMap[name + '.pie']) //noinspection JSUnfilteredForInLoop
+        && log(adbCon.__tag, 'upload file to ' + cfg.androidWorkDir + '/' + name)
+        && adbCon.write(uploadContentMap[name]);
+      }
+      adbCon.write(new Buffer('QUIT\0\0\0\0'));
+    };
   }, {timeout: cfg.adbCheckBasicInfoTimeout * 1000, log: true}); //end of CheckBasicInfo
 
   function setStatus(status) {
@@ -1268,7 +1282,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
 
   function handle_adb_command(cmd, arg0, arg1, payloadBuf) {
     var backend = backendMap[arg1];
-    (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(tag, 'read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
+    (cfg.logAdbBridgeDetail || importantAdbCmdSet[cmd]) && log(tag, 'read  ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (payloadBuf.length ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
 
     if (cmd === 'CNXN') {
       bridge_write('CNXN', /*arg0:A_VERSION*/0x01000000, /*arg1:MAX_PAYLOAD*/0x00001000, new Buffer('device::ro.product.name=' + dev.info[5] + ';ro.product.model=' + dev.info[1] + ';ro.product.device=' + dev.info[6] + ';'));
@@ -1284,7 +1298,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
       });
 
       backend.on('data', function (buf) {
-        cfg.logAdbBridgeDetail && log(backend.__tag, 'read  ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
+        cfg.logAdbBridgeDetail && log(backend.__tag, 'read  ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
         if (total_matched_len < 8) {
           var match_len = Math.min(buf.length, 4 - total_matched_len % 4), i;
           for (i = 0; i < match_len; i++, total_matched_len++)
@@ -1294,7 +1308,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
           if (total_matched_len === 4) {
             return backend_write(backend, adbHost_makeBuf(serviceBuf));
           }
-          bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
+          bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0, EMPTY_BUF);
 
           if (!(buf = buf.slice(match_len)).length) return;
         }
@@ -1309,7 +1323,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
         backend_cleanup(backend, 'invalid backend id');
       } else if (cmd === 'WRTE') {
         backend_write(backend, payloadBuf);
-        bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0);
+        bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0, EMPTY_BUF);
       } else if (cmd === 'CLSE') {
         backend_cleanup(backend, 'CLSE requested');
       }
@@ -1317,8 +1331,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
   } //end of handle_adb_command
 
   function bridge_write(cmd, arg0, arg1, payloadBuf) {
-    payloadBuf = payloadBuf || EMPTY_BUF;
-    cfg.logAdbBridgeDetail && log(tag, 'write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (cfg.logAdbBridgeDetail ? (': "' + buf2ascii(payloadBuf) + '"') : ''));
+    cfg.logAdbBridgeDetail && log(tag, 'write ' + cmd + '(' + hexUint32(arg0) + ', ' + hexUint32(arg1) + ') + ' + hexUint32(payloadBuf.length) + ' bytes' + (cfg.logAdbBridgeDetail ? (': "' + payloadBuf.toString('ascii') + '"') : ''));
     var buf = new Buffer(24 + payloadBuf.length);
     buf.writeUInt8(cmd.charCodeAt(0), 0);
     buf.writeUInt8(cmd.charCodeAt(1), 1);
@@ -1361,11 +1374,11 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
     delete backendMap[backend.__id];
     cfg.logAdbBridgeDetail && log(backend.__tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && backend.end();
-    reason !== 'CLSE requested' && bridge_write('CLSE', /*localId:*/0, /*remoteId:*/backend.__frontendId);
+    reason !== 'CLSE requested' && bridge_write('CLSE', /*localId:*/0, /*remoteId:*/backend.__frontendId, EMPTY_BUF);
   }
 
   function backend_write(backend, buf) {
-    cfg.logAdbBridgeDetail && log(backend.__tag, 'write ' + hexUint32(buf.length) + ' bytes: "' + buf2ascii(buf) + '"');
+    cfg.logAdbBridgeDetail && log(backend.__tag, 'write ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
     backend.write(buf);
   }
 
@@ -1457,14 +1470,22 @@ function reloadResource() {
     (filename = new FilenameInfo(filename)).isValid && createDev(filename.sn);
   });
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
-    return hash.update(/^\./.test(filename) ? '' : fs.readFileSync(cfg.binDir + '/' + filename));
+    if (/^\./.test(filename)) return hash;
+    var bufAry = [], head, body, i, content = fs.readFileSync(cfg.binDir + '/' + filename);
+    bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(cfg.androidWorkDir + '/' + filename + ',' + parseInt('0100700', 8))).length, 4) && head, body);
+    for (i = 0; i < content.length; i += 64 * 1024)
+      bufAry.push((head = new Buffer('DATA____')) && head.writeUInt32LE((body = content.slice(i, i + 64 * 1024)).length, 4) && head, body);
+    bufAry.push((head = new Buffer('DONE____')) && head.writeUInt32LE(Date.now() / 1000, 4, /*noAssert:*/true) && head);
+    uploadContentMap[filename] = Buffer.concat(bufAry);
+    return hash.update(content);
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
 }
 
 reloadResource();
-spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
+initAdbHosts();
+(initAdbHosts.needLocalAdb ? spawn : callFunc)('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
   if (stderr) {
-    process.stderr.write('failed to check "Android Debug Bridge". Please install it from http://developer.android.com/tools/sdk/tools-notes.html and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file\n');
+    process.stderr.write('failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server. So if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file\n');
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr) {
