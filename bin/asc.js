@@ -20,7 +20,10 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
-var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
+var keyCodeMap = {}, keyNameMap = {3: 'KEYCODE_HOME', 4: 'KEYCODE_BACK', 82: 'KEYCODE_MENU', 26: 'KEYCODE_POWER', 187: 'KEYCODE_APP_SWITCH', 66: 'KEYCODE_ENTER', 67: 'KEYCODE_DEL', 112: 'KEYCODE_FORWARD_DEL', 21: 'KEYCODE_DPAD_LEFT', 22: 'KEYCODE_DPAD_RIGHT', 19: 'KEYCODE_DPAD_UP', 20: 'KEYCODE_DPAD_DOWN', 122: 'KEYCODE_MOVE_HOME', 123: 'KEYCODE_MOVE_END'};
+Object.keys(keyNameMap).forEach(function (keyCode) {
+  return keyCodeMap[keyNameMap[keyCode]] = keyCode;
+});
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0});
 true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
@@ -618,18 +621,17 @@ function sendTouchEvent(dev, _type, _x, _y) {
 }
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   if (!chkDev(dev, {connected: true, capturing: true, keybdable: true})
-      || isKeyCode && !keyNameMap[keyCodeOrText] && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMap)) )
+      || isKeyCode && !keyNameMap[keyCodeOrText] && !keyCodeMap[keyCodeOrText] && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMap).concat(Object.keys(keyCodeMap))) )
       || !isKeyCode && !chk('text', keyCodeOrText)) {
     return false;
   }
   if (isKeyCode) {
     dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
   } else {
-    keyCodeOrText.slice(0, 2000).split(/\r*\n/).forEach(function (ls, n) {
+    keyCodeOrText.slice(0, 64 * 1024).split(/\r*\n/).forEach(function (ls, n) {
       n && dev.capture.keybdSrv.__runCmd('k ' + 66/*enter*/);
-      for (var i = 0; i < ls.length; i += 10) {
-        dev.capture.keybdSrv.__runCmd('K ' + ls.slice(i, i + 10).replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
-      }
+      for (var i = 0; i < ls.length; i += 32)
+        dev.capture.keybdSrv.__runCmd('K ' + ls.slice(i, i + 32)); //.replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
     });
   }
   return true;
@@ -795,8 +797,10 @@ function _startRemoteDesktopServer(dev, q) {
   });
   capture.keybdSrv.__on_adb_stream_open = function () {
     capture.keybdSrv.__runCmd('exec 2> /dev/null > /dev/null');
-    capture.keybdSrv.__runCmd(cfg.androidWorkDir + '/busybox stty -echo -onlcr; PS1=');
-    capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
+    capture.keybdSrv.__runCmd('cd ' + cfg.androidWorkDir);
+    capture.keybdSrv.__runCmd('./busybox stty -echo -onlcr; PS1=');
+    //capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
+    capture.keybdSrv.__runCmd('mkdir ./dalvik-cache; export ANDROID_DATA=.; export CLASSPATH=./keybdserver.jar:/system/framework/input.jar; exec /system/bin/app_process /system/bin keybdserver.KeybdServer');
   };
   capture.keybdSrv.__runCmd = function (cmd) {
     cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '<', cmd);
@@ -1425,7 +1429,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
 
       dev = ws.devHandleMap[devHandle = Number(match[1])];
       var isKeyCode = match[2] === ':', keyCodeOrText = match[3];
-      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'keybd: ' + JSON.stringify(keyCodeOrText) + (isKeyCode ? ('(KeyCode ' + (keyNameMap[keyCodeOrText] || '?') + ')') : ''));
+      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'keybd: ' + JSON.stringify(keyCodeOrText) + (isKeyCode && keyNameMap[keyCodeOrText] ? ('(' + keyNameMap[keyCodeOrText] + ')') : ''));
       if (!sendKeybdEvent(dev, keyCodeOrText, isKeyCode)) {
         cfg.logRdcWebSocketDetail && log(_tag, chk.err);
         return ws.send(chk.err);

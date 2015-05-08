@@ -189,6 +189,8 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
 
     }; //end of AscUtil.setTouchHandler
 
+    var keyCodeMap = {0xd: 66/*enter*/, 0x8: 67 /*del*/, 0x2e: 112 /*forward_del*/, 0x25: 21/*left*/, 0x27: 22/*right*/, 0x26: 19/*up*/, 0x28: 20/*down*/, 0x24: 122/*home*/, 0x23: 123/*end*/};
+
     function init_keyboard_handler() {
       if (init_keyboard_handler.called) return;
       init_keyboard_handler.called = true;
@@ -197,7 +199,7 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
       $(document.body).unbind('keydown.live_input keypress.live_input paste.live_input')
           .on('keydown.live_input', function (e) {
             if (!focusedLiveImage) return;
-            var c = e.which === 0xd ? 66/*enter*/ : e.which === 0x8 ? 67 /*del*/ : e.which === 0x2e ? 112 /*forward_del*/ : 0;
+            var c = keyCodeMap[e.which];
             if (!c) return;
             keyQueue.push(c) === 1 && sendKey();
             e.preventDefault();
