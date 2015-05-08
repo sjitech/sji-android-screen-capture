@@ -22,14 +22,14 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
 var keyNameMap = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APPS', 66: 'ENTER', 67: 'DELETE', 112: 'FORWARD_DEL'};
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0});
 true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
 
 function dummyFunc() {
 }
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
-  log(tag, 'RUN ' + JSON.stringify(_path) + ' ' + JSON.stringify(args) + (opt.timeout ? ' timeout:' + opt.timeout : ''), false);
+  log(tag, 'SPAWN ' + JSON.stringify(_path) + ' ' + JSON.stringify(args) + (opt.timeout ? ' timeout:' + opt.timeout : ''), false);
 
   var childProc = child_process.spawn(_path, args, opt);
   childProc.pid && (procMap[childProc.pid] = childProc);
@@ -68,8 +68,8 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
     on_close(reason !== 'CLOSED' && reason || signal || (stderr = Buffer.concat(stderr).toString()), (stdout = Buffer.concat(stdout).toString()), code, signal);
   }
 }
-function fastAdbExec(_tag, devOrHost, cmd, _on_close/*(stderr, stdout)*/, _opt) {
-  return fastAdbOpen(_tag, devOrHost, (devOrHost.adbHost ? 'shell:' : 'host:') + cmd, _on_close, _opt);
+function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
+  return fastAdbOpen(_tag, dev, 'shell:' + cmd, _on_close, _opt);
 }
 function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -78,7 +78,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
   _log && log(tag, 'OPEN ' + JSON.stringify(service) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
 
   var adbCon = net.connect(adbHost, function /*on_connected*/() {
-    (adbCon.__everConnected = true) && _log && log(tag, 'connection OK');
+    (adbCon.__everConnected = true) && _log && log(tag, '---- connection OK');
     var total_matched_len = 0, wanted_payload_len = -1, tmpBuf = EMPTY_BUF, tmpBufAry = [];
 
     isDevCmd ? adbCon.write(dev.buf_switchTransport) : adbCon.write(adbHost_makeBuf(new Buffer(service)));
@@ -95,7 +95,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
         if (total_matched_len === 4 && isDevCmd) {
           return adbCon.write(adbHost_makeBuf(new Buffer(service)));
         }
-        _log && log(tag, 'adb stream opened');
+        _log && log(tag, '---- adb stream opened');
         adbCon.__adb_stream_opened = true;
         adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
 
@@ -153,9 +153,9 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
     reason !== 'CLOSED' && adbCon.end();
     isDevCmd && (delete dev.adbConMap[adbCon.__id]);
     if (reason === 'network error') {
-      !adbCon.__everConnected && isDevCmd && adbHost.autoStartLocalAdbDaemon && setTimeout(function () {
+      !adbCon.__everConnected && adbHost.autoStartLocalAdbServer && setTimeout(function () {
         spawn('[StartAdbServer]', cfg.adb, ['-P', adbHost.port, 'start-server'], {timeout: 10 * 1000});
-      }, 4 * 1000);
+      }, cfg.adbAutoStartServerInterval * 1000);
     }
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString()) && _log && log(tag + '>', stdout);
@@ -377,10 +377,11 @@ function AdbHost(adbHostStr) {
   var host = adbHostStr.replace(/:\d+$/, ''), port = adbHostStr.slice(host.length + 1);
   this.host = host || 'localhost';
   this.port = port || 5037;
-  (this.autoStartLocalAdbDaemon = !host) && (initAdbHosts.needLocalAdb = true);
+  this.str = this.host + ':' + this.port;
+  (this.autoStartLocalAdbServer = !host) && (initAdbHosts.needLocalAdb = true);
 }
 AdbHost.prototype.toString = function () {
-  return this.host + ':' + this.port;
+  return this.str;
 };
 function initAdbHosts() {
   cfg.adbHosts.forEach(function (adbHostStr, i) {
@@ -405,7 +406,7 @@ function initDeviceTrackers() {
   }, cfg.adbRetryPrepareDeviceInterval * 1000);
 
   function _initDeviceTracker(adbHost) {
-    var adbCon = fastAdbExec('[TrackDevices]', adbHost, 'track-devices', function/*on_close*/() {
+    var adbCon = fastAdbOpen('[TrackDevices]', adbHost, 'host:track-devices', function/*on_close*/() {
       adbCon.__on_adb_stream_data(EMPTY_BUF);
       setTimeout(function () {
         _initDeviceTracker(adbHost);
@@ -418,13 +419,13 @@ function initDeviceTrackers() {
         if (!conId || !conStatus || conId === '????????????') return;
         var dev = devList[devList.length] = createDev(isTcpConId(conId) ? '' : conId, adbHost, conId);
         if (dev.conStatus !== conStatus) {
-          (dev.conStatus = conStatus) && log('[TrackDevices] {' + dev.id + '}', isDevConnectedReally(dev) ? 'connected' : ('status changed to: ' + conStatus));
+          (dev.conStatus = conStatus) && log('[TrackDevices] {' + dev.id + '}', isDevConnectedReally(dev) ? 'CONNECTED' : ('STATUS CHANGED: ' + conStatus));
           isDevConnectedReally(dev) ? prepareDevice(dev) : unprepareDevice(dev, conStatus, 'device unusable');
         }
       });
       devAry.forEach(function (dev) {
         if (dev.adbHost === adbHost && dev.conStatus && devList.indexOf(dev) < 0) {
-          log('[TrackDevices] {' + dev.id + '}', 'disconnected');
+          log('[TrackDevices] {' + dev.id + '}', 'DISCONNECTED');
           unprepareDevice(dev, '', 'device disconnected');
         }
       });
@@ -738,7 +739,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   }
   return true;
 }
-function _startNewCaptureProcess(dev, q) {
+function _startRemoteDesktopServer(dev, q) {
   var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
@@ -802,7 +803,7 @@ function _startNewCaptureProcess(dev, q) {
     capture.keybdSrv.write(cmd + '\n');
   };
   capture.keybdSrv.__on_adb_stream_data = function (buf) {
-    cfg.logAllProcCmd && log(capture.keybdSrv.__tag, '> ' + JSON.stringify(buf.toString()));
+    cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '>', JSON.stringify(buf.toString()));
   };
 
   return capture;
@@ -827,7 +828,7 @@ function _startNewCaptureProcess(dev, q) {
   }
 }
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
-  var capture = dev.capture || _startNewCaptureProcess(dev, q);
+  var capture = dev.capture || _startRemoteDesktopServer(dev, q);
   capture.consumerMap[res.__tag] = res;
   scheduleUpdateLiveUI();
   clearTimeout(capture.delayKillTimer);

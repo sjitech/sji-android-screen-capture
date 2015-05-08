@@ -55,6 +55,7 @@
   "adbGetDeviceListTimeout": 60,
   "adbEchoTimeout": 10,
   "adbRetryDeviceTrackerInterval": 5,
+  "adbAutoStartServerInterval": 5,
   "adbKeepDeviceAliveInterval": 240, //exec [adb shell echo alive] repeatedly
   "adbCheckBasicInfoTimeout": 300,
   "adbPushFileToDeviceTimeout": 600,
