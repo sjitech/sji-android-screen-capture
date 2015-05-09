@@ -781,7 +781,7 @@ function _startRemoteDesktopServer(dev, q) {
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg.resentUnchangedImageInterval * 1000);
 
-  capture.touchSrv = fastAdbOpen('[TouchSrv]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+  capture.touchSrv = fastAdbOpen('[TouchServer]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
   });
   capture.touchSrv.__sendEvent = function (type, code, value) {
@@ -792,7 +792,7 @@ function _startRemoteDesktopServer(dev, q) {
     capture.touchSrv.write(touchEventBuf);
   };
 
-  capture.keybdSrv = fastAdbOpen('[KeybdSrv]', dev, 'shell:', function/*on_close*/() {
+  capture.keybdSrv = fastAdbOpen('[KeybdServer]', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
   });
   capture.keybdSrv.__on_adb_stream_open = function () {
