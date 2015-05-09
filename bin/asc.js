@@ -1490,16 +1490,16 @@ reloadResource();
 initAdbHosts();
 (initAdbHosts.needLocalAdb ? spawn : callFunc)('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
   if (stderr) {
-    process.stderr.write('failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server. So if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file\n');
+    process.stderr.write('failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
     return process.exit(1);
   }
   return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr) {
-    stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file\n');
+    stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
     try {
       websocket = require('websocket');
     } catch (e) {
     }
-    !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser, fast touch/keyboard).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node"\n');
+    !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser, fast touch/keyboard).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node".\n');
     adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, web_handler) : require('http').createServer(web_handler);
     adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
       if (cfg.streamWeb_port) {
