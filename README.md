@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 <b>No kidding!</b> 
-New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player.  <br>We have not yet used hardware assisted video encoder so still can not transmit fullscreen size in 30fps, but smaller is faster(Acording to size, you can check youtube link below).  <br><br>But sorry...this project have been kept private. We will open the source later, i am not sure when.  <br><br><br>
+New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player.  <br>We have not yet used hardware assisted video encoder so still can not transmit fullscreen size in 30fps, but smaller is faster(Acording to size, you can check youtube link below).  <br><br><br><b>But sorry...this project have been kept private. We will open the source later, i am not sure when.  </b><br><br><br>
 <b>Only if your company really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br><br>
 
 <b>New: I can provide a experience site for you to view and touch my android device remotely</b><br><br>
@@ -25,6 +25,7 @@ New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers
 New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
 <b>New 2014/10/27: Successfully capture 30 screen per second in android 4.2-4.4, any size, clearly and almost 0% CPU usage!, but ffmpeg in android is too slow. I will try to optimize it or use native Media Encoder which is hardware assisted.</b><br>
 <b>New 2015/03/09: now can map device to browser user's PC, let browser user use adb/ADT/Eclipse/AndroidStudio to develop app to the mapped virtual device.  All this are done via Chrome browser (WebSocket + Chrome App)</b><br>
+<b>New 2015/05/09: Very fast touch expeirence from PC's browser. And keyboard input from PC's browser is also improved.</b><br>
 <br>
 ==========================
 ==========================
@@ -42,10 +43,6 @@ Live Viewer<br>
 <img src="doc/liveViewer.png" /><br>
 Recorded Video Viewer<br>
 <img src="doc/videoViewer.png" /><br>
-Saved Image Viewer<br>
-<img src="doc/imageViewer.png" /><br>
-AdminTool<br>
-<img src="doc/AdminTool.png" /><br>
 
 [How to use]
 
@@ -81,3 +78,16 @@ Chrome,Firefox,Safari are well supported.
     bin/android/busybox is downloaded from <a href="http://www.busybox.net/downloads/binaries/latest/busybox-armv5l">busybox binary downloads</a>.
     <br>
     Currently this product need PC, but can be modified to run in rooted android device directly, if you are interested please contact me.
+
+
+===================
+More Note:
+
+Actually speaking, we did can get screenshot from device at high speed(30~60fps), but encoding jpeg in android and transfer in internet will cost time, so overall speed is down depends on final image size you specified and device spec. In our experience, 0.1s delay for 720x1080, about15fps, in LAN, or normal internet.
+
+If you plan to use this product in slow internet environment, you maybe be disappointed. But you can customize this product, such as use OMX encoder in android, send H264 stream to PC's VLC  player instead of browser, that has been approved be fast.
+
+
+
+
+
