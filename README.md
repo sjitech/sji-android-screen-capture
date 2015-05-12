@@ -83,7 +83,7 @@ Chrome,Firefox,Safari are well supported.
 ===================
 More Note:
 
-Actually speaking, we did can get screenshot from device at high speed(30~60fps), but encoding jpeg in android and transfer in internet will cost time, so overall speed is down depends on final image size you specified and device spec. In our experience, 0.1s delay for 720x1080, about15fps, in LAN, or normal internet.
+Actually speaking, for android 4.2+, we did can get screenshot from device at high speed(30~60fps), but encoding jpeg in android and transfer in internet will cost time, so overall speed is down depends on final image size you specified and device spec. In our experience, 0.1s delay for 720x1080, about15fps, in LAN, or normal internet.
 
 If you plan to use this product in slow internet environment, you maybe be disappointed. But you can customize this product, such as use OMX encoder in android, send H264 stream to PC's VLC  player instead of browser, that has been approved be fast.
 
