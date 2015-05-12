@@ -1,4 +1,4 @@
-sji-android-screen-capture
+sji-android-screen-capture (to be removed)
 ==========================
 
 <b>No kidding!</b> 
