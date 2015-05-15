@@ -1,4 +1,4 @@
-package jp.sji.sumatium.tool.screenorientation;
+package asc.tool.screenorientation;
 
 import java.util.HashMap;
 

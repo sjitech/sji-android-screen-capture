@@ -642,7 +642,7 @@ function setDeviceOrientation(dev, orientation) {
     return false;
   }
   dev.adbCon_setDeviceOrientation && dev.adbCon_setDeviceOrientation.__cleanup('new request comes');
-  return (dev.adbCon_setDeviceOrientation = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/jp.sji.sumatium.tool.screenorientation >/dev/null 2>&1 || (pm install ./ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n jp.sji.sumatium.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function/*on_close*/() {
+  return (dev.adbCon_setDeviceOrientation = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/asc.tool.screenorientation >/dev/null 2>&1 || (rm -f /data/local/tmp/ScreenOrientation.apk 2>/dev/null; ln ./ScreenOrientation.apk /data/local/tmp/ScreenOrientation.apk && pm install /data/local/tmp/ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n asc.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function/*on_close*/() {
     dev.adbCon_setDeviceOrientation = null;
   }, {timeout: cfg.adbSetOrientationTimeout * 1000}));
 }
