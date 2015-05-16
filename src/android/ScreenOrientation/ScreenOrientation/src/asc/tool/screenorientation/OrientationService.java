@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.PixelFormat;
+import android.os.Handler;
 import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 import android.view.View;
@@ -39,7 +40,7 @@ public class OrientationService extends Service {
 			if (!isViewAdded) {
 				wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
 				view = new View(this);
-				lp = new LayoutParams(0, 0, LayoutParams.TYPE_SYSTEM_ALERT, LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSPARENT);
+				lp = new LayoutParams(0, 0, LayoutParams.TYPE_SYSTEM_ERROR, LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSPARENT);
 				lp.screenOrientation = want;
 				wm.addView(view, lp);
 				isViewAdded = true;
@@ -50,6 +51,14 @@ public class OrientationService extends Service {
 				lp.screenOrientation = want;
 				wm.updateViewLayout(view, lp);
 			}
+			new Handler().postDelayed(new Runnable() {
+
+				@Override
+				public void run() {
+					stopForeground(true);
+					stopSelf();
+				}
+			}, 2000);
 		} else {
 			stopForeground(true);
 			stopSelf();
