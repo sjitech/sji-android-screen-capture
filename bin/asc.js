@@ -25,7 +25,7 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
   return keyCodeMap[keyNameMap[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0, adbInstallOrientationApp: 0});
 true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbSetOrientationTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
 
 function dummyFunc() {
@@ -89,13 +89,13 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
     adbCon.on('data', function (buf) {
       if (cleanup.called) return;
       if (stderr.length) return stderr.push(buf);
-      if (total_matched_len < (isDevCmd ? 8 : 4)) {
+      if (total_matched_len < (isDevCmd ? 8/*len of OKAYOKAY*/ : 4/*len of OKAY*/)) {
         var match_len = Math.min(buf.length, 4 - total_matched_len % 4), i;
         for (i = 0; i < match_len; i++, total_matched_len++)
           if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
         if (total_matched_len !== 4 && total_matched_len !== 8) return;
 
-        if (total_matched_len === 4 && isDevCmd) {
+        if (total_matched_len === 4/*len of OKAY*/ && isDevCmd) {
           return adbCon.write(adbHost_makeBuf(new Buffer(service)));
         }
         _log && log(tag, '---- adb stream opened');
@@ -521,7 +521,9 @@ function prepareDevice(dev, force/*optional*/) {
       } else if (!getMoreInfo(dev, parts)) {
         return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
       }
-      setDeviceOrientation(dev, 'free');
+      fastAdbExec('[InstallOrientationApp]', dev, 'rm -f /data/local/tmp/ScreenOrientation.apk 2>/dev/null; ln ' + cfg.androidWorkDir + '/ScreenOrientation.apk /data/local/tmp/ScreenOrientation.apk && pm install -r /data/local/tmp/ScreenOrientation.apk', function/*on_close*/(stderr, stdout) {
+        !/\nSuccess/.test(stdout) && log('failed to install ScreenOrientation.apk');
+      }, {timeout: cfg.adbInstallOrientationApp * 1000, log: true});
       return setStatus('OK');
     }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
   } //end of finishPrepare
@@ -642,7 +644,7 @@ function setDeviceOrientation(dev, orientation) {
     return false;
   }
   dev.adbCon_setDeviceOrientation && dev.adbCon_setDeviceOrientation.__cleanup('new request comes');
-  return (dev.adbCon_setDeviceOrientation = fastAdbExec('[SetOrientation]', dev, 'cd ' + cfg.androidWorkDir + '; ls -d /data/data/asc.tool.screenorientation >/dev/null 2>&1 || (rm -f /data/local/tmp/ScreenOrientation.apk 2>/dev/null; ln ./ScreenOrientation.apk /data/local/tmp/ScreenOrientation.apk && pm install /data/local/tmp/ScreenOrientation.apk 2>&1 | ./busybox grep -Eo \'^Success$|INSTALL_FAILED_ALREADY_EXISTS\') && am startservice -n asc.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function/*on_close*/() {
+  return (dev.adbCon_setDeviceOrientation = fastAdbExec('[SetOrientation]', dev, 'am startservice -n asc.tool.screenorientation/.OrientationService -a ' + orientation + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function/*on_close*/() {
     dev.adbCon_setDeviceOrientation = null;
   }, {timeout: cfg.adbSetOrientationTimeout * 1000}));
 }
@@ -1304,13 +1306,13 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
 
       backend.on('data', function (buf) {
         cfg.logAdbBridgeDetail && log(backend.__tag, 'read  ' + hexUint32(buf.length) + ' bytes: "' + buf.toString('ascii') + '"');
-        if (total_matched_len < 8) {
+        if (total_matched_len < 8/*len of OKAYOKAY*/) {
           var match_len = Math.min(buf.length, 4 - total_matched_len % 4), i;
           for (i = 0; i < match_len; i++, total_matched_len++)
             if (buf[i] !== 'OKAY'.charCodeAt(total_matched_len % 4)) return backend_cleanup(backend, 'FAIL');
           if (total_matched_len !== 4 && total_matched_len !== 8) return;
 
-          if (total_matched_len === 4) {
+          if (total_matched_len === 4/*len of OKAY*/) {
             return backend_write(backend, adbHost_makeBuf(serviceBuf));
           }
           bridge_write('OKAY', /*localId:*/arg1, /*remoteId:*/arg0, EMPTY_BUF);
