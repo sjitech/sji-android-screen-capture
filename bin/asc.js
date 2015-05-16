@@ -1477,7 +1477,7 @@ function reloadResource() {
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
     if (/^\./.test(filename)) return hash;
     var bufAry = [], head, body, i, content = fs.readFileSync(cfg.binDir + '/' + filename);
-    bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(cfg.androidWorkDir + '/' + filename + ',' + parseInt('0100700', 8))).length, 4) && head, body);
+    bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(cfg.androidWorkDir + '/' + filename + ',' + parseInt('0100700'/*file attribute*/, 8))).length, 4) && head, body);
     for (i = 0; i < content.length; i += 64 * 1024)
       bufAry.push((head = new Buffer('DATA____')) && head.writeUInt32LE((body = content.slice(i, i + 64 * 1024)).length, 4) && head, body);
     bufAry.push((head = new Buffer('DONE____')) && head.writeUInt32LE(Date.now() / 1000, 4, /*noAssert:*/true) && head);
