@@ -65,13 +65,13 @@
   "adbTouchTimeout": 3000,
   "adbSendKeyTimeout": 10,
   "adbTurnScreenOnTimeout": 30,
-  "adbSetOrientationTimeout": 20,
-  "adbInstallOrientationApp": 40,
+  "adbInstallOrientServiceTimeout": 300,
+  "adbStartOrientServiceTimeout": 30,
   "adbCmdTimeout": 30,
+  "defaultMaxAdminCmdOutputLength": 65536,
   "adbScanPerHostDelay": 2,
   "ajaxAllowOrigin": "*",
   "defaultMaxRecentImageFiles": 50,
-  "defaultMaxAdminCmdOutputLength": 65536,
 
   "__end": 0
 }
