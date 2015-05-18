@@ -485,7 +485,7 @@ var cmd_getBasicInfo = ' getprop ro.product.manufacturer; getprop ro.product.mod
 var cmd_getVer = ' cat ' + cfg.androidWorkDir + '/version';
 var cmd_clearFiles = ' rm -r ' + cfg.androidWorkDir + ' 2> /dev/null; umask 007 && mkdir ' + cfg.androidWorkDir + ';';
 var cmd_cdWorkDir = ' cd ' + cfg.androidWorkDir + ' || exit;';
-var cmd_updateVerFile = ' echo $FILE_VER > version || exit;';
+var cmd_updateVerFile = ' chmod 770 * && echo $FILE_VER > version || exit;';
 var cmd_getExtraInfo = ''
     + ' echo ===; dumpsys window policy | ./busybox grep -E \'mUnrestrictedScreen=|DisplayWidth=\';'
     + ' echo ===; ./busybox grep -Ec \'^processor\' /proc/cpuinfo;'
