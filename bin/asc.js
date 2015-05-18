@@ -11,7 +11,7 @@ process.on('uncaughtException', function (e) {
   process.stderr.write(e + "\n" + e.stack + '\n');
   throw e;
 });
-var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer, uploadContentMap = {/*filename:*/};
+var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer, pushContentMap = {/*filename:*/};
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
 var REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]),
     touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
@@ -69,7 +69,10 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
     reason !== 'CLOSED' && childProc.kill('SIGKILL');
     delete procMap[childProc.pid];
     clearTimeout(timer);
-    on_close(reason !== 'CLOSED' && reason || signal || (stderr = Buffer.concat(stderr).toString()), (stdout = Buffer.concat(stdout).toString()), code, signal);
+    stderr = Buffer.concat(stderr).toString('binary');
+    stdout = Buffer.concat(stdout).toString('binary');
+    stderr = reason !== 'CLOSED' && reason || signal || stderr;
+    on_close(stderr, stdout, code, signal);
   }
 }
 
@@ -164,8 +167,8 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
       }, cfg.adbAutoStartServerInterval * 1000);
     }
     clearTimeout(timer);
-    (stdout = Buffer.concat(stdout).toString()) && _log && log(tag + '>', stdout);
-    (stderr = Buffer.concat(stderr).toString()) && _log && log(tag + '!', stderr.slice(8) || stderr);
+    (stdout = Buffer.concat(stdout).toString('binary')) && _log && log(tag + '>', stdout);
+    (stderr = Buffer.concat(stderr).toString('binary')) && _log && log(tag + '!', stderr.slice(8) || stderr);
     (stdout || stderr) && _log && log(tag, '---- end of stdout/stderr');
     on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + (stderr.slice(8) || stderr)), stdout);
   }
@@ -478,8 +481,9 @@ function unprepareDevice(dev, conStatus, reason) {
 
 var cmd_getBasicInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device;'
     + ' echo ===; getevent -pS;'
-    + ' echo ===; cat ' + cfg.androidWorkDir + '/version';
-var cmd_clearFiles = ' rm -r ' + cfg.androidWorkDir + ' 2>/dev/null;';
+    + ' echo ===;';
+var cmd_getVer = ' cat ' + cfg.androidWorkDir + '/version';
+var cmd_clearFiles = ' rm -r ' + cfg.androidWorkDir + ' 2> /dev/null; umask 007 && mkdir ' + cfg.androidWorkDir + ';';
 var cmd_cdWorkDir = ' cd ' + cfg.androidWorkDir + ' || exit;';
 var cmd_updateVerFile = ' echo $FILE_VER > version || exit;';
 var cmd_getExtraInfo = ''
@@ -489,13 +493,15 @@ var cmd_getExtraInfo = ''
     + ' echo ===; LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./$DLOPEN ./sc-??? ./fsc-???;'
     + ' echo ===; ls -d /data/data/asc.tool.screenorientation;';
 var cmd_uninstallOrientApp = ' pm uninstall asc.tool.screenorientation >/dev/null 2>/dev/null;';
-var cmd_installOrientApp = ' (cd /data/local/tmp; rm ScreenOrientation.apk 2>/dev/null; ln ' + cfg.androidWorkDir + '/ScreenOrientation.apk ScreenOrientation.apk && pm install ScreenOrientation.apk);';
+var cmd_installOrientApp = ' pm install ' + cfg.androidWorkDir + '-ScreenOrientation.apk;';
+var cmd_deleteOrientAppFile = ' rm ' + cfg.androidWorkDir + '-ScreenOrientation.apk;';
 
 function prepareDevice(dev, force/*optional*/) {
   if (dev.status === 'OK' && !force || dev.status === 'preparing') return;
   log('[PrepareDevice] {' + dev.id + '}', 'BEGIN');
   (dev.status = 'preparing') && scheduleUpdateWholeUI();
-  fastAdbExec('[CheckBasicInfo]', dev, cmd_getBasicInfo + (force ? cmd_clearFiles : ''), function/*on_close*/(stderr, stdout) {
+  dev.postPrepareProc && dev.postPrepareProc.__cleanup('restart');
+  fastAdbExec('[CheckBasicInfo]', dev, cmd_getBasicInfo + (force ? cmd_clearFiles : cmd_getVer), function/*on_close*/(stderr, stdout) {
     if (stderr) {
       return setStatus(stderr);
     }
@@ -515,18 +521,18 @@ function prepareDevice(dev, force/*optional*/) {
       return finishPrepare(/*fileChanged:*/false);
     }
     var adbCon = fastAdbOpen('[PushFile]', dev, 'sync:', function/*on_close*/(stderr, stdout) {
-      if (stderr || (stdout = stdout.replace(/OKAY/g, '').split(/FAIL/)).length > 1) {
-        return setStatus(stderr || stdout[0].slice(4) || stdout[0]);
+      if (stderr || (stdout = stdout.replace(/OKAY\0*/g, '').split(/FAIL..../)).length > 1) {
+        return setStatus(stderr || ('failed to push file. reason: ' + (stdout[1] || 'unknown')));
       }
       return finishPrepare(/*fileChanged:*/true);
     }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
     adbCon.__on_adb_stream_open = function () {
-      for (var _filename in uploadContentMap) { //noinspection JSUnfilteredForInLoop
+      for (var _filename in pushContentMap) { //noinspection JSUnfilteredForInLoop
         var name = _filename, sysVer = parseInt(name.slice(name.replace(/-\d+$/, '').length + 1)) / 100, armv = parseInt(name.slice(name.replace(/\.armv\d+$/, '').length + 5));
         (!sysVer || sysVer <= dev.sysVer) && (!armv || dev.armv === armv)
-        && (dev.sysVer < 5 ? !/\.pie$/.test(name) : !uploadContentMap[name + '.pie']) //noinspection JSUnfilteredForInLoop
-        && log(adbCon.__tag, 'upload file to ' + cfg.androidWorkDir + '/' + name)
-        && adbCon.write(uploadContentMap[name]);
+        && (dev.sysVer < 5 ? !/\.pie$/.test(name) : !pushContentMap[name + '.pie']) //noinspection JSUnfilteredForInLoop
+        && log(adbCon.__tag, 'push local file to ' + cfg.androidWorkDir + (/\.apk/i.test(name) ? '-' : '/') + name)
+        && adbCon.write(pushContentMap[name]);
       }
       adbCon.write(new Buffer('QUIT\0\0\0\0'));
     };
@@ -541,32 +547,31 @@ function prepareDevice(dev, force/*optional*/) {
 
   function finishPrepare(fileChanged) {
     fastAdbExec('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallOrientApp + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
-          if (stderr) {
-            return setStatus(stderr);
-          }
-          var parts = stdout.trim().split(/\s*===\s*/);
-          if (parts.length !== 6) {
-            return setStatus('failed to prepare: unexpected result format');
-          } else if (parts[0]) {
-            return setStatus('failed to prepare: unexpected result: ' + parts[0].replace(/\s/g, ' ').trim());
-          } else if (!getMoreInfo(parts)) {
-            return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
-          }
-          if (parts[5] === '/data/data/asc.tool.screenorientation') { //app already installed
-            startOrientService(dev);
-          } else {
-            fastAdbExec('[InstallOrientationService]', dev, cmd_installOrientApp, function/*on_close*/(stderr, stdout) {
-              (/\nSuccess/.test(stdout)) && startOrientService(dev);
-            }, {timeout: cfg.adbInstallOrientServiceTimeout * 1000, log: true});
-          }
-          return setStatus('OK');
-        }
-        ,
-        {
-          timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true
-        }
-    )
-    ;
+      if (stderr) {
+        return setStatus(stderr);
+      }
+      var parts = stdout.trim().split(/\s*===\s*/);
+      if (parts.length !== 6) {
+        return setStatus('failed to prepare: unexpected result format');
+      } else if (parts[0]) {
+        return setStatus('failed to prepare: unexpected result: ' + parts[0].replace(/\s/g, ' ').trim());
+      } else if (!getMoreInfo(parts)) {
+        return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
+      }
+      if (parts[5] === '/data/data/asc.tool.screenorientation') { //app already installed
+        startOrientService(dev);
+      } else {
+        dev.postPrepareProc = fastAdbExec('[InstallOrientationService]', dev, cmd_installOrientApp, function/*on_close*/(stderr, stdout) {
+          dev.postPrepareProc = null;
+          if (!/\nSuccess/.test(stdout)) return;
+          startOrientService(dev);
+          dev.postPrepareProc = fastAdbExec('[DeleteOrientApk]', dev, cmd_deleteOrientAppFile, function/*on_close*/() {
+            dev.postPrepareProc = null;
+          }, {timeout: 2000, log: true});
+        }, {timeout: cfg.adbInstallOrientServiceTimeout * 1000, log: true});
+      }
+      return setStatus('OK');
+    }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
   } //end of finishPrepare
 
   function getMoreInfo(parts/*result of cmd_getExtraInfo*/) {
@@ -1182,6 +1187,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 }).option = {log: true};
 (adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res, q) {
+  q.mode === 'forcePrepare' && reloadPushFiles();
   devAry.forEach(function (dev) {
     isDevConnectedReally(dev) && prepareDevice(dev, q.mode === 'forcePrepare');
   });
@@ -1547,14 +1553,20 @@ function reloadResource() {
   fs.readdirSync(cfg.outputDir).forEach(function (filename) {
     (filename = new FilenameInfo(filename)).isValid && createDev(filename.sn);
   });
+  reloadPushFiles();
+}
+
+function reloadPushFiles() {
+  pushContentMap = {};
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
     if (/^\./.test(filename)) return hash;
+    var isApk = /\.apk$/i.test(filename), remotePath = cfg.androidWorkDir + (isApk ? '-' : '/') + filename, fileAttr = isApk ? '0100774' : '0100770';
     var bufAry = [], head, body, i, content = fs.readFileSync(cfg.binDir + '/' + filename);
-    bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(cfg.androidWorkDir + '/' + filename + ',' + parseInt('0100700'/*file attribute*/, 8))).length, 4) && head, body);
+    bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(remotePath + ',' + parseInt(fileAttr, 8))).length, 4) && head, body);
     for (i = 0; i < content.length; i += 64 * 1024)
       bufAry.push((head = new Buffer('DATA____')) && head.writeUInt32LE((body = content.slice(i, i + 64 * 1024)).length, 4) && head, body);
     bufAry.push((head = new Buffer('DONE____')) && head.writeUInt32LE(Date.now() / 1000, 4, /*noAssert:*/true) && head);
-    uploadContentMap[filename] = Buffer.concat(bufAry);
+    pushContentMap[filename] = Buffer.concat(bufAry);
     return hash.update(content);
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
 }
@@ -1563,8 +1575,8 @@ reloadResource();
 initAdbHosts();
 (initAdbHosts.needLocalAdb ? spawn : passthrough)('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
   stderr && process.stderr.write('failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
-  return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr) {
-    stderr && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
+  return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr, stdout) {
+    !/version/i.test(stdout) && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
     try {
       websocket = require('websocket');
     } catch (e) {
