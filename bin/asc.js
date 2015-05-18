@@ -30,6 +30,7 @@ true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouc
 
 function dummyFunc() {
 }
+
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
   log(tag, 'SPAWN ' + JSON.stringify(_path) + ' ' + JSON.stringify(args) + (opt.timeout ? ' timeout:' + opt.timeout : ''), /*autoNewLine:*/false);
@@ -71,9 +72,11 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
     on_close(reason !== 'CLOSED' && reason || signal || (stderr = Buffer.concat(stderr).toString()), (stdout = Buffer.concat(stdout).toString()), code, signal);
   }
 }
+
 function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   return fastAdbOpen(_tag, dev, 'shell:' + cmd, _on_close, _opt);
 }
+
 function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
   var isDevCmd = !!devOrHost.adbHost, dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
@@ -167,6 +170,7 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
     on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + (stderr.slice(8) || stderr)), stdout);
   }
 }
+
 function adbHost_makeBuf(buf) {
   return Buffer.concat([new Buffer(hexUint32(buf.length)), buf]);
 }
@@ -176,17 +180,21 @@ function htmlEncode(text) {
     return match === '&' ? '&amp;' : match === '<' ? '&lt;' : match === '>' ? '&gt;' : match === '"' ? '&quot;' : ('&#' + match.charCodeAt(0) + ';');
   });
 }
+
 function forEachValueIn(map, callback) {
   for (var k in map) //noinspection JSUnfilteredForInLoop
     callback(map[k]);
 }
+
 function pad234(d, len/*2~4*/) {
   return len === 2 ? ((d < 10) ? '0' + d : d.toString()) : len === 3 ? ((d < 10) ? '00' + d : (d < 100) ? '0' + d : d.toString()) : len === 4 ? ((d < 10) ? '000' + d : (d < 100) ? '00' + d : (d < 1000) ? '0' + d : d.toString()) : d;
 }
+
 function hexUint32(d) {
   var h = d.toString(16);
   return d <= 0xf ? '000' + h : d <= 0xff ? '00' + h : d <= 0xfff ? '0' + h : d <= 0xffff ? h : h;
 }
+
 function getTimestamp() {
   var dt = new Date(), seqStr = '';
   if (dt.valueOf() === getTimestamp.dtMs) {
@@ -197,9 +205,11 @@ function getTimestamp() {
   }
   return pad234(dt.getFullYear(), 4) + pad234(dt.getMonth() + 1, 2) + pad234(dt.getDate(), 2) + pad234(dt.getHours(), 2) + pad234(dt.getMinutes(), 2) + pad234(dt.getSeconds(), 2) + '.' + pad234(dt.getMilliseconds(), 3) + seqStr;
 }
+
 function stringifyTimestampShort(ts) {
   return ts.slice(4, 6) + '/' + ts.slice(6, 8) + ' ' + ts.slice(8, 10) + ':' + ts.slice(10, 12) + ':' + ts.slice(12, 14);
 }
+
 function passthrough() {
   for (var i = 0; i < arguments.length; i++) (typeof(arguments[i]) === 'function') && arguments[i]();
 }
@@ -226,10 +236,12 @@ function getHttpSourceAddresses(req) {
   (directIp === '::ffff:127.0.0.1' || directIp === '127.0.0.1' || directIp === '::1') && (directIp = 'localhost');
   return (origIp ? (origIp + ' ') : '') + directIp;
 }
+
 function writeMultipartImage(res, buf, doNotCount) { //Note: this will write next content-type earlier to force Chrome draw image immediately
   (doNotCount || (res.__framesWritten = (res.__framesWritten || 0) + 1))
   && res.write(Buffer.concat([res.headersSent ? EMPTY_BUF : CrLfBoundTypeCrLf2, buf, CrLfBoundTypeCrLf2]));
 }
+
 function end(res/*HttpResponse or FileOutput*/, data/*optional*/, type) {
   if (data && res.setHeader && !res.headersSent) { //for unsent http response
     if (type) {
@@ -252,9 +264,11 @@ function getFileSizeSync(filePath) {
     return 0;
   }
 }
+
 function FilenameInfo(f, sn) {
   (this.name = f) && (f = f.match(re_filename)) && (this.sn = querystring.unescape(f[2])) && (!sn || this.sn === sn) && (this.src = f[1]) && (this.timestamp = f[3]) && (this.type = f[4] || f[6]) && (f[4]/*isVideo*/ || (this.i = f[5]) !== '') && (this.isValid = true);
 }
+
 FilenameInfo.prototype.toString = function () {
   return this.name /*original name*/;
 };
@@ -294,9 +308,11 @@ function convertCRLFToLF(context, requiredCrCount, buf) {
 function isTcpConId(conId) {
   return /:\d+$/.test(conId);
 }
+
 function isDevConnectedReally(dev) {
   return dev.conStatus === 'device';
 }
+
 function createDev(sn/*maybe empty*/, adbHost, conId/*sn or ip:port which maybe same on different host*/) {
   var devGrp = devGrpMap[sn] || (devGrpMap[sn] = []), dev = null;
   if (adbHost) {
@@ -320,6 +336,7 @@ function createDev(sn/*maybe empty*/, adbHost, conId/*sn or ip:port which maybe 
   setDevId(dev, sn, adbHost, conId);
   return dev;
 }
+
 function setDevId(dev, sn, adbHost, conId) {
   conId = conId || sn;
   dev.sn = sn;
@@ -334,6 +351,7 @@ function setDevId(dev, sn, adbHost, conId) {
   dev.re_lastViewId_cookie = new RegExp('\\b' + cookie_id_head + 'viewId_' + dev.idVar + '=([^;]+)');
   return dev;
 }
+
 function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
   if (!chk('device', q.device)) {
     return null;
@@ -363,6 +381,7 @@ function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
   q._dev_i = dev.i;
   return dev;
 }
+
 function chkDev(dev, opt) {
   var failed = !dev && (chk.err = 'device not found')
       || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
@@ -374,6 +393,7 @@ function chkDev(dev, opt) {
       || opt.orientable && !(dev.capture.orientSrv && dev.capture.orientSrv.__adb_stream_opened) && (chk.err = 'device not ready for changing orientation');
   return !failed;
 }
+
 function newAutoAccessKey() {
   return !cfg.adminKey ? '' : (getTimestamp().slice(4, 14) + '_' + crypto.createHash('md5').update(cfg.adminKey + Date.now() + Math.random()).digest('hex'));
 }
@@ -385,6 +405,7 @@ function AdbHost(adbHostStr) {
   this.str = this.host + ':' + this.port;
   (this.autoStartLocalAdbServer = !host) && (initAdbHosts.needLocalAdb = true);
 }
+
 AdbHost.prototype.toString = function () {
   return this.str;
 };
@@ -393,6 +414,7 @@ function initAdbHosts() {
     cfg.adbHosts[i] = new AdbHost(adbHostStr);
   });
 }
+
 function initDeviceTrackers() {
   cfg.adbHosts.forEach(function (adbHost) {
     _initDeviceTracker(adbHost);
@@ -466,8 +488,8 @@ var cmd_getExtraInfo = ''
     + ' echo ===; ./busybox head -n 1 /proc/meminfo;'
     + ' echo ===; LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./$DLOPEN ./sc-??? ./fsc-???;'
     + ' echo ===; ls -d /data/data/asc.tool.screenorientation;';
-var cmd_uninstallOrientApp = ' pm uninstall asc.tool.screenorientation 2>&1 >/dev/null;';
-var cmd_installOrientApp = ' (cd /data/local/tmp; rm ScreenOrientation.apk 2>/dev/null; ln -s ' + cfg.androidWorkDir + '/ScreenOrientation.apk ScreenOrientation.apk && pm install ScreenOrientation.apk);';
+var cmd_uninstallOrientApp = ' pm uninstall asc.tool.screenorientation >/dev/null 2>/dev/null;';
+var cmd_installOrientApp = ' (cd /data/local/tmp; rm ScreenOrientation.apk 2>/dev/null; ln ' + cfg.androidWorkDir + '/ScreenOrientation.apk ScreenOrientation.apk && pm install ScreenOrientation.apk);';
 
 function prepareDevice(dev, force/*optional*/) {
   if (dev.status === 'OK' && !force || dev.status === 'preparing') return;
@@ -519,24 +541,32 @@ function prepareDevice(dev, force/*optional*/) {
 
   function finishPrepare(fileChanged) {
     fastAdbExec('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallOrientApp + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
-      if (stderr) {
-        return setStatus(stderr);
-      }
-      var parts = stdout.trim().split(/\s*===\s*/);
-      if (parts.length !== 6 || parts[0]) {
-        return setStatus('failed to finish preparing device file');
-      } else if (!getMoreInfo(parts)) {
-        return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
-      }
-      if (parts[5] === '/data/data/asc.tool.screenorientation') { //app already installed
-        startOrientService(dev);
-      } else {
-        fastAdbExec('[InstallOrientationService]', dev, cmd_installOrientApp, function/*on_close*/(stderr, stdout) {
-          (/\nSuccess/.test(stdout)) && startOrientService(dev);
-        }, {timeout: cfg.adbInstallOrientServiceTimeout * 1000, log: true});
-      }
-      return setStatus('OK');
-    }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
+          if (stderr) {
+            return setStatus(stderr);
+          }
+          var parts = stdout.trim().split(/\s*===\s*/);
+          if (parts.length !== 6) {
+            return setStatus('failed to prepare: unexpected result format');
+          } else if (parts[0]) {
+            return setStatus('failed to prepare: unexpected result: ' + parts[0].replace(/\s/g, ' ').trim());
+          } else if (!getMoreInfo(parts)) {
+            return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
+          }
+          if (parts[5] === '/data/data/asc.tool.screenorientation') { //app already installed
+            startOrientService(dev);
+          } else {
+            fastAdbExec('[InstallOrientationService]', dev, cmd_installOrientApp, function/*on_close*/(stderr, stdout) {
+              (/\nSuccess/.test(stdout)) && startOrientService(dev);
+            }, {timeout: cfg.adbInstallOrientServiceTimeout * 1000, log: true});
+          }
+          return setStatus('OK');
+        }
+        ,
+        {
+          timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true
+        }
+    )
+    ;
   } //end of finishPrepare
 
   function getMoreInfo(parts/*result of cmd_getExtraInfo*/) {
@@ -648,6 +678,7 @@ function sendTouchEvent(dev, _type, _x, _y) {
   }
   return true;
 }
+
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   if (!chkDev(dev, {connected: true, capturing: true, keybdable: true})
       || isKeyCode && !keyNameMap[keyCodeOrText] && !keyCodeMap[keyCodeOrText] && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMap).concat(Object.keys(keyCodeMap))) )
@@ -665,6 +696,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   }
   return true;
 }
+
 function setDeviceOrientation(dev, orientation) {
   if (!chkDev(dev, {connected: true, capturing: true, orientable: true})
       || !chk('orientation', orientation, ['landscape', 'portrait', 'free'])) {
@@ -673,6 +705,7 @@ function setDeviceOrientation(dev, orientation) {
   cfg.logAllProcCmd && log(dev.capture.orientSrv.__tag + '<', orientation);
   return dev.capture.orientSrv.write(orientation + '\n');
 }
+
 function turnOnScreen(dev) {
   if (!chkDev(dev, {connected: true})) {
     return false;
@@ -682,6 +715,7 @@ function turnOnScreen(dev) {
     dev.adbCon_turnOnScreen = null;
   }, {timeout: cfg.adbTurnScreenOnTimeout * 1000}));
 }
+
 function encryptSn(sn) {
   sn = sn || ' ';
   var d, i;
@@ -768,6 +802,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   }
   return true;
 }
+
 function _startRemoteDesktopServer(dev, q) {
   var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
   var adbCon = capture.adbCon = fastAdbExec('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
@@ -823,7 +858,7 @@ function _startRemoteDesktopServer(dev, q) {
     capture.keybdSrv = null;
   });
   capture.keybdSrv.__on_adb_stream_open = function () {
-    capture.keybdSrv.__runCmd('exec 2> /dev/null > /dev/null');
+    capture.keybdSrv.__runCmd('exec >/dev/null 2>/dev/null');
     capture.keybdSrv.__runCmd('cd ' + cfg.androidWorkDir);
     capture.keybdSrv.__runCmd('./busybox stty -echo -onlcr; PS1=');
     //capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
@@ -864,6 +899,7 @@ function _startRemoteDesktopServer(dev, q) {
     scheduleUpdateLiveUI();
   }
 }
+
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
   var capture = dev.capture || _startRemoteDesktopServer(dev, q);
   capture.consumerMap[res.__tag] = res;
@@ -884,6 +920,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
 }
+
 function doRecord(dev, q/*same as capture*/) {
   var filename = querystring.escape(dev.sn) + '~rec_' + q._promise_q._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
   var childProc = spawn('[Record] {' + dev.id + '}', cfg.ffmpeg, [].concat(
@@ -908,6 +945,7 @@ function doRecord(dev, q/*same as capture*/) {
   doCapture(dev, childProc.stdin, q);
   return 'OK: ' + filename;
 }
+
 function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/) {
   var capture = devAry[res.q._dev_i].capture;
   if (!capture || capture.consumerMap[res.__tag] !== res) return;
@@ -948,6 +986,7 @@ function scheduleUpdateLiveUI() {
     });
   }, 0);
 }
+
 function scheduleUpdateWholeUI() {
   clearTimeout(status.updateWholeUITimer);
   status.updateWholeUITimer = setTimeout(function () {
@@ -964,6 +1003,7 @@ function replaceComVar(html, dev) {
   return html.replace(/@device\b/g, querystring.escape(dev.id)).replace(/#device\b/g, htmlEncode(dev.id)).replace(/\$device\b/g, dev.idVar).replace(/#devIdDisp\b/g, htmlEncode((dev.sn === dev.conId ? ' ' : '(' + dev.sn + ')') + dev.id))
       .replace(/@accessKey\b/g, querystring.escape(dev.accessKey.slice(11))).replace(/#accessKey\b/g, htmlEncode(dev.accessKey.slice(11))).replace(/#devInfo\b/g, dev.info_htm).replaceShowIf('devInfo', dev.info_htm)
 }
+
 String.prototype.replaceShowIf = function (placeHolder, show) {
   return this.replace(new RegExp('@showIf_' + placeHolder + '\\b', 'g'), show ? '' : 'display:none').replace(new RegExp('@hideIf_' + placeHolder + '\\b', 'g'), show ? 'display:none' : '');
 };
