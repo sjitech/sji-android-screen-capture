@@ -1340,9 +1340,9 @@ function createWebSocketServer() {
       dev.adbBridgeWebSocket = wsConReq.accept(null, wsConReq.origin);
       return handle_adbBridgeWebSocket_connection(dev, '[AdbBridge.WEBSOCK] {' + dev.id + '}');
     }
-    else if (urlPath === '/touch' || urlPath === '/sendKey' || urlPath === '/sendText') {
+    else {
       cfg.logRdcWebSocketDetail && log(httpTag, 'REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
-      if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: urlPath == '/touch', keybdable: urlPath === '/sendKey' || urlPath === '/sendText'}))) {
+      if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true}))) {
         cfg.logRdcWebSocketDetail && log(httpTag, 'Rejected. Reason: ' + chk.err);
         return wsConReq.reject();
       }
@@ -1352,10 +1352,6 @@ function createWebSocketServer() {
       rdcWebSocket.devHandleMap[dev.i] = dev;
       dev.rdcWebSocketMap[rdcWebSocket.__id = getTimestamp()] = rdcWebSocket;
       return handle_rdcWebSocket_connection(rdcWebSocket, '[RDC__' + httpSeq + ']');
-    }
-    else {
-      cfg.logAllHttpReqRes && log(httpTag, 'Rejected REQ: ' + httpReq.url + (' [from ' + getHttpSourceAddresses(httpReq) + ']').replace(' [from localhost]', '') + (cfg.logHttpReqDetail ? ' [' + httpReq.headers['user-agent'] + ']' : '') + (cfg.logHttpReqDetail ? (' origin: ' + wsConReq.origin || '') : ''));
-      return wsConReq.reject();
     }
   });
 }
@@ -1510,10 +1506,9 @@ function handle_rdcWebSocket_connection(ws, tag) {
       var match = msg.utf8Data.match(/^(\d+)([:<])([\s\S]+)$/);
       if (!match) { //treat as open_device request
         cfg.logRdcWebSocketDetail && log(_tag, 'open device: ' + JSON.stringify(msg.utf8Data));
-        var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query, urlPath = parsedUrl.pathname.replace(/^\/?/, '/') /*prepend slash*/;
+        var parsedUrl = Url.parse(msg.utf8Data, true/*querystring*/), q = parsedUrl.query;
         q.device && (_tag += ' {' + q.device + '}');
-        if (!(urlPath === '/touch' || urlPath === '/sendKey' || urlPath === '/sendText') && (chk.err = 'invalid request')
-            || !(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true, touchable: urlPath == '/touch', keybdable: urlPath === '/sendKey' || urlPath === '/sendText'}))) {
+        if (!(dev = getDev(q, {chkAccessKey: true, connected: true, capturing: true}))) {
           cfg.logRdcWebSocketDetail && log(_tag, chk.err);
           return ws.send(chk.err);
         }

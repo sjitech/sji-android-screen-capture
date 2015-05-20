@@ -8,7 +8,7 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
     var rdcWebSocket, focusedLiveImage;
     var isDesktopFirefoxStyle = /Firefox|Android/i.test(navigator.userAgent);
     var touchTypeMap = {mousedown: 'd', mousemove: 'm', mouseup: 'u', mouseout: 'o', touchstart: 'd', touchend: 'u', touchmove: 'm', touchcancel: 'o', touchleave: 'o'};
-    var DEF_TIMEOUT = 3000;
+    var DEF_TIMEOUT = 3000, WEBSOCKET_CONNECT_TIMEOUT = 10 * 1000;
 
     AscUtil.setTouchHandler = function (liveImage/*htmlElement*/, urlForSendTouchEvent, rootRotator/*htmlElement, optional*/) {
       var $liveImage = $(liveImage), $rootRotator = rootRotator ? $(rootRotator) : $liveImage;
@@ -17,62 +17,70 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
       liveImage.ctx_sendKey = {url: urlForSendTouchEvent.replace(/touch\?/, 'sendKey?'), devHandle: undefined};
       liveImage.ctx_sendText = {url: urlForSendTouchEvent.replace(/touch\?/, 'sendText?'), devHandle: undefined};
 
-      $liveImage
-          .unbind('mousedown touchstart dragstart mouseenter mouseout')
-          .on('mouseenter.detect_input_focus', function () {
-            focusedLiveImage = liveImage;
-          })
-          .on('mouseout.detect_input_focus', function () {
-            focusedLiveImage = null;
-          })
-          .on('mousedown', function (e) { //touch handler for desktop browser
-            if (e.which === 3) return; //skip right button
-            convertToTouchEventAndSend(e);
-            $liveImage
-                .on('mousemove', function (e) {
-                  convertToTouchEventAndSend(e);
-                })
-                .on('mouseup mouseout.detect_click_or_move', function (e) {
-                  convertToTouchEventAndSend(e);
-                  $liveImage.unbind('mousemove mouseup mouseout.detect_click_or_move');
-                })
-            ;
-          })
-          .on('touchstart', function (e) { //touch handler for mobile browser
-            if (isMultiTouch(e.originalEvent)) {
-              AscUtil.showEventsOnly && console.log(Date.now() + ' multi-touch down');
-              $liveImage.unbind('touchmove touchend touchcancel touchleave');
-              clearTimeout(touchstart_delaySendTimer);
-              touchstart_e = null;
-              return; //skip multi-touch
-            }
-            convertToTouchEventAndSend(e);
-            $liveImage
-                .on('touchmove', function (e) {
-                  if (isMultiTouch(e.originalEvent)) {
-                    AscUtil.showEventsOnly && console.log('multi-touch move');
-                    $liveImage.unbind('touchmove touchend touchcancel touchleave'); //ignore multi-touch
-                  } else {
-                    e.preventDefault(); //prevent scrolling/resizing page only if not touched by multi-finger
-                    convertToTouchEventAndSend(e);
-                  }
-                })
-                .on('touchend touchcancel touchleave', function (e) {
-                  convertToTouchEventAndSend(e);
-                  $liveImage.unbind('touchmove touchend touchcancel touchleave');
-                })
-                .unbind('mousedown') //need not mousedown event anymore
-                .on('contextmenu', function () {
-                  return false;
-                })
-            ;
-          })
-          .on('dragstart', function () {
-            return false; //e.preventDefault() has no effect
-          })
-      ; //end of $liveImage.bind(...)
+      if (AscUtil.useWebSocket) {
+        RdcWebSocket_init(urlForSendTouchEvent);
+      }
+
+      init_touch_handler();
 
       init_keyboard_handler();
+
+      function init_touch_handler() {
+        $liveImage
+            .unbind('mousedown touchstart dragstart mouseenter mouseout')
+            .on('mouseenter.detect_input_focus', function () {
+              focusedLiveImage = liveImage;
+            })
+            .on('mouseout.detect_input_focus', function () {
+              focusedLiveImage = null;
+            })
+            .on('mousedown', function (e) { //touch handler for desktop browser
+              if (e.which === 3) return; //skip right button
+              convertToTouchEventAndSend(e);
+              $liveImage
+                  .on('mousemove', function (e) {
+                    convertToTouchEventAndSend(e);
+                  })
+                  .on('mouseup mouseout.detect_click_or_move', function (e) {
+                    convertToTouchEventAndSend(e);
+                    $liveImage.unbind('mousemove mouseup mouseout.detect_click_or_move');
+                  })
+              ;
+            })
+            .on('touchstart', function (e) { //touch handler for mobile browser
+              if (isMultiTouch(e.originalEvent)) {
+                AscUtil.showEventsOnly && console.log(Date.now() + ' multi-touch down');
+                $liveImage.unbind('touchmove touchend touchcancel touchleave');
+                clearTimeout(touchstart_delaySendTimer);
+                touchstart_e = null;
+                return; //skip multi-touch
+              }
+              convertToTouchEventAndSend(e);
+              $liveImage
+                  .on('touchmove', function (e) {
+                    if (isMultiTouch(e.originalEvent)) {
+                      AscUtil.showEventsOnly && console.log('multi-touch move');
+                      $liveImage.unbind('touchmove touchend touchcancel touchleave'); //ignore multi-touch
+                    } else {
+                      e.preventDefault(); //prevent scrolling/resizing page only if not touched by multi-finger
+                      convertToTouchEventAndSend(e);
+                    }
+                  })
+                  .on('touchend touchcancel touchleave', function (e) {
+                    convertToTouchEventAndSend(e);
+                    $liveImage.unbind('touchmove touchend touchcancel touchleave');
+                  })
+                  .unbind('mousedown') //need not mousedown event anymore
+                  .on('contextmenu', function () {
+                    return false;
+                  })
+              ;
+            })
+            .on('dragstart', function () {
+              return false; //e.preventDefault() has no effect
+            })
+        ; //end of $liveImage.bind(...)
+      } //end of init_touch_handler;
 
       function isMultiTouch(_e) {
         return _e && (_e.changedTouches && _e.changedTouches.length > 1 || _e.touches && _e.touches.length > 1);
@@ -296,21 +304,13 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
       if (rdcWebSocket) {
         send_if_websocket_inited();
       } else {
-        if (AscUtil.useWebSocket) {
-          RdcWebSocket_init(ctx.url, function (err) {
-            err ? send_by_ajax() : send_if_websocket_inited();
-          });
-        } else {
-          send_by_ajax();
-        }
+        send_by_ajax();
       }
 
       function send_if_websocket_inited() {
         if (ctx.devHandle === undefined) {
           RdcWebSocket_open_device(ctx.url, function (err, handle) {
-            if (err) {
-              send_by_ajax();
-            } else {
+            if (!err) {
               ctx.devHandle = handle; //maybe still undefined
               send_by_websocket();
             }
@@ -336,12 +336,8 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
       }, opt && opt.timeout || DEF_TIMEOUT);
     } //end of RdcWebSocket_open_device
 
-    RdcWebSocket_init.callbackAry = [];
-
-    function RdcWebSocket_init(devUrl, callback) {
-      if (rdcWebSocket) return callback();
-      RdcWebSocket_init.callbackAry.push(callback);
-      if (rdcWebSocket === '')  return;
+    function RdcWebSocket_init(devUrl) {
+      if (rdcWebSocket || rdcWebSocket === '')  return;
       rdcWebSocket = '';
 
       var wsTag = '[RdcWebSocket]';
@@ -354,16 +350,15 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
         AscUtil.debug && console.log(wsTag + ' OPENED');
         rdcWebSocket = ws;
         clearTimeout(timer_connectionTimeout);
-        RdcWebSocket_init.callbackAry.forEach(function (callback) {
-          callback();
-        });
-        RdcWebSocket_init.callbackAry.length = 0;
       });
       ws.addEventListener('close', function (e) {
         cleanup('CLOSED', (e.code || '') + (e.reason ? ' ' + e.reason : ''));
       });
       ws.addEventListener('error', function () {
         cleanup('network error');
+        setTimeout(function () {
+          RdcWebSocket_init(devUrl);
+        }, WEBSOCKET_CONNECT_TIMEOUT);
       });
 
       ws.addEventListener('message', function (e) {
@@ -391,9 +386,9 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
 
       timer_connectionTimeout = setTimeout(function () {
         cleanup('timeout');
-      }, 5000);
+        RdcWebSocket_init(devUrl);
+      }, WEBSOCKET_CONNECT_TIMEOUT);
 
-      ws.__cleanup = cleanup;
       return ws;
 
       function cleanup(reason, detail) {
@@ -407,10 +402,6 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
           callbackMap[k](reason);
         }
         callbackMap = {};
-        RdcWebSocket_init.callbackAry.forEach(function (callback) {
-          callback(reason);
-        });
-        RdcWebSocket_init.callbackAry.length = 0;
       }
     } //end of RdcWebSocket_init
 
