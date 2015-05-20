@@ -638,14 +638,15 @@ function prepareDevice(dev, force/*optional*/) {
 
 function startOrientService(dev) {
   adbRun('[StartOrientService]', dev, 'am startservice -n asc.tool.screenorientation/.OrientationService' + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function (stderr, stdout) {
-    if (stderr || !/^Starting service:/.test(stdout) || /Error:/.test(stdout)) return;
-    setTimeout(function () {
-      dev.capture && !dev.capture.orientSrv && (dev.capture.orientSrv = adb('[OrientServer]', dev, 'localabstract:asc.tool.screenorientation', function/*on_close*/() {
-        dev.capture && (dev.capture.orientSrv = null);
-        dev.capture && startOrientService(dev);
-      }, {log: true}));
-    }, 2000);
+    (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && connectToOrientService(dev);
   }, {timeout: cfg.adbStartOrientServiceTimeout * 1000, log: true});
+}
+
+function connectToOrientService(dev) {
+  dev.capture && !dev.capture.orientSrv && (dev.capture.orientSrv = adb('[OrientServer]', dev, 'localabstract:asc.tool.screenorientation', function/*on_close*/() {
+    dev.capture && (dev.capture.orientSrv = null);
+    dev.capture && startOrientService(dev);
+  }, {log: true}))
 }
 
 function sendTouchEvent(dev, _type, _x, _y) {
@@ -897,11 +898,7 @@ function _startRemoteDesktopServer(dev, q) {
     cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '>', buf, /*autoNewLine:*/false);
   };
 
-  capture.orientSrv = adb('[OrientServer]', dev, 'localabstract:asc.tool.screenorientation', function/*on_close*/() {
-    capture.orientSrv = null;
-    startOrientService(dev);
-  }, {log: true});
-
+  connectToOrientService(dev); //set capture.orientSrv
   return capture;
 
   function cleanup(reason) {

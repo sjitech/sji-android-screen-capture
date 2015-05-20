@@ -248,13 +248,20 @@
       });
   })();
 
-  var devAry = $('input[name="device"]').toArray().map(function (el) {
-    return el.value;
-  });
-  console.log(JSON.stringify(devAry));
+  var devIdAry;
+  function getDevIdAry() {
+    if (!devIdAry) {
+      devIdAry = $('input[name="device"]').toArray().map(function (el) {
+        return el.value;
+      });
+      console.log(JSON.stringify(devIdAry));
+    }
+    return devIdAry;
+  }
 
   function adb(cmd, timeout, device, maxSize) {
-    (Array.isArray(device) ? device : device ? [device] : devAry).forEach(function (device) {
+
+    (Array.isArray(device) ? device : device ? [device] : getDevIdAry()).forEach(function (device) {
       $.ajax('cmd@adminUrlSuffix?device=' + encodeURIComponent(device) + '&cmd=' + encodeURIComponent(cmd) + (timeout ? '&timeout=' + encodeURIComponent(timeout) : '') + (maxSize ? '&size=' + maxSize : ''))
         .done(function (res) {
           console.log('-------------------Begin device: "' + device + '"-------------------\n' + res + '-------------------End   device: "' + device + '"-------------------\n');
