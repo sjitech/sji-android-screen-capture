@@ -324,14 +324,14 @@ function isDevConnectedReally(dev) {
   return dev.conStatus === 'device';
 }
 
-function createDev(sn/*maybe empty*/, adbHost, conId/*sn or ip:port which maybe same on different host*/) {
-  var devGrp = devGrpMap[sn] || (devGrpMap[sn] = []), dev = null;
+function createDev(conId/*sn or ip:port which maybe same on different host*/, adbHost/*optional*/) {
+  var sn = isTcpConId(conId) ? '' : conId, devGrp = devGrpMap[sn] || (devGrpMap[sn] = []), dev = null;
   if (adbHost) {
     if (devGrp.some(function (_dev) {
           return _dev.adbHost === adbHost && _dev.conId === conId && (dev = _dev);
         })
         || devGrp.some(function (_dev) { //reuse fileOnly device (empty adbHost)
-          return !_dev.adbHost && (dev = setDevId(_dev, sn, adbHost, conId));
+          return !_dev.adbHost && (dev = _dev) && setDevId();
         })) {
       return dev;
     }
@@ -344,16 +344,14 @@ function createDev(sn/*maybe empty*/, adbHost, conId/*sn or ip:port which maybe 
     masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
   };
   !adbHost && cfg.showDisconnectedDevices && scheduleUpdateWholeUI();
-  setDevId(dev, sn, adbHost, conId);
-  return dev;
+  return setDevId();
 
-  function setDevId(dev, sn, adbHost, conId) {
-    conId = conId || sn;
-    dev.sn = sn;
-    dev.adbHost = adbHost;
-    dev.conId = conId;
-    dev.buf_switchTransport = adbHost_makeBuf(new Buffer('host:transport:' + conId));
+  function setDevId() {
     dev.id = conId + (!adbHost ? '' : '@' + adbHost);
+    dev.conId = conId;
+    dev.adbHost = adbHost;
+    dev.sn = sn;
+    dev.buf_switchTransport = adbHost_makeBuf(new Buffer('host:transport:' + conId));
     dev.idVar = dev.id.replace(/[^0-9a-zA-Z]/g, function (match) {
       return match === '@' ? '_at_' : match === ':' ? '_p_' : '_x' + match.charCodeAt(0).toString(16);
     });
@@ -455,10 +453,9 @@ function initDeviceTrackers() {
     adbCon.__on_adb_stream_data = function (buf) {
       var devList = [];
       buf.toString().split('\n').forEach(function (desc) { //noinspection JSValidateTypes
-        var parts = desc.split('\t'), conId = parts[0], conStatus = parts[1];
+        var parts = desc.split('\t'), conId = parts[0], conStatus = parts[1], dev;
         if (!conId || !conStatus || conId === '????????????') return;
-        var dev = devList[devList.length] = createDev(isTcpConId(conId) ? '' : conId, adbHost, conId);
-        if (dev.conStatus !== conStatus) {
+        if ((dev = devList[devList.length] = createDev(conId, adbHost)).conStatus !== conStatus) {
           (dev.conStatus = conStatus) && log('[TrackDevices] {' + dev.id + '}', isDevConnectedReally(dev) ? 'CONNECTED' : ('STATUS CHANGED: ' + conStatus));
           isDevConnectedReally(dev) ? prepareDevice(dev) : unprepareDevice(dev, conStatus, 'device unusable');
         }
@@ -474,6 +471,7 @@ function initDeviceTrackers() {
 } //end of trackDevices
 
 function unprepareDevice(dev, conStatus, reason) {
+  scheduleUpdateWholeUI();
   forEachValueIn(dev.adbConMap, function (adbCon) {
     adbCon.__cleanup(reason);
   });
@@ -482,9 +480,8 @@ function unprepareDevice(dev, conStatus, reason) {
   dev.conStatus = conStatus;
   dev.status = dev.touchStatus = '';
   dev.isOsStartingUp = false;
-  scheduleUpdateWholeUI();
   if (dev.conId !== dev.sn) { //for tcp device
-    dev.sn && createDev(dev.sn); //create fileOnly entry for the disconnected tcp device  TODO: check
+    dev.sn && createDev(dev.sn); //create fileOnly entry for the disconnected tcp device
     dev.adbHost = dev.conId = ''; //make the device reusable and hidden
   }
 }
