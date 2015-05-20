@@ -79,6 +79,9 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
 function fastAdbExec(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
   return fastAdbOpen(_tag, dev, 'shell:' + cmd, _on_close, _opt);
 }
+//todo: timeout of adb_stream_open.
+//todo: rename fastAdb -> adb, fastAdbExec -> adb('shell:')
+//todo: rename total_matched_len
 
 function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -152,7 +155,6 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
 
   adbCon.__cleanup = cleanup;
   adbCon.__tag = tag;
-  isDevCmd && (dev.lastActiveDateMs = Date.now());
   isDevCmd && (dev.adbConMap[adbCon.__id = getTimestamp()] = adbCon);
   return adbCon;
 
@@ -161,16 +163,16 @@ function fastAdbOpen(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _o
     (cleanup.called = true) && _log && log(tag, 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && adbCon.end();
     isDevCmd && (delete dev.adbConMap[adbCon.__id]);
-    if (reason === 'network error') {
-      !adbCon.__everConnected && adbHost.autoStartLocalAdbServer && setTimeout(function () {
+    if (reason === 'network error' && !adbCon.__everConnected && adbHost.autoStartLocalAdbServer) {
+      setTimeout(function () {
         spawn('[StartAdbServer]', cfg.adb, ['-P', adbHost.port, 'start-server'], {timeout: 10 * 1000});
       }, cfg.adbAutoStartServerInterval * 1000);
     }
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString('binary')) && _log && log(tag + '>', stdout);
-    (stderr = Buffer.concat(stderr).toString('binary')) && _log && log(tag + '!', stderr.slice(8) || stderr);
+    (stderr = Buffer.concat(stderr).toString('binary')) && _log && (stderr = stderr.slice(8) || stderr.slice(0, 4)) && log(tag + '!', stderr);
     (stdout || stderr) && _log && log(tag, '---- end of stdout/stderr');
-    on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + (stderr.slice(8) || stderr)), stdout);
+    on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + stderr), stdout);
   }
 }
 
@@ -350,7 +352,7 @@ function setDevId(dev, sn, adbHost, conId) {
   dev.idVar = dev.id.replace(/[^0-9a-zA-Z]/g, function (match) {
     return match === '@' ? '_at_' : match === ':' ? '_p_' : '_x' + match.charCodeAt(0).toString(16);
   });
-  dev.idSort = 'host:' + (adbHost || '') + ' ' + (sn ? 'sn:' + sn : 'tcp:' + conId);
+  dev.idSort = (sn ? 'sn:' + sn : 'tcp:' + conId) + ' ' + 'host:' + (adbHost || '');
   dev.re_lastViewId_cookie = new RegExp('\\b' + cookie_id_head + 'viewId_' + dev.idVar + '=([^;]+)');
   return dev;
 }
@@ -388,11 +390,13 @@ function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
 function chkDev(dev, opt) {
   var failed = !dev && (chk.err = 'device not found')
       || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
-      || opt.capturing && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started')
+      || opt.capturing && !(dev.capture) && (chk.err = 'screen capturer not started')
+      || opt.image && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started completely')
       || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
       || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
       || opt.touchable && !(dev.capture && dev.capture.touchSrv && dev.capture.touchSrv.__adb_stream_opened) && (chk.err = 'device not ready for touch')
       || opt.keybdable && !(dev.capture && dev.capture.keybdSrv && dev.capture.keybdSrv.__adb_stream_opened) && (chk.err = 'device not ready for keyboard')
+      || opt.orientableLater && !(dev.capture && dev.capture.orientSrv) && (chk.err = 'device not ready for changing orientation!')
       || opt.orientable && !(dev.capture.orientSrv && dev.capture.orientSrv.__adb_stream_opened) && (chk.err = 'device not ready for changing orientation');
   return !failed;
 }
@@ -474,7 +478,7 @@ function unprepareDevice(dev, conStatus, reason) {
   dev.isOsStartingUp = false;
   scheduleUpdateWholeUI();
   if (dev.conId !== dev.sn) { //for tcp device
-    dev.sn && createDev(dev.sn); //create fileOnly entry for the disconnected tcp device
+    dev.sn && createDev(dev.sn); //create fileOnly entry for the disconnected tcp device  TODO: check
     dev.adbHost = dev.conId = ''; //make the device reusable and hidden
   }
 }
@@ -626,6 +630,7 @@ function startOrientService(dev) {
     setTimeout(function () {
       dev.capture && !dev.capture.orientSrv && (dev.capture.orientSrv = fastAdbOpen('[OrientServer]', dev, 'localabstract:asc.tool.screenorientation', function/*on_close*/() {
         dev.capture && (dev.capture.orientSrv = null);
+        dev.capture && startOrientService(dev);
       }, {log: true}));
     }, 2000);
   }, {timeout: cfg.adbStartOrientServiceTimeout * 1000, log: true});
@@ -702,13 +707,17 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   return true;
 }
 
-function setDeviceOrientation(dev, orientation) {
-  if (!chkDev(dev, {connected: true, capturing: true, orientable: true})
+function setDeviceOrientation(dev, orientation, canDelay) {
+  if (!chkDev(dev, {connected: true, capturing: true, orientable: !canDelay, orientableLater: !!canDelay})
       || !chk('orientation', orientation, ['landscape', 'portrait', 'free'])) {
     return false;
   }
-  cfg.logAllProcCmd && log(dev.capture.orientSrv.__tag + '<', orientation);
-  return dev.capture.orientSrv.write(orientation + '\n');
+  dev.capture.orientSrv.__adb_stream_opened ? writeCmd() : (dev.capture.orientSrv.__on_adb_stream_open = writeCmd);
+  return true;
+  function writeCmd() {
+    cfg.logAllProcCmd && log(dev.capture.orientSrv.__tag + '<', orientation);
+    return dev.capture.orientSrv.write(orientation + '\n');
+  }
 }
 
 function turnOnScreen(dev) {
@@ -741,7 +750,6 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   q.fastResize === undefined && (q.fastResize = q['useFastResize']); //for compatibility
   q.fastCapture === undefined && (q.fastCapture = q['useFastCapture']); //for compatibility
   q.size === undefined && (q.size = q['scale']); //for compatibility
-  q._old = {size: q.size, orient: q.orient, fastCapture: q.fastCapture, fastResize: q.fastResize};
   q._priority = (q.size || q.orient || q.fastCapture || q.fastResize) ? 1 : 0;
   if (dev && !chkDev(dev, {connected: true, capturable: true})
       || dev && !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
@@ -921,9 +929,10 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + ' ' + capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
-  q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
+  capture.q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
+  q.orientation && setDeviceOrientation(dev, q.orientation, /*canDelay:*/true);
 }
 
 function doRecord(dev, q/*same as capture*/) {
@@ -1056,7 +1065,7 @@ function web_handler(req, res) {
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
   if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
-      || !chkDev(dev, {connected: true, capturing: true})) {
+      || !chkDev(dev, {connected: true, capturing: true, image: true})) {
     return end(res, chk.err);
   }
   q.filename = querystring.escape(dev.sn) + '~live_' + dev.capture.q._hash + '_' + dev.capture.q.timestamp + '~frame' + String.fromCharCode(65 + String(dev.capture.image.i).length - 1) + dev.capture.image.i + '.jpg';
@@ -1087,8 +1096,7 @@ streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) 
     return end(res, chk.err);
   }
   return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
-          .replace(/@size\b/g, q._old.size || '').replace(/@orient\b/g, q._old.orient || '').replace(/@fastResize\b/g, q._old.fastResize || '').replace(/@fastCapture\b/g, q._old.fastCapture || '')
-          .replace(/@res_size\b/g, q._promise_q.size).replace(/@res_orient\b/g, q._promise_q.orient).replace(/@res_fastCapture\b/g, q._promise_q.fastCapture).replace(/@res_fastResize\b/g, q._promise_q.fastResize)
+          .replace(/@res_size\b/g, q._promise_q.size).replace(/@res_orient\b/g, q._promise_q.orient).replace(/@res_fastCapture\b/g, q._promise_q.fastCapture).replace(/@res_fastResize\b/g, q._promise_q.fastResize).replace(/@res_orientation\b/g, q.orientation || '')//todo: remove res_ prefix
           .replace(/checkedIf_res_fastCapture\b/g, q._promise_q.fastCapture ? 'checked' : '').replace(/checkedIf_res_fastResize\b/g, q._promise_q.fastResize ? 'checked' : '')
           .replace(/enabledIf_can_fastCapture\b/g, dev.fastLibPath ? '' : 'disabled').replace(/enabledIf_can_fastResize\b/g, !!dev.fastLibPath || dev.libPath >= './sc-400' ? '' : 'disabled')
           .replace(/__server_using_websocket\b/g, websocket ? 'true' : 'false')
@@ -1182,8 +1190,7 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
     });
     !Object.keys(dev.capture.consumerMap).length && dev.capture.__cleanup('on demand'); //end capture process immediately if no any consumer exists
   }
-  q.adbBridge && (dev.adbBridge = (q.adbBridge === 'true'));
-  q.orientation && setDeviceOrientation(dev, q.orientation);
+  q.adbBridge && !(dev.adbBridge = (q.adbBridge === 'true')) && dev.adbBridgeWebSocket && dev.adbBridgeWebSocket.__cleanup('disabled');
   return q.action === 'startRecording' ? end(res, doRecord(dev, q)) : end(res, 'OK');
 }).option = {log: true};
 (adminWeb_handlerMap['/prepareAllDevices' + cfg.adminUrlSuffix] = function (req, res, q) {
@@ -1375,8 +1382,7 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
       var serviceBuf = (payloadBuf[payloadBuf.length - 1] ? payloadBuf : payloadBuf.slice(0, -1)), total_matched_len = 0;
       arg1/*as localId*/ = (nextBackendId === 0xffffffff ? (nextBackendId = 1) : ++nextBackendId);
 
-      backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0);
-      backend.on('connect', function () {
+      backend = backend_create(/*localId:*/arg1, /*remoteId*/arg0, function /*on_connected*/() {
         cfg.logAdbBridgeDetail && log(backend.__tag, 'connection OK. ' + dev.adbHost + ' as backend ' + hexUint32(backend.__id));
         backend_write(backend, dev.buf_switchTransport);
       });
@@ -1434,9 +1440,9 @@ function handle_adbBridgeWebSocket_connection(dev, tag) {
     ws.send(buf);
   }
 
-  function backend_create(backendId, frontendId/*for peer id*/) {
+  function backend_create(backendId, frontendId/*for peer id*/, on_connected) {
     var tag = '[AdbBridge.BACKEND] {' + dev.id + '}';
-    var backend = net.connect(dev.adbHost);
+    var backend = net.connect(dev.adbHost, on_connected);
 
     backend.__id = backendId;
     backend.__frontendId = frontendId;

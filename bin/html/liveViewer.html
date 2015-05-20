@@ -45,6 +45,7 @@
         fastCapture
       </label>
     </span>
+    <input type="hidden" name="orientation" value="@res_orientation" id="devOrient"/>
   </form>
   <iframe name="resultIFrame"></iframe>
 </div>
@@ -63,9 +64,9 @@
   <div style="font-weight:bold; margin-top: 12px">Device Action</div>
   <div style="border: 1px solid #000000">
     <div style="margin-top: 4px">
-      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame" title="Landscape (Locked)" style="border: 1px solid #000000; width: 35px; height: 15px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
-      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame" title="Portrait (Locked)" style="border: 1px solid #000000; width: 15px; height: 35px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
-      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame" title="Unlock Orientation" style="vertical-align: middle">Free</a>
+      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame" onclick="$('#devOrient').val('landscape')" title="Landscape (Locked)" style="border: 1px solid #000000; width: 35px; height: 15px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
+      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame" onclick="$('#devOrient').val('portrait')" title="Portrait (Locked)" style="border: 1px solid #000000; width: 15px; height: 35px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
+      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame" onclick="$('#devOrient').val('free')" title="Unlock Orientation" style="vertical-align: middle">Free</a>
     </div>
     <div style="margin-top: 12px">
       <a class="button" href="turnOnScreen?device=@device&accessKey=@accessKey" target="resultIFrame">ON</a>
@@ -92,7 +93,7 @@
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
   <div id="lblLoading">loading</div>
   <div id="viewerContainer" style="display: inline-block">
-    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&size=@size&orient=@orient&fastCapture=@fastCapture&fastResize=@fastResize"/>
+    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&size=@res_size&fastCapture=@res_fastCapture&fastResize=@res_fastResize&orientation=@res_orientation"/>
   </div>
 </div>
 <div style="position: fixed; right: 0; bottom: 0; width: 130px; text-align: center">
