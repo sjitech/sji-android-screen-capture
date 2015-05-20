@@ -176,10 +176,19 @@ function adbHost_makeBuf(buf) {
 
 function adbPreparePushFile(content, remotePath) {
   var bufAry = [], head, body, i;
-  bufAry.push((head = new Buffer('SEND____')) && head.writeUInt32LE((body = new Buffer(remotePath)).length, 4) && head, body);
-  for (i = 0; i < content.length; i += 64 * 1024)
-    bufAry.push((head = new Buffer('DATA____')) && head.writeUInt32LE((body = content.slice(i, i + 64 * 1024)).length, 4) && head, body);
-  bufAry.push((head = new Buffer('DONE____')) && head.writeUInt32LE(Date.now() / 1000, 4, /*noAssert:*/true) && head);
+  head = new Buffer('SEND____');
+  body = new Buffer(remotePath);
+  head.writeUInt32LE(body.length, 4);
+  bufAry.push(head, body);
+  for (i = 0; i < content.length; i += 64 * 1024) {
+    head = new Buffer('DATA____');
+    body = content.slice(i, i + 64 * 1024);
+    head.writeUInt32LE(body.length, 4);
+    bufAry.push(head, body);
+  }
+  head = new Buffer('DONE____');
+  head.writeUInt32LE(Date.now() / 1000, 4, /*noAssert:*/true);
+  bufAry.push(head);
   return Buffer.concat(bufAry);
 }
 
