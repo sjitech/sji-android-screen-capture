@@ -21,31 +21,31 @@
     <span style="@hideIf_masterMode">
       <button type="submit">Set</button>
       <label title="Example: 0.5, 400x600, 400x, x600, 600x400 means landscape. Note: this size maybe adjusted to 8/n of original when in fastResize mode">
-        <input type="text" name="size" value="@res_size" size="10" id="viewSize"/>
+        <input type="text" name="size" value="@size" size="10" id="viewSize"/>
       </label>
       <label title="view as landscape or portrait">
-        <input type="hidden" name="orient" value="@res_orient" id="viewOrient"/>
-        <input type="button" class="orient_sample @res_orient"/>
+        <input type="hidden" name="orient" value="@orient" id="viewOrient"/>
+        <input type="button" class="orient_sample @orient"/>
       </label>
       <label enabledIf_can_fastResize title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
-        <input type="hidden" name="fastResize" value="@res_fastResize"/>
-        <input type="checkbox" checkedIf_res_fastResize enabledIf_can_fastResize onclick="$(this).prev().val(this.checked)"/>fastResize
+        <input type="hidden" name="fastResize" value="@fastResize"/>
+        <input type="checkbox" checkedIf_fastResize enabledIf_can_fastResize onclick="$(this).prev().val(this.checked)"/>fastResize
       </label>
       <label enabledIf_can_fastCapture title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
-        <input type="hidden" name="fastCapture" value="@res_fastCapture"/>
-        <input type="checkbox" checkedIf_res_fastCapture enabledIf_can_fastCapture onclick="$(this).prev().val(this.checked)"/>fastCapture
+        <input type="hidden" name="fastCapture" value="@fastCapture"/>
+        <input type="checkbox" checkedIf_fastCapture enabledIf_can_fastCapture onclick="$(this).prev().val(this.checked)"/>fastCapture
       </label>
     </span>
     <span style="@showIf_masterMode">
-      @res_size
-      <label class="@res_fastResize" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
+      @size
+      <label class="@fastResize" title="Android 4.0+: This mode effectively shrink image size, so cut down CPU usage. But to prevent too much alias, the result size will be auto adjusted to n/8 of original, so maybe different with requested">
         fastResize
       </label>
-      <label class="@res_fastCapture" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
+      <label class="@fastCapture" title="Android4.2+: This mode will effectively capture screenshot only when change happens, so cut down CPU usage and network traffic">
         fastCapture
       </label>
     </span>
-    <input type="hidden" name="orientation" value="@res_orientation" id="devOrient"/>
+    <input type="hidden" name="orientation" value="@orientation" id="devOrient"/>
   </form>
   <iframe name="resultIFrame"></iframe>
 </div>
@@ -93,7 +93,7 @@
 <div style="text-align: center; margin-top: 56px; margin-right: 130px; position: relative; z-index: 100">
   <div id="lblLoading">loading</div>
   <div id="viewerContainer" style="display: inline-block">
-    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&size=@res_size&fastCapture=@res_fastCapture&fastResize=@res_fastResize&orientation=@res_orientation"/>
+    <img id="viewer" src="capture?device=@device&accessKey=@accessKey&size=@size&fastCapture=@fastCapture&fastResize=@fastResize&orientation=@orientation"/>
   </div>
 </div>
 <div style="position: fixed; right: 0; bottom: 0; width: 130px; text-align: center">

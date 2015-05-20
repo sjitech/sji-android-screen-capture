@@ -1096,8 +1096,8 @@ streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) 
     return end(res, chk.err);
   }
   return end(res, replaceComVar(htmlCache[urlPath], dev).replaceShowIf('masterMode', dev.masterMode)
-          .replace(/@res_size\b/g, q._promise_q.size).replace(/@res_orient\b/g, q._promise_q.orient).replace(/@res_fastCapture\b/g, q._promise_q.fastCapture).replace(/@res_fastResize\b/g, q._promise_q.fastResize).replace(/@res_orientation\b/g, q.orientation || '')//todo: remove res_ prefix
-          .replace(/checkedIf_res_fastCapture\b/g, q._promise_q.fastCapture ? 'checked' : '').replace(/checkedIf_res_fastResize\b/g, q._promise_q.fastResize ? 'checked' : '')
+          .replace(/@size\b/g, q._promise_q.size).replace(/@orient\b/g, q._promise_q.orient).replace(/@fastCapture\b/g, q._promise_q.fastCapture).replace(/@fastResize\b/g, q._promise_q.fastResize).replace(/@orientation\b/g, q.orientation || '')
+          .replace(/checkedIf_fastCapture\b/g, q._promise_q.fastCapture ? 'checked' : '').replace(/checkedIf_fastResize\b/g, q._promise_q.fastResize ? 'checked' : '')
           .replace(/enabledIf_can_fastCapture\b/g, dev.fastLibPath ? '' : 'disabled').replace(/enabledIf_can_fastResize\b/g, !!dev.fastLibPath || dev.libPath >= './sc-400' ? '' : 'disabled')
           .replace(/__server_using_websocket\b/g, websocket ? 'true' : 'false')
       , 'text/html');
