@@ -248,9 +248,9 @@
       });
   })();
 
-  var devAry = $('.deviceSN').toArray().reduce(function (resAry, el) {
-    return resAry.push($(el).text()) && resAry;
-  }, []);
+  var devAry = $('input[name="device"]').toArray().map(function (el) {
+    return el.value;
+  });
   console.log(JSON.stringify(devAry));
 
   function adb(cmd, timeout, device, maxSize) {
