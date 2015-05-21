@@ -28,9 +28,9 @@ public class OrientationService extends Service {
 	static String tag = "ASC";
 	static HashMap<String, Integer> orientMap = new HashMap<String, Integer>();
 	static {
-		orientMap.put("landscape", ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-		orientMap.put("portrait", ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-		orientMap.put("free", ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+		orientMap.put("orient:landscape", ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+		orientMap.put("orient:portrait", ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+		orientMap.put("orient:free", ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
 	}
 	WindowManager wm;
 	View ghostView;
@@ -147,7 +147,7 @@ public class OrientationService extends Service {
 					final LocalSocket _con = con;
 					new Thread() {
 						public void run() {
-							final ScreenUnlocker screenUnlocker = new ScreenUnlocker();
+							final Screen screen = new Screen();
 							for (;;) {
 								Log.d(tag, "waiting command");
 								String cmd;
@@ -162,7 +162,7 @@ public class OrientationService extends Service {
 											ownerThreadId = -1;
 										}
 									}
-									screenUnlocker.close();
+									screen.free();
 									break;
 								}
 
@@ -177,10 +177,12 @@ public class OrientationService extends Service {
 											mainthreadAccessor.postDelayed(action_set_orient, 0);
 										}
 									}
-								} else if ("open".equals(cmd)) {
-									screenUnlocker.open();
-								} else if ("close".equals(cmd)) {
-									screenUnlocker.close();
+								} else if ("screen:on".equals(cmd)) {
+									screen.turnOn(false);
+								} else if ("screen:on+unlock".equals(cmd)) {
+									screen.turnOn(true);
+								} else if ("screen:free".equals(cmd)) {
+									screen.free();
 								}
 							} // end of command loop
 
@@ -226,69 +228,105 @@ public class OrientationService extends Service {
 		return null;
 	}
 
-	class ScreenUnlocker {
-		public boolean opened;
+	class Screen {
+		public boolean did_addGhostView;
 		public View ghostView;
 		LayoutParams lp;
-		KeyguardManager.KeyguardLock keyGuardLock;
+		public boolean did_acquireWakeLock;
 		PowerManager.WakeLock wakeLock;
+		public boolean did_disableKeyguard;
+		KeyguardManager.KeyguardLock keyGuardLock;
 
-		public void open() {
-			mainthreadAccessor.post(action_open);
+		public Screen() {
+			lp = new LayoutParams();
+			lp.type = LayoutParams.TYPE_SYSTEM_OVERLAY;
+			lp.width = 0;
+			lp.height = 0;
+			lp.flags = 0;
+			lp.flags |= LayoutParams.FLAG_NOT_FOCUSABLE;
+			lp.flags |= LayoutParams.FLAG_NOT_TOUCHABLE;
+			lp.flags |= LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+			lp.flags |= LayoutParams.FLAG_TURN_SCREEN_ON;
+			lp.flags |= LayoutParams.FLAG_KEEP_SCREEN_ON;
+			lp.flags |= LayoutParams.FLAG_DISMISS_KEYGUARD;
 		}
 
-		public void close() {
-			mainthreadAccessor.post(action_close);
-		}
-
-		Runnable action_open = new Runnable() {
-			public void run() {
-				action_close.run();
-				try {
-					if (ghostView == null) {
-						ghostView = new View(OrientationService.this);
-						lp = new LayoutParams();
-						lp.type = LayoutParams.TYPE_SYSTEM_OVERLAY;
-						lp.width = 0;
-						lp.height = 0;
-						lp.flags = 0;
-						lp.flags |= LayoutParams.FLAG_NOT_FOCUSABLE;
-						lp.flags |= LayoutParams.FLAG_NOT_TOUCHABLE;
-						lp.flags |= LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-						lp.flags |= LayoutParams.FLAG_TURN_SCREEN_ON;
-						lp.flags |= LayoutParams.FLAG_KEEP_SCREEN_ON;
-						lp.flags |= LayoutParams.FLAG_DISMISS_KEYGUARD;
+		public void turnOn(final boolean unlock) {
+			mainthreadAccessor.post(new Runnable() {
+				public void run() {
+					action_free.run();
+					try {
+						if (ghostView == null)
+							ghostView = new View(OrientationService.this);
+						wm.addView(ghostView, lp);
+						Log.d(tag, "addGhostView OK");
+						did_addGhostView = true;
+					} catch (Throwable e) {
+						Log.d(tag, "addGhostView() error: " + e.getMessage());
+						e.printStackTrace();
 					}
-					wm.addView(ghostView, lp);
-					if (keyGuardLock == null)
-						keyGuardLock = keyGuardManager.newKeyguardLock("ASC");
-					keyGuardLock.disableKeyguard();
-					if (wakeLock == null)
-						wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "ASC");
-					wakeLock.acquire();
-				} catch (Throwable e) {
-					Log.d(tag, "screenUnlocker open() error: " + e.getMessage());
-					e.printStackTrace();
+					try {
+						if (wakeLock == null)
+							wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, OrientationService.class.getPackage().getName() + '.' + Thread.currentThread().getId());
+						wakeLock.acquire();
+						Log.d(tag, "acquireWakeLock OK");
+						did_acquireWakeLock = true;
+					} catch (Throwable e) {
+						Log.d(tag, "acquireWakeLock() error: " + e.getMessage());
+						e.printStackTrace();
+					}
+					if (unlock) {
+						try {
+							if (keyGuardLock == null)
+								keyGuardLock = keyGuardManager.newKeyguardLock("ASC");
+							keyGuardLock.disableKeyguard();
+							Log.d(tag, "disableKeyguard OK");
+							did_disableKeyguard = true;
+						} catch (Throwable e) {
+							Log.d(tag, "disableKeyguard() error: " + e.getMessage());
+							e.printStackTrace();
+						}
+					}
 				}
-				Log.d(tag, "screenUnlocker opened");
-				opened = true;
-			}
-		};
+			});
+		}
 
-		Runnable action_close = new Runnable() {
+		public void free() {
+			mainthreadAccessor.post(action_free);
+		}
+
+		Runnable action_free = new Runnable() {
 			public void run() {
-				if (!opened)
-					return;
 				try {
-					wm.removeView(ghostView);
-					keyGuardLock.reenableKeyguard();
-					wakeLock.release();
+					if (did_addGhostView) {
+						wm.removeView(ghostView);
+						Log.d(tag, "removeGhostView OK");
+						did_addGhostView = false;
+					}
 				} catch (Throwable e) {
-					Log.d(tag, "screenUnlocker close() error: " + e.getMessage());
+					Log.d(tag, "removeGhostView() error: " + e.getMessage());
 					e.printStackTrace();
 				}
-				Log.d(tag, "screenUnlocker closed");
-				opened = false;
+				try {
+					if (did_acquireWakeLock) {
+						wakeLock.release();
+						Log.d(tag, "releaseWakeLock OK");
+						did_acquireWakeLock = false;
+					}
+				} catch (Throwable e) {
+					Log.d(tag, "releaseWakeLock() error: " + e.getMessage());
+					e.printStackTrace();
+				}
+				try {
+					if (did_disableKeyguard) {
+						keyGuardLock.reenableKeyguard();
+						Log.d(tag, "reenableKeyguard OK");
+						did_disableKeyguard = false;
+					}
+				} catch (Throwable e) {
+					Log.d(tag, "reenableKeyguard() error: " + e.getMessage());
+					e.printStackTrace();
+				}
 			}
 		};
 	}
