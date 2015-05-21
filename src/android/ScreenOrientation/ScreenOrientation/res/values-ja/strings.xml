@@ -3,6 +3,6 @@
 
     <string name="app_name">画面方向</string>
     <string name="notify_title">画面方向ロック中</string>
-    <string name="notify_content">タップして解除します。</string>
+    <string name="notify_content">タップで解除します</string>
 
 </resources>
