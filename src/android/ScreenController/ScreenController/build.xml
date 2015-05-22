@@ -3,21 +3,23 @@
               Any modifications will be overwritten.
               To include a user specific buildfile here, simply create one in the same
               directory with the processing instruction <?eclipse.ant.import?>
-              as the first entry and export the buildfile again. --><project basedir="." default="build" name="android-support-v7-appcompat">
+              as the first entry and export the buildfile again. --><project basedir="." default="build" name="ScreenController">
     <property environment="env"/>
     <property name="ECLIPSE_HOME" value="../../../../../../../macq/Downloads/eclipse421Juno"/>
     <property name="debuglevel" value="source,lines,vars"/>
-    <property name="target" value="1.7"/>
-    <property name="source" value="1.7"/>
+    <property name="target" value="1.6"/>
+    <property name="source" value="1.6"/>
     <path id="Android 5.1.1.libraryclasspath">
         <pathelement location="../../../../../../../../Applications/android-sdk-macosx/platforms/android-22/android.jar"/>
     </path>
     <path id="Android Private Libraries.libraryclasspath">
-        <pathelement location="libs/android-support-v7-appcompat.jar"/>
+        <pathelement location="../appcompat/libs/android-support-v7-appcompat.jar"/>
         <pathelement location="libs/android-support-v4.jar"/>
     </path>
-    <path id="Android Dependencies.libraryclasspath"/>
-    <path id="android-support-v7-appcompat.classpath">
+    <path id="Android Dependencies.libraryclasspath">
+        <pathelement location="../appcompat/bin/screencontroller_appcompat.jar"/>
+    </path>
+    <path id="ScreenController.classpath">
         <pathelement location="bin/classes"/>
         <path refid="Android 5.1.1.libraryclasspath"/>
         <path refid="Android Private Libraries.libraryclasspath"/>
@@ -47,7 +49,7 @@
         <javac debug="true" debuglevel="${debuglevel}" destdir="bin/classes" includeantruntime="false" source="${source}" target="${target}">
             <src path="src"/>
             <src path="gen"/>
-            <classpath refid="android-support-v7-appcompat.classpath"/>
+            <classpath refid="ScreenController.classpath"/>
         </javac>
     </target>
     <target description="Build all projects which reference this project. Useful to propagate changes." name="build-refprojects"/>
