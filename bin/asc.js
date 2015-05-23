@@ -293,38 +293,6 @@ FilenameInfo.prototype.toString = function () {
   return this.name /*original name*/;
 };
 
-function convertCRLFToLF(context, requiredCrCount, buf) {
-  if (!requiredCrCount) { //lucky! no CR prepended, so need not convert.
-    return [buf];
-  }
-  var bufAry = [], startPos = 0, crCount = 0, bufLen = buf.length;
-  if (context.orphanCrCount) { //remove orphan CR
-    var restCrCount = requiredCrCount - context.orphanCrCount;
-    (!restCrCount && buf[0] === LF || restCrCount && buf[0] === CR && buf[1] === LF)
-        ? (startPos = restCrCount)
-        : bufAry.push(context.orphanCrCount === 2 ? BUF_CR2 : BUF_CR);
-    context.orphanCrCount = 0;
-  }
-  for (var i = startPos; i < bufLen; i++) { // convert CRLF or CRCRLF to LF
-    if (buf[i] === CR) {
-      crCount++;
-      if (i + 1 === bufLen) {
-        context.orphanCrCount = Math.min(crCount, requiredCrCount); //mark as orphan CR
-        startPos < bufLen - context.orphanCrCount && bufAry.push(buf.slice(startPos, bufLen - context.orphanCrCount));
-        return bufAry;
-      }
-    } else {
-      if (crCount >= requiredCrCount && buf[i] === LF) {
-        bufAry.push(buf.slice(startPos, i - requiredCrCount));
-        startPos = i;
-      }
-      crCount = 0;
-    }
-  }
-  bufAry.push(buf.slice(startPos));
-  return bufAry;
-}
-
 function isTcpConId(conId) {
   return /:\d+$/.test(conId);
 }
@@ -525,7 +493,6 @@ function prepareDevice(dev, force/*optional*/) {
     if (parts.length !== 3) {
       return setStatus('failed to check basic info');
     }
-    dev.CrCount = Math.max(0, stdout.match(/\r?\r?\n$/)[0].length - 1/*LF*/ - 1/*another CR will be removed by stty -oncr*/); //in unix/linux this will be 0
     dev.info = parts[0].split(/\r*\n/);
     dev.sysVer = Number((dev.info[2] + '.0.0').split('.').slice(0, 3).join('.').replace(/\.([^.]+)$/, '$1')); //4.1.2 -> 4.12
     dev.armv = parseInt(dev.info[3].replace(/^armeabi-v|^arm64-v/, '')) >= 7 ? 7 : 5; //armeabi-v7a -> 7
@@ -840,21 +807,19 @@ function _startRemoteDesktopServer(dev, q) {
         cleanup(stderr || 'CLOSED');
       }, {log: true});
   adbCon.__on_adb_stream_data = function (buf) {
-    convertCRLFToLF(capture/*context*/, dev.CrCount, buf).forEach(function (buf) {
-      var pos = 0, unsavedStart = 0, endPos = buf.length;
-      for (; pos < endPos; pos++) {
-        if (foundMark && buf[pos] === 0xD9) {
-          capture.image = {buf: Buffer.concat(bufAry.push(buf.slice(unsavedStart, pos + 1)) && bufAry), i: capture.image ? capture.image.i + 1 : 1};
-          bufAry = [];
-          unsavedStart = pos + 1;
-          forEachValueIn(capture.consumerMap, function (res) {
-            res.setHeader/*isHttp*/ && (res.q.type === 'ajpg' ? writeMultipartImage : endCaptureConsumer)(res, capture.image.buf);
-          });//end of consumer enum
-        }
-        foundMark = (buf[pos] === 0xff);
-      } //end of for loop in buffer
-      unsavedStart < endPos && bufAry.push(buf.slice(unsavedStart, endPos));
-    });
+    var pos = 0, unsavedStart = 0, endPos = buf.length;
+    for (; pos < endPos; pos++) {
+      if (foundMark && buf[pos] === 0xD9) {
+        capture.image = {buf: Buffer.concat(bufAry.push(buf.slice(unsavedStart, pos + 1)) && bufAry), i: capture.image ? capture.image.i + 1 : 1};
+        bufAry.length = 0;
+        unsavedStart = pos + 1;
+        forEachValueIn(capture.consumerMap, function (res) {
+          res.setHeader/*isHttp*/ && (res.q.type === 'ajpg' ? writeMultipartImage : endCaptureConsumer)(res, capture.image.buf);
+        });//end of consumer enum
+      }
+      foundMark = (buf[pos] === 0xff);
+    } //end of for loop in buffer
+    unsavedStart < endPos && bufAry.push(buf.slice(unsavedStart, endPos));
   };
   turnOnScreen(dev);
   scheduleUpdateLiveUI();
