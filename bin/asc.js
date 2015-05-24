@@ -606,15 +606,17 @@ function prepareDevice(dev, force/*optional*/) {
 
 function startScreenControllerService(dev) {
   adbRun('[StartScreenControllerService]', dev, 'am startservice -n asc.tool.screencontroller/.ScreenControllerService' + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function (stderr, stdout) {
-    (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && connectToScreenControllerService(dev);
+    dev.capture && (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && turnOnScreen_setDeviceOrientation(dev);
   }, {timeout: cfg['adbStartScreenControllerServiceTimeout'] * 1000, log: true});
 }
 
-function connectToScreenControllerService(dev) {
-  dev.capture && !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/() {
+function turnOnScreen_setDeviceOrientation(dev, orient) {
+  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/() {
     dev.capture && (dev.capture.screenController = null);
     dev.capture && startScreenControllerService(dev);
-  }, {log: true})) && turnOnScreen(dev, /*unlock:*/true);
+  }, {log: true}));
+  turnOnScreen(dev, /*unlock:*/true);
+  setDeviceOrientation(dev, orient || dev.last_devOrient);
 }
 
 function sendTouchEvent(dev, _type, _x, _y) {
@@ -688,15 +690,16 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   return true;
 }
 
-function setDeviceOrientation(dev, orientation) {
+function setDeviceOrientation(dev, orient) {
   if (!chkDev(dev, {connected: true, capturing: true, orientable: true})
-      || !chk('orientation', orientation, ['landscape', 'portrait', 'free'])) {
+      || !chk('orientation', orient, ['landscape', 'portrait', 'free'])) {
     return false;
   }
   (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__on_adb_stream_open', function () {
-    cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', orientation);
-    return dev.capture.screenController.write('orient:' + orientation + '\n');
+    cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', orient);
+    return dev.capture.screenController.write('orient:' + orient + '\n');
   });
+  dev.last_devOrient = orient;
   return true;
 }
 
@@ -865,7 +868,6 @@ function _startRemoteDesktopServer(dev, q) {
     cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '>', buf, /*autoNewLine:*/false);
   };
 
-  connectToScreenControllerService(dev); //set capture.screenController
   return capture;
 
   function cleanup(reason) {
@@ -891,7 +893,7 @@ function _startRemoteDesktopServer(dev, q) {
 
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
   scheduleUpdateLiveUI();
-  var capture = dev.capture || _startRemoteDesktopServer(dev, q);
+  var useExisting = !!dev.capture, capture = dev.capture || _startRemoteDesktopServer(dev, q);
   capture.consumerMap[res.__tag] = res;
   clearTimeout(capture.delayKillTimer);
   res.q = q;
@@ -907,9 +909,8 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   }, cfg.fpsStatisticInterval * 1000));
   capture.q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
-  q.type === 'jpg' && capture.image && capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
-  q.orientation && setDeviceOrientation(dev, q.orientation, /*canDelay:*/true);
-  turnOnScreen(dev, /*unlock:*/true, /*canDelay:*/true);
+  q.type === 'jpg' && capture.image && useExisting && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
+  (q.type === 'ajpg' || q._isFirstSingleJpgReq) && turnOnScreen_setDeviceOrientation(dev, q.orientation);
 }
 
 function doRecord(dev, q/*same as capture*/) {
@@ -1037,7 +1038,7 @@ function web_handler(req, res) {
   return doCapture(dev, res, q);
 }).option = {
   logCondition: function (req, res, q) {
-    return !(q.type === 'jpg' && q.timestamp);
+    return q.type === 'ajpg' || (q._isFirstSingleJpgReq = !q.timestamp);
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
@@ -1066,7 +1067,7 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   end(res, turnOnScreen(dev, q['unlock'] === 'true') ? 'OK' : chk.err);
 }).option = {log: true};
 (streamWeb_handlerMap['/setOrientation'] = function (req, res, q, urlPath, dev) {
-  end(res, setDeviceOrientation(dev, q.orientation) ? 'OK' : chk.err);
+  end(res, setDeviceOrientation(dev, q['orientation']) ? 'OK' : chk.err);
 }).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
   if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
