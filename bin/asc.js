@@ -13,8 +13,7 @@ process.on('uncaughtException', function (e) {
 });
 var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer, pushContentMap = {/*filename:*/};
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
-var REC_TAG = '[REC]', CR = 0xd, LF = 0xa, BUF_CR2 = new Buffer([CR, CR]), BUF_CR = new Buffer([CR]), EMPTY_BUF = new Buffer([]),
-    touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
+var REC_TAG = '[REC]', EMPTY_BUF = new Buffer([]), touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
@@ -26,7 +25,7 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
 });
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, adbInstallOrientServiceTimeout: 0, adbStartOrientServiceTimeout: 0, __end: 0});
+true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -103,7 +102,7 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
         }
         cfg.logAllProcCmd && log(tag, '---- adb stream opened');
         adbCon.__adb_stream_opened = true;
-        adbCon.__on_adb_stream_open && adbCon.__on_adb_stream_open();
+        adbCon.emit('__on_adb_stream_open');
 
         if (!(buf = buf.slice(okay_len)).length) return;
       }
@@ -233,6 +232,7 @@ function dummyFunc() {
 function passthrough() {
   for (var i = 0; i < arguments.length; i++) (typeof(arguments[i]) === 'function') && arguments[i]();
 }
+passthrough.once = passthrough.on = passthrough;
 
 function chk(name, value /*, next parameters: candidateArray | candidateValue | candidateMinValue, candidateMaxValue*/) {
   if (arguments.length === 3) { //check against array
@@ -370,15 +370,16 @@ function getDev(q /*{[IN]device, [IN]accessKey, [OUT]devHandle}*/, opt) {
 
 function chkDev(dev, opt) {
   var failed = !dev && (chk.err = 'device not found')
-      || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
-      || opt.capturing && !(dev.capture) && (chk.err = 'screen capturer not started')
-      || opt.image && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started completely')
-      || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
-      || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
-      || opt.touchable && !(dev.capture && dev.capture.touchSrv && dev.capture.touchSrv.__adb_stream_opened) && (chk.err = 'device not ready for touch')
-      || opt.keybdable && !(dev.capture && dev.capture.keybdSrv && dev.capture.keybdSrv.__adb_stream_opened) && (chk.err = 'device not ready for keyboard')
-      || opt.orientableLater && !(dev.capture && dev.capture.orientSrv) && (chk.err = 'device not ready for changing orientation!')
-      || opt.orientable && !(dev.capture.orientSrv && dev.capture.orientSrv.__adb_stream_opened) && (chk.err = 'device not ready for changing orientation');
+          || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
+          || opt.capturing && !(dev.capture) && (chk.err = 'screen capturer not started')
+          || opt.image && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started completely')
+          || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
+          || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
+          || opt.touchable && !(dev.capture && dev.capture.touchSrv ) && (chk.err = 'device not ready for touch')
+          || opt.keybdable && !(dev.capture && dev.capture.keybdSrv ) && (chk.err = 'device not ready for keyboard')
+          || opt.orientable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for changing orientation!')
+          || opt.unlockable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for turning on and unlocking screen')
+      ;
   return !failed;
 }
 
@@ -475,10 +476,10 @@ var cmd_getExtraInfo = ''
     + ' echo ===; ./busybox grep -Ec \'^processor\' /proc/cpuinfo;'
     + ' echo ===; ./busybox head -n 1 /proc/meminfo;'
     + ' echo ===; LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./$DLOPEN ./sc-??? ./fsc-???;'
-    + ' echo ===; ls -d /data/data/asc.tool.screenorientation;';
-var cmd_uninstallOrientApp = ' pm uninstall asc.tool.screenorientation >/dev/null 2>/dev/null;';
-var cmd_installOrientApp = ' pm install ' + cfg.androidWorkDir + '-ScreenOrientation.apk;';
-var cmd_deleteOrientAppFile = ' rm ' + cfg.androidWorkDir + '-ScreenOrientation.apk;';
+    + ' echo ===; ls -d /data/data/asc.tool.screencontroller;';
+var cmd_uninstallScreenControllerApp = ' pm uninstall asc.tool.screencontroller >/dev/null 2>/dev/null;';
+var cmd_installScreenControllerApp = ' pm install ' + cfg.androidWorkDir + '-screencontroller.apk;';
+var cmd_deleteScreenControllerAppFile = ' rm ' + cfg.androidWorkDir + '-screencontroller.apk;';
 
 function prepareDevice(dev, force/*optional*/) {
   if (dev.status === 'OK' && !force || dev.status === 'preparing') return;
@@ -509,7 +510,7 @@ function prepareDevice(dev, force/*optional*/) {
       }
       return finishPrepare(/*fileChanged:*/true);
     }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
-    adbCon.__on_adb_stream_open = function () {
+    adbCon.once('__on_adb_stream_open', function () {
       for (var _filename in pushContentMap) { //noinspection JSUnfilteredForInLoop
         var name = _filename, sysVer = parseInt(name.slice(name.replace(/-\d+$/, '').length + 1)) / 100, armv = parseInt(name.slice(name.replace(/\.armv\d+$/, '').length + 5));
         (!sysVer || sysVer <= dev.sysVer) && (!armv || dev.armv === armv)
@@ -518,7 +519,7 @@ function prepareDevice(dev, force/*optional*/) {
         && adbCon.write(pushContentMap[name]);
       }
       adbCon.write(new Buffer('QUIT\0\0\0\0'));
-    };
+    });
   }, {timeout: cfg.adbCheckBasicInfoTimeout * 1000, log: true}); //end of CheckBasicInfo
 
   function setStatus(status) {
@@ -529,7 +530,7 @@ function prepareDevice(dev, force/*optional*/) {
   }
 
   function finishPrepare(fileChanged) {
-    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallOrientApp + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
+    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallScreenControllerApp + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
       if (stderr) {
         return setStatus(stderr);
       }
@@ -541,17 +542,17 @@ function prepareDevice(dev, force/*optional*/) {
       } else if (!getMoreInfo(parts)) {
         return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
       }
-      if (parts[5] === '/data/data/asc.tool.screenorientation') { //app already installed
-        startOrientService(dev);
+      if (parts[5] === '/data/data/asc.tool.screencontroller') { //app already installed
+        startScreenControllerService(dev);
       } else {
-        dev.postPrepareProc = adbRun('[InstallOrientationService]', dev, cmd_installOrientApp, function/*on_close*/(stderr, stdout) {
+        dev.postPrepareProc = adbRun('[InstallScreenControllerApp]', dev, cmd_installScreenControllerApp, function/*on_close*/(stderr, stdout) {
           dev.postPrepareProc = null;
           if (!/\nSuccess/.test(stdout)) return;
-          startOrientService(dev);
-          dev.postPrepareProc = adbRun('[DeleteOrientApk]', dev, cmd_deleteOrientAppFile, function/*on_close*/() {
+          startScreenControllerService(dev);
+          dev.postPrepareProc = adbRun('[DeleteScreenControllerAppFile]', dev, cmd_deleteScreenControllerAppFile, function/*on_close*/() {
             dev.postPrepareProc = null;
           }, {timeout: 2000, log: true});
-        }, {timeout: cfg.adbInstallOrientServiceTimeout * 1000, log: true});
+        }, {timeout: cfg['adbInstallScreenControllerAppTimeout'] * 1000, log: true});
       }
       return setStatus('OK');
     }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
@@ -603,17 +604,17 @@ function prepareDevice(dev, force/*optional*/) {
   } //end of chkTouchDev
 } //end of prepareDevice
 
-function startOrientService(dev) {
-  adbRun('[StartOrientService]', dev, 'am startservice -n asc.tool.screenorientation/.OrientationService' + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function (stderr, stdout) {
-    (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && connectToOrientService(dev);
-  }, {timeout: cfg.adbStartOrientServiceTimeout * 1000, log: true});
+function startScreenControllerService(dev) {
+  adbRun('[StartScreenControllerService]', dev, 'am startservice -n asc.tool.screencontroller/.ScreenControllerService' + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function (stderr, stdout) {
+    (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && connectToScreenControllerService(dev);
+  }, {timeout: cfg['adbStartScreenControllerServiceTimeout'] * 1000, log: true});
 }
 
-function connectToOrientService(dev) {
-  dev.capture && !dev.capture.orientSrv && (dev.capture.orientSrv = adb('[OrientServer]', dev, 'localabstract:asc.tool.screenorientation', function/*on_close*/() {
-    dev.capture && (dev.capture.orientSrv = null);
-    dev.capture && startOrientService(dev);
-  }, {log: true}))
+function connectToScreenControllerService(dev) {
+  dev.capture && !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/() {
+    dev.capture && (dev.capture.screenController = null);
+    dev.capture && startScreenControllerService(dev);
+  }, {log: true})) && turnOnScreen(dev, /*unlock:*/true);
 }
 
 function sendTouchEvent(dev, _type, _x, _y) {
@@ -687,27 +688,27 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   return true;
 }
 
-function setDeviceOrientation(dev, orientation, canDelay) {
-  if (!chkDev(dev, {connected: true, capturing: true, orientable: !canDelay, orientableLater: !!canDelay})
+function setDeviceOrientation(dev, orientation) {
+  if (!chkDev(dev, {connected: true, capturing: true, orientable: true})
       || !chk('orientation', orientation, ['landscape', 'portrait', 'free'])) {
     return false;
   }
-  dev.capture.orientSrv.__adb_stream_opened ? writeCmd() : (dev.capture.orientSrv.__on_adb_stream_open = writeCmd);
+  (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__on_adb_stream_open', function () {
+    cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', orientation);
+    return dev.capture.screenController.write('orient:' + orientation + '\n');
+  });
   return true;
-  function writeCmd() {
-    cfg.logAllProcCmd && log(dev.capture.orientSrv.__tag + '<', orientation);
-    return dev.capture.orientSrv.write(orientation + '\n');
-  }
 }
 
-function turnOnScreen(dev) {
-  if (!chkDev(dev, {connected: true})) {
+function turnOnScreen(dev, unlock) {
+  if (!chkDev(dev, {connected: true, capturing: true, unlockable: true})) {
     return false;
   }
-  dev.adbCon_turnOnScreen && dev.adbCon_turnOnScreen.__cleanup('new request comes');
-  return (dev.adbCon_turnOnScreen = adbRun('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && input keyevent 26 && input keyevent 82', function/*on_close*/() {
-    dev.adbCon_turnOnScreen = null;
-  }, {timeout: cfg.adbTurnScreenOnTimeout * 1000}));
+  (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__on_adb_stream_open', function () {
+    cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', 'screen:on' + (unlock ? '+unlock' : ''));
+    return dev.capture.screenController.write('screen:on' + (unlock ? '+unlock' : '') + '\n');
+  });
+  return true;
 }
 
 function encryptSn(sn) {
@@ -821,8 +822,6 @@ function _startRemoteDesktopServer(dev, q) {
     } //end of for loop in buffer
     unsavedStart < endPos && bufAry.push(buf.slice(unsavedStart, endPos));
   };
-  turnOnScreen(dev);
-  scheduleUpdateLiveUI();
   q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
     capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
@@ -834,36 +833,39 @@ function _startRemoteDesktopServer(dev, q) {
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg.resentUnchangedImageInterval * 1000);
 
-  capture.touchSrv = adb('[TouchServer]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
+  capture.touchSrv = adb('[TouchSrv]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
   });
   capture.touchSrv.__sendEvent = function (type, code, value) {
     touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
     touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
     touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
-    cfg.logAllProcCmd && log(capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
-    capture.touchSrv.write(touchEventBuf);
+    (capture.touchSrv.__adb_stream_opened ? passthrough : capture.touchSrv).once('__on_adb_stream_open', function () {
+      cfg.logAllProcCmd && log(capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
+      capture.touchSrv.write(touchEventBuf);
+    });
   };
 
-  capture.keybdSrv = adb('[KeybdServer]', dev, 'shell:', function/*on_close*/() {
+  capture.keybdSrv = adb('[KeybdSrv]', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
   });
-  capture.keybdSrv.__on_adb_stream_open = function () {
+  capture.keybdSrv.once('__on_adb_stream_open', function () {
     capture.keybdSrv.__runCmd('exec >/dev/null 2>/dev/null');
     capture.keybdSrv.__runCmd('cd ' + cfg.androidWorkDir);
     capture.keybdSrv.__runCmd('./busybox stty -echo -onlcr; PS1=');
-    //capture.keybdSrv.__runCmd('alias k="/system/bin/input keyevent"; alias K=' + cfg.androidWorkDir + '/input_text.sh');
     capture.keybdSrv.__runCmd('mkdir ./dalvik-cache; export ANDROID_DATA=.; export CLASSPATH=./keybdserver.jar:/system/framework/input.jar; exec /system/bin/app_process /system/bin keybdserver.KeybdServer');
-  };
+  });
   capture.keybdSrv.__runCmd = function (cmd) {
-    cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '<', cmd);
-    capture.keybdSrv.write(cmd + '\n');
+    (capture.keybdSrv.__adb_stream_opened ? passthrough : capture.keybdSrv).once('__on_adb_stream_open', function () {
+      cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '<', cmd);
+      capture.keybdSrv.write(cmd + '\n');
+    });
   };
   capture.keybdSrv.__on_adb_stream_data = function (buf) {
     cfg.logAllProcCmd && log(capture.keybdSrv.__tag + '>', buf, /*autoNewLine:*/false);
   };
 
-  connectToOrientService(dev); //set capture.orientSrv
+  connectToScreenControllerService(dev); //set capture.screenController
   return capture;
 
   function cleanup(reason) {
@@ -876,7 +878,7 @@ function _startRemoteDesktopServer(dev, q) {
     capture.adbCon && capture.adbCon.__cleanup(reason);
     capture.touchSrv && capture.touchSrv.__cleanup('capturer closed');
     capture.keybdSrv && capture.keybdSrv.__cleanup('capturer closed');
-    capture.orientSrv && capture.orientSrv.__cleanup('capture closed');
+    capture.screenController && capture.screenController.__cleanup('capture closed');
     dev.capture = null;
     forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
       delete rdcWebSocket.devHandleMap[dev.i];
@@ -888,9 +890,9 @@ function _startRemoteDesktopServer(dev, q) {
 }
 
 function doCapture(dev, res/*Any Type Output Stream*/, q) {
+  scheduleUpdateLiveUI();
   var capture = dev.capture || _startRemoteDesktopServer(dev, q);
   capture.consumerMap[res.__tag] = res;
-  scheduleUpdateLiveUI();
   clearTimeout(capture.delayKillTimer);
   res.q = q;
   res.once('close', function () {
@@ -907,6 +909,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && capture.q !== q && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
   q.orientation && setDeviceOrientation(dev, q.orientation, /*canDelay:*/true);
+  turnOnScreen(dev, /*unlock:*/true, /*canDelay:*/true);
 }
 
 function doRecord(dev, q/*same as capture*/) {
@@ -1060,7 +1063,7 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   end(res, sendKeybdEvent(dev, q.text, /*isKeyCode:*/false) ? 'OK' : chk.err);
 };
 (streamWeb_handlerMap['/turnOnScreen'] = function (req, res, q, urlPath, dev) {
-  end(res, turnOnScreen(dev) ? 'OK' : chk.err);
+  end(res, turnOnScreen(dev, q['unlock'] === 'true') ? 'OK' : chk.err);
 }).option = {log: true};
 (streamWeb_handlerMap['/setOrientation'] = function (req, res, q, urlPath, dev) {
   end(res, setDeviceOrientation(dev, q.orientation) ? 'OK' : chk.err);
@@ -1535,7 +1538,7 @@ function reloadPushFiles() {
   pushContentMap = {};
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
     if (/^\./.test(filename)) return hash;
-    var content = fs.readFileSync(cfg.binDir + '/' + filename), isApk = /\.apk$/i.test(filename), remotePath = cfg.androidWorkDir + (isApk ? '-' : '/') + filename;
+    var content = fs.readFileSync(cfg.binDir + '/' + filename), isApk = /\.apk$/i.test(filename), remotePath = cfg.androidWorkDir + (isApk ? '-' : '/') + filename.toLocaleLowerCase();
     pushContentMap[filename] = adbPreparePushFile(content, remotePath);
     return hash.update(content);
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
