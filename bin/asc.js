@@ -4,7 +4,7 @@ process.chdir(__dirname); //set dir of current file as working dir
 var child_process = require('child_process'), fs = require('fs'), Url = require('url'), querystring = require('querystring'), Path = require('path'), crypto = require('crypto'), util = require('util'), net = require('net'), os = require('os'),
     jsonFile = require('./node_modules/jsonFile.js'), logger = require('./node_modules/logger.js'),
     cfg = util._extend(jsonFile.parse('./config.json'), process.argv[2/*first param*/] && jsonFile.parse(Path.resolve(old_work_dir, process.argv[2]))), //combine user provided configuration file with base file
-    log = logger.create(cfg && cfg.log_filePath, cfg && cfg.log_keepOldFileDays);
+    log = logger.create(cfg && cfg['log_filePath'], cfg && cfg['log_keepOldFileDays']);
 log('===================================pid:' + process.pid + '=======================================\nuse configuration: ' + JSON.stringify(cfg, null, '  '));
 process.on('uncaughtException', function (e) {
   log('uncaughtException: ' + e + "\n" + e.stack);
@@ -24,8 +24,8 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
   return keyCodeMap[keyNameMap[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, enableGetFileFromStreamWeb: 0});
-true === false && log({fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', __end: 0});
+true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, enableGetFileFromStreamWeb: 0});
+true === false && log({fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, adminUrlSuffix: '', viewUrlBase: '', cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -158,7 +158,7 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
     isDevCmd && (delete dev.adbConMap[adbCon.__id]);
     if (reason === 'network error' && !adbCon.__everConnected && adbHost.autoStartLocalAdbServer) {
       setTimeout(function () {
-        spawn('[StartAdbServer]', cfg.adb, ['-P', adbHost.port, 'start-server'], {timeout: 10 * 1000});
+        spawn('[StartAdbServer]', cfg['adb'], ['-P', adbHost.port, 'start-server'], {timeout: 10 * 1000});
       }, cfg['adbAutoStartServerInterval'] * 1000);
     }
     clearTimeout(timer);
@@ -393,7 +393,7 @@ function AdbHost(adbHostStr) {
   this.port = port || 5037;
   this.str = this.host + ':' + this.port;
   (this.autoStartLocalAdbServer = !host) && !AdbHost.haveCheckedLocalAdb && (AdbHost.haveCheckedLocalAdb = true)
-  && spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
+  && spawn('[CheckAdb]', cfg['adb'], ['version'], function/*on_close*/(stderr) {
     stderr && process.stderr.write('Warning: failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
   }, {timeout: 30 * 1000});
 }
@@ -715,7 +715,7 @@ function turnOnScreen(dev, unlock) {
 function encryptSn(sn) {
   sn = sn || ' ';
   var d, i;
-  if (cfg.checkDevTimeLimit) {
+  if (cfg['checkDevTimeLimit']) {
     var dt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     d = pad234(dt.getFullYear() % 100, 2) + pad234(dt.getMonth() + 1, 2) + pad234(dt.getDate(), 2);
   } else {
@@ -827,12 +827,12 @@ function _startRemoteDesktopServer(dev, q) {
     capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.oldImageIndex = capture.image.i));
-  }, cfg.resentImageForSafariAfter * 1000));
+  }, cfg['resentImageForSafariAfter'] * 1000));
   capture.timer_resentUnchangedImage = setInterval(function () {
     capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(capture.consumerMap, function (res) { //resend image to keep image tag alive
       writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.veryOldImageIndex = capture.image.i));
-  }, cfg.resentUnchangedImageInterval * 1000);
+  }, cfg['resentUnchangedImageInterval'] * 1000);
 
   capture.touchSrv = adb('[TouchSrv]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
     capture.touchSrv = null;
@@ -913,10 +913,10 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
 
 function doRecord(dev, q/*same as capture*/) {
   var filename = querystring.escape(dev.sn) + '~rec_' + q._promise_q._hash + '_' + q.timestamp + '.mp4', outPath = cfg.outputDir + '/' + filename;
-  var childProc = spawn('[Record] {' + dev.id + '}', cfg.ffmpeg, [].concat(
-      '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
-      '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
-  ), function/*on_close*/() {
+  var childProc = spawn('[Record] {' + dev.id + '}', cfg['ffmpeg'], [
+    '-y' /*overwrite output*/, '-nostdin', '-nostats', '-loglevel', cfg.logFfmpegDebugInfo ? 'debug' : 'error',
+    '-f', 'mjpeg', '-r', cfg.videoFileFrameRate, '-i', '-'/*stdin*/, '-pix_fmt', 'yuv420p'/*for safari mp4*/, outPath
+  ], function/*on_close*/() {
     dev.subOutputDir && fs.link(outPath, cfg.outputDir + '/' + dev.subOutputDir + '/' + filename, function (e) {
       e && log(childProc.__tag, 'failed to create dir link. ' + e);
     });
@@ -1065,7 +1065,7 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   end(res, turnOnScreen(dev, q['unlock'] === 'true') ? 'OK' : chk.err);
 }).option = {log: true};
 (streamWeb_handlerMap['/setOrientation'] = function (req, res, q, urlPath, dev) {
-  end(res, setDeviceOrientation(dev, q['orientation']) ? 'OK' : chk.err);
+  end(res, setDeviceOrientation(dev, q.orientation) ? 'OK' : chk.err);
 }).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
   if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
@@ -1106,7 +1106,7 @@ streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.h
       return end(res, replaceComVar(htmlCache[urlPath], dev)
           .replace(/@count\b/g, String(sortedKeys.length))
           .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-            return sortedKeys.slice(0, Number(q.count) || cfg.defaultMaxRecentImageFiles).reduce(function (joinedStr, key) {
+            return sortedKeys.slice(0, Number(q.count) || cfg['defaultMaxRecentImageFiles']).reduce(function (joinedStr, key) {
               return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
             }, ''/*initial joinedStr*/);
           }), 'text/html');
@@ -1206,7 +1206,7 @@ adminWeb_handlerMap['/'] = function (req, res, q) {
   }), 'text/html');
 };
 adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, q) {
-  q._logFilePath = log.getLogFilePath(q.logHowManyDaysAgo);
+  q._logFilePath = log.getLogFilePath(q['logHowManyDaysAgo']);
   if (!(q._fileSize = getFileSizeSync(q._logFilePath) || (q.mode && !chk('size', q.size = Number(q.size), 1, Number.MAX_VALUE)))) {
     return end(res, chk.err);
   }
@@ -1249,7 +1249,7 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   end(res, 'OK');
 }).option = {log: true};
 (adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (req, res, q) {
-  var dev = getDev(q, {connected: true}), restLen = (q.size = Number(q.size)) > 0 ? q.size : cfg.defaultMaxAdminCmdOutputLength;
+  var dev = getDev(q, {connected: true}), restLen = (q.size = Number(q.size)) > 0 ? q.size : cfg['defaultMaxAdminCmdOutputLength'];
   if (!dev) {
     end(res, chk.err);
   } else {
@@ -1551,7 +1551,7 @@ function on_httpServerReady() {
 
 reloadResource();
 
-spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr, stdout) {
+spawn('[CheckFfmpeg]', cfg['ffmpeg'], ['-version'], function/*on_close*/(stderr, stdout) {
   !/version/i.test(stdout) && process.stderr.write('Warning: failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
 }, {timeout: 10 * 1000});
 
