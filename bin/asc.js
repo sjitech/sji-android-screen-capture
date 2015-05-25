@@ -24,8 +24,8 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
   return keyCodeMap[keyNameMap[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', adbHosts: [], ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, adbGetDeviceListTimeout: 0, adbKeepDeviceAliveInterval: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, adbEchoTimeout: 0, adbFinishPrepareFileTimeout: 0, adbPushFileToDeviceTimeout: 0, adbCheckBasicInfoTimeout: 0, enableGetFileFromStreamWeb: 0, adbAutoStartServerInterval: 0});
-true === false && log({adbCaptureExitDelayTime: 0, adbSendKeyTimeout: 0, adbTouchTimeout: 0, adbCmdTimeout: 0, adbTurnScreenOnTimeout: 0, adbScanPerHostDelay: 0, fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, adbBridge: 0, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', adbRetryDeviceTrackerInterval: 0, adbRetryPrepareDeviceInterval: 0, __end: 0});
+true === false && log({log_filePath: '', log_keepOldFileDays: 0, adb: '', ffmpeg: '', binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, logHowManyDaysAgo: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, enableGetFileFromStreamWeb: 0});
+true === false && log({fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, resentUnchangedImageInterval: 0, resentImageForSafariAfter: 0, adminUrlSuffix: '', viewUrlBase: '', ajaxAllowOrigin: '', checkDevTimeLimit: true, cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, defaultMaxRecentImageFiles: 0, defaultMaxAdminCmdOutputLength: 0, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, device: '', __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -159,7 +159,7 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
     if (reason === 'network error' && !adbCon.__everConnected && adbHost.autoStartLocalAdbServer) {
       setTimeout(function () {
         spawn('[StartAdbServer]', cfg.adb, ['-P', adbHost.port, 'start-server'], {timeout: 10 * 1000});
-      }, cfg.adbAutoStartServerInterval * 1000);
+      }, cfg['adbAutoStartServerInterval'] * 1000);
     }
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString('binary')) && _log && log(tag + '>', stdout);
@@ -373,7 +373,7 @@ function chkDev(dev, opt) {
           || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
           || opt.capturing && !(dev.capture) && (chk.err = 'screen capturer not started')
           || opt.image && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started completely')
-          || opt.adbBridge && !(dev.adbBridge && cfg.adbBridge) && (chk.err = 'adbBridge disabled')
+          || opt.adbBridge && !(dev.adbBridge && cfg['adbBridge']) && (chk.err = 'adbBridge disabled')
           || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
           || opt.touchable && !(dev.capture && dev.capture.touchSrv ) && (chk.err = 'device not ready for touch')
           || opt.keybdable && !(dev.capture && dev.capture.keybdSrv ) && (chk.err = 'device not ready for keyboard')
@@ -403,28 +403,28 @@ AdbHost.prototype.toString = function () {
 };
 
 function initDeviceTrackers() {
-  cfg.adbHosts.forEach(function (adbHostStr) {
+  cfg['adbHosts'].forEach(function (adbHostStr) {
     _initDeviceTracker(new AdbHost(adbHostStr));
   });
 
   setInterval(function () {
     devAry.forEach(function (dev) {
-      dev.status === 'OK' && !Object.keys(dev.adbConMap).length && adbRun('[KeepAlive]', dev, 'a=', {timeout: cfg.adbEchoTimeout * 1000});
+      dev.status === 'OK' && !Object.keys(dev.adbConMap).length && adbRun('[KeepAlive]', dev, 'a=', {timeout: cfg['adbEchoTimeout'] * 1000});
     });
-  }, cfg.adbKeepDeviceAliveInterval * 1000);
+  }, cfg['adbKeepDeviceAliveInterval'] * 1000);
 
   setInterval(function () {
     devAry.forEach(function (dev) {
       dev.isOsStartingUp && prepareDevice(dev);
     });
-  }, cfg.adbRetryPrepareDeviceInterval * 1000);
+  }, cfg['adbRetryPrepareDeviceInterval'] * 1000);
 
   function _initDeviceTracker(adbHost) {
     var adbCon = adb('[TrackDevices]', adbHost, 'host:track-devices', function/*on_close*/() {
       adbCon.__on_adb_stream_data(EMPTY_BUF);
       setTimeout(function () {
         _initDeviceTracker(adbHost);
-      }, cfg.adbRetryDeviceTrackerInterval * 1000);
+      }, cfg['adbRetryDeviceTrackerInterval'] * 1000);
     });
     adbCon.__on_adb_stream_data = function (buf) {
       var devList = [];
@@ -507,7 +507,7 @@ function prepareDevice(dev, force/*optional*/) {
         return setStatus(stderr || ('failed to push file. reason: ' + (stdout[1] || 'unknown')));
       }
       return finishPrepare(/*fileChanged:*/true);
-    }, {timeout: cfg.adbPushFileToDeviceTimeout * 1000, log: true}); //end of PushFileToDevice
+    }, {timeout: cfg['adbPushFileToDeviceTimeout'] * 1000, log: true}); //end of PushFileToDevice
     adbCon.once('__on_adb_stream_open', function () {
       for (var _filename in pushContentMap) { //noinspection JSUnfilteredForInLoop
         var name = _filename, sysVer = parseInt(name.slice(name.replace(/-\d+$/, '').length + 1)) / 100, armv = parseInt(name.slice(name.replace(/\.armv\d+$/, '').length + 5));
@@ -518,7 +518,7 @@ function prepareDevice(dev, force/*optional*/) {
       }
       adbCon.write(new Buffer('QUIT\0\0\0\0'));
     });
-  }, {timeout: cfg.adbCheckBasicInfoTimeout * 1000, log: true}); //end of CheckBasicInfo
+  }, {timeout: cfg['adbCheckBasicInfoTimeout'] * 1000, log: true}); //end of CheckBasicInfo
 
   function setStatus(status) {
     log('[PrepareDevice] {' + dev.id + '}', 'END: ' + status);
@@ -553,7 +553,7 @@ function prepareDevice(dev, force/*optional*/) {
         }, {timeout: cfg['adbInstallScreenControllerAppTimeout'] * 1000, log: true});
       }
       return setStatus('OK');
-    }, {timeout: cfg.adbFinishPrepareFileTimeout * 1000, log: true});
+    }, {timeout: cfg['adbFinishPrepareFileTimeout'] * 1000, log: true});
   } //end of finishPrepare
 
   function getMoreInfo(parts/*result of cmd_getExtraInfo*/) {
@@ -947,7 +947,7 @@ function endCaptureConsumer(res/*Any Type Output Stream*/, imageBuf/*optional*/)
   clearInterval(res.__feedConvertTimer);
   !Object.keys(capture.consumerMap).length && (capture.delayKillTimer = setTimeout(function () {
     capture.__cleanup('no more consumer');
-  }, cfg.adbCaptureExitDelayTime * 1000));
+  }, cfg['adbCaptureExitDelayTime'] * 1000));
 }
 
 function scheduleUpdateLiveUI() {
@@ -1255,7 +1255,7 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   } else {
     var adbCon = adbRun('[cmd]', dev, q.cmd, function/*on_close*/(stderr) {
       end(res, !stderr ? '' : ((res.headersSent ? '\n' : '') + stderr));
-    }, {timeout: (Number(q.timeout) || cfg.adbCmdTimeout) * 1000, log: q.log !== 'false'});
+    }, {timeout: (Number(q.timeout) || cfg['adbCmdTimeout']) * 1000, log: q.log !== 'false'});
     adbCon.__on_adb_stream_data = function (buf) {
       res.write(buf.slice(0, Math.min(buf.length, restLen)));
       (restLen -= buf.length) <= 0 && adbCon.__cleanup('too much output');
