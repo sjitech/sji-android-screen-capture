@@ -19,9 +19,9 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'should_callAscLibSecurely', 'support_adbBridge'];
-var keyCodeMap = {}, keyNameMap = {3: 'KEYCODE_HOME', 4: 'KEYCODE_BACK', 82: 'KEYCODE_MENU', 26: 'KEYCODE_POWER', 187: 'KEYCODE_APP_SWITCH', 66: 'KEYCODE_ENTER', 67: 'KEYCODE_DEL', 112: 'KEYCODE_FORWARD_DEL', 21: 'KEYCODE_DPAD_LEFT', 22: 'KEYCODE_DPAD_RIGHT', 19: 'KEYCODE_DPAD_UP', 20: 'KEYCODE_DPAD_DOWN', 122: 'KEYCODE_MOVE_HOME', 123: 'KEYCODE_MOVE_END'};
-Object.keys(keyNameMap).forEach(function (keyCode) {
-  return keyCodeMap[keyNameMap[keyCode]] = keyCode;
+var keyCodeMapOfName = {}, keyNameMapOfCode = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APP_SWITCH', 66: 'ENTER', 67: 'DEL', 112: 'FORWARD_DEL', 21: 'DPAD_LEFT', 22: 'DPAD_RIGHT', 19: 'DPAD_UP', 20: 'DPAD_DOWN', 122: 'MOVE_HOME', 123: 'MOVE_END'};
+Object.keys(keyNameMapOfCode).forEach(function (keyCode) {
+  return keyCodeMapOfName[keyNameMapOfCode[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
@@ -673,7 +673,7 @@ function sendTouchEvent(dev, _type, _x, _y) {
 
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   if (!chkDev(dev, {connected: true, capturing: true, keybdable: true})
-      || isKeyCode && !keyNameMap[keyCodeOrText] && !keyCodeMap[keyCodeOrText] && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMap).concat(Object.keys(keyCodeMap))) )
+      || isKeyCode && !keyNameMapOfCode[keyCodeOrText] && !(keyCodeOrText = keyCodeMapOfName[keyCodeOrText]) && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMapOfCode).concat(Object.keys(keyCodeMapOfName))) )
       || !isKeyCode && !chk('text', keyCodeOrText)) {
     return false;
   }
@@ -681,7 +681,7 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
     dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
   } else {
     keyCodeOrText.slice(0, cfg['maxTextInputLength']).split(/\r*\n/).forEach(function (ls, n) {
-      n && dev.capture.keybdSrv.__runCmd('k ' + 66/*enter*/);
+      n && dev.capture.keybdSrv.__runCmd('k ' + keyCodeMapOfName['ENTER']);
       dev.capture.keybdSrv.__runCmd('K ' + ls.replace(/\t/g, '    '));
     });
   }
@@ -881,8 +881,8 @@ function _startRemoteDesktopServer(dev, q) {
     capture.screenController && capture.screenController.__cleanup('capture closed');
     dev.capture = null;
     forEachValueIn(dev.rdcWebSocketMap, function (rdcWebSocket) {
-      delete rdcWebSocket.devHandleMap[dev.i];
-      !Object.keys(rdcWebSocket.devHandleMap).length && rdcWebSocket.__cleanup('capturer closed');
+      delete rdcWebSocket.devMapOfHandle[dev.i];
+      !Object.keys(rdcWebSocket.devMapOfHandle).length && rdcWebSocket.__cleanup('capturer closed');
     });
     dev.rdcWebSocketMap = {};
     scheduleUpdateLiveUI();
@@ -1312,8 +1312,8 @@ function createWebSocketServer() {
       }
       cfg.logRdcWebSocketDetail && log(httpTag, 'Accepted as [RDC__' + httpSeq + ']');
       var rdcWebSocket = wsConReq.accept(null, wsConReq.origin);
-      rdcWebSocket.devHandleMap = {};
-      rdcWebSocket.devHandleMap[dev.i] = dev;
+      rdcWebSocket.devMapOfHandle = {};
+      rdcWebSocket.devMapOfHandle[dev.i] = dev;
       dev.rdcWebSocketMap[rdcWebSocket.__id = getTimestamp()] = rdcWebSocket;
       return handle_rdcWebSocket_connection(rdcWebSocket, '[RDC__' + httpSeq + ']');
     }
@@ -1476,16 +1476,16 @@ function handle_rdcWebSocket_connection(ws, tag) {
           cfg.logRdcWebSocketDetail && log(_tag, chk.err);
           return ws.send(chk.err);
         }
-        ws.devHandleMap[dev.i] = dev;
+        ws.devMapOfHandle[dev.i] = dev;
         dev.rdcWebSocketMap[ws.__id] = ws;
 
         cfg.logRdcWebSocketDetail && log(_tag, 'OK');
         return ws.send(String(dev.i));
       } //end of open_device request
 
-      dev = ws.devHandleMap[devHandle = Number(match[1])];
+      dev = ws.devMapOfHandle[devHandle = Number(match[1])];
       var isKeyCode = match[2] === ':', keyCodeOrText = match[3];
-      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'keybd: ' + JSON.stringify(keyCodeOrText) + (isKeyCode && keyNameMap[keyCodeOrText] ? ('(' + keyNameMap[keyCodeOrText] + ')') : ''));
+      cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'keybd: ' + JSON.stringify(keyCodeOrText) + (isKeyCode && keyNameMapOfCode[keyCodeOrText] ? ('(' + keyNameMapOfCode[keyCodeOrText] + ')') : ''));
       if (!sendKeybdEvent(dev, keyCodeOrText, isKeyCode)) {
         cfg.logRdcWebSocketDetail && log(_tag, chk.err);
         return ws.send(chk.err);
@@ -1496,7 +1496,7 @@ function handle_rdcWebSocket_connection(ws, tag) {
       if (msg.binaryData.length !== 13) {
         return ws.send('invalid request');
       }
-      dev = ws.devHandleMap[devHandle = msg.binaryData.readUInt32BE(0)];
+      dev = ws.devMapOfHandle[devHandle = msg.binaryData.readUInt32BE(0)];
       var type = String.fromCharCode(msg.binaryData.readUInt8(12)), x = msg.binaryData.readFloatBE(4), y = msg.binaryData.readFloatBE(8);
       cfg.logRdcWebSocketDetail && log((_tag += ' {' + (dev ? dev.id : '?#' + devHandle) + '}'), 'touch: ' + type + ' ' + x.toFixed(5) + ' ' + y.toFixed(5));
       if (!sendTouchEvent(dev, type, x, y)) {
@@ -1512,13 +1512,13 @@ function handle_rdcWebSocket_connection(ws, tag) {
 
   function cleanup(reason, detail) {
     if (cleanup.called) return;
-    (cleanup.called = true) && cfg.logRdcWebSocketDetail && log(tag + ' {' + Object.keys(ws.devHandleMap).join('}, {') + '}', 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
+    (cleanup.called = true) && cfg.logRdcWebSocketDetail && log(tag + ' {' + Object.keys(ws.devMapOfHandle).join('}, {') + '}', 'CLEANUP. Reason: ' + reason + '.' + (detail ? ' ' + detail : ''));
     reason !== 'CLOSED' && ws.drop();
 
-    forEachValueIn(ws.devHandleMap, function (dev) {
+    forEachValueIn(ws.devMapOfHandle, function (dev) {
       delete dev.rdcWebSocketMap[ws.__id];
     });
-    ws.devHandleMap = {};
+    ws.devMapOfHandle = {};
   }
 } //end of handle_rdcWebSocket_connection
 
