@@ -24,8 +24,9 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
   return keyCodeMap[keyNameMap[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
-true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, download: 0, keyCode: '', text: '', x: 0, y: 0, stack: {}, logFfmpegDebugInfo: 0, logFpsStatistic: 0, logHttpReqDetail: 0, showDisconnectedDevices: 0, logAllProcCmd: 0, enableGetFileFromStreamWeb: 0});
-true === false && log({fpsStatisticInterval: 0, logAllHttpReqRes: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, adminUrlSuffix: '', viewUrlBase: '', cookie: '', range: '', orientation: '', httpRequest: {}, binaryData: {}, accept: Function, reject: Function, logCondition: 0, viewSize: '', viewOrient: '', videoFileFrameRate: 0, _isSafari: 0, __end: 0});
+true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
+true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, enableGetFileFromStreamWeb: 0, __end: 0});
+true == false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
