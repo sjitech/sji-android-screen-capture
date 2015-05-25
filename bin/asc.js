@@ -392,21 +392,19 @@ function AdbHost(adbHostStr) {
   this.host = host || 'localhost';
   this.port = port || 5037;
   this.str = this.host + ':' + this.port;
-  (this.autoStartLocalAdbServer = !host) && (initAdbHosts.needLocalAdb = true);
+  (this.autoStartLocalAdbServer = !host) && !AdbHost.haveCheckedLocalAdb && (AdbHost.haveCheckedLocalAdb = true)
+  && spawn('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
+    stderr && process.stderr.write('Warning: failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
+  }, {timeout: 30 * 1000});
 }
 
 AdbHost.prototype.toString = function () {
   return this.str;
 };
-function initAdbHosts() {
-  cfg.adbHosts.forEach(function (adbHostStr, i) {
-    cfg.adbHosts[i] = new AdbHost(adbHostStr);
-  });
-}
 
 function initDeviceTrackers() {
-  cfg.adbHosts.forEach(function (adbHost) {
-    _initDeviceTracker(adbHost);
+  cfg.adbHosts.forEach(function (adbHostStr) {
+    _initDeviceTracker(new AdbHost(adbHostStr));
   });
 
   setInterval(function () {
@@ -1545,30 +1543,28 @@ function reloadPushFiles() {
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
 }
 
+function on_httpServerReady() {
+  websocket && createWebSocketServer();
+  initDeviceTrackers();
+  process.stderr.write('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : '') + '\n');
+}
+
 reloadResource();
-initAdbHosts();
-(initAdbHosts.needLocalAdb ? spawn : passthrough)('[CheckAdb]', cfg.adb, ['version'], function/*on_close*/(stderr) {
-  stderr && process.stderr.write('failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
-  return spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr, stdout) {
-    !/version/i.test(stdout) && process.stderr.write('failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
-    try {
-      websocket = require('websocket');
-    } catch (e) {
-    }
-    !websocket && process.stderr.write('failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser, fast touch/keyboard).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node".\n');
-    adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, web_handler) : require('http').createServer(web_handler);
-    adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
-      if (cfg.streamWeb_port) {
-        streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, web_handler) : require('http').createServer(web_handler);
-        streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, function/*on_httpServerReady*/() {
-          process.stderr.write('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : '') + '\n');
-          websocket && createWebSocketServer();
-        });
-      } else {
-        process.stderr.write('OK. You can start from ' + cfg.adminWeb_protocol + '://localhost:' + cfg.adminWeb_port + '/' + (cfg.adminKey ? '?adminKey=' + querystring.escape(cfg.adminKey) : '') + '\n');
-        websocket && createWebSocketServer();
-      }
-      initDeviceTrackers();
-    });
-  }, {timeout: 10 * 1000});
-}, {timeout: 30 * 1000});
+
+spawn('[CheckFfmpeg]', cfg.ffmpeg, ['-version'], function/*on_close*/(stderr, stdout) {
+  !/version/i.test(stdout) && process.stderr.write('Warning: failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
+}, {timeout: 10 * 1000});
+
+try {
+  websocket = require('websocket');
+} catch (e) {
+}
+!websocket && process.stderr.write('Warning: failed to check websocket lib. You will not be able to use some advanced function(i.e. AdbBridge via browser).\nYou can install it by command "nmp install websocket" or from "https://github.com/theturtle32/WebSocket-Node".\n');
+
+adminWeb = cfg.adminWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.adminWeb_cert)}, web_handler) : require('http').createServer(web_handler);
+adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*/ : cfg.adminWeb_ip, function/*on_httpServerReady*/() {
+  if (!cfg.streamWeb_port) return on_httpServerReady();
+  streamWeb = cfg.streamWeb_protocol === 'https' ? require('https').createServer({pfx: fs.readFileSync(cfg.streamWeb_cert)}, web_handler) : require('http').createServer(web_handler);
+  streamWeb.listen(cfg.streamWeb_port, cfg.streamWeb_ip === '*' ? undefined/*all ip4*/ : cfg.streamWeb_ip, on_httpServerReady);
+});
+
