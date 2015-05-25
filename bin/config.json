@@ -2,6 +2,8 @@
 //digital unit of time and interval is second.
 //in runtime, current directory will be the dir of asc.js, so you'd better specify full path of file or dir
 {
+  "adbHosts": [""], //"" just means default local adb server, also = ":5037". Other example: ["172.21.137.5", "172.21.137.6:5037", "localhost:50370"]. Note: "localhost:port" will not auto start local adb server, but ":port" does.
+
   "adminWeb_port": 3000, //Admin Web public port (must < 65536). For port < 1024, your need to have root privilege.
   "adminWeb_ip": "localhost", //IP or hostname to which admin web listens. "*" means listen all network interfaces. 127.0.0.1 or localhost can only be accessed locally
   "adminWeb_protocol": "http", //or "https", when use https, you need prepare specify certificate file by "adminWeb_cert"
@@ -23,6 +25,7 @@
   "fastCapture": true,
   "checkDevTimeLimit": true,
   "adbBridge": true,
+  "canGetFileFromStreamWeb": false,
 
   //log settings
   "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
@@ -47,7 +50,6 @@
 
   //internal settings
   "adb": "adb", //path of Android Debug Bridge utility. If it is already in PATH list, you can just set file name, otherwise full path
-  "adbHosts": [""], //"" just means default local adb daemon, also = ":5037". Other example: ["172.21.137.5", "172.21.137.6:5037", ":50370"].
   "ffmpeg": "ffmpeg", //path of local FFMPEG utility. If it is already in PATH list, you can just set file name, otherwise full path
   "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
@@ -67,11 +69,9 @@
   "adbTurnScreenOnTimeout": 30,
   "adbInstallScreenControllerAppTimeout": 300,
   "adbStartScreenControllerServiceTimeout": 30,
-  "adbCmdTimeout": 30,
-  "defaultMaxAdminCmdOutputLength": 65536,
-  "adbScanPerHostDelay": 2,
-  "ajaxAllowOrigin": "*",
-  "defaultMaxRecentImageFiles": 50,
+  "adbAdmCmdTimeout": 30,
+  "adbAdmCmdMaxOutputLength": 65536,
+  "maxImagesInImageViewer": 1024,
 
   "__end": 0
 }

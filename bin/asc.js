@@ -25,7 +25,7 @@ Object.keys(keyNameMap).forEach(function (keyCode) {
 });
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
-true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, enableGetFileFromStreamWeb: 0, __end: 0});
+true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, canGetFileFromStreamWeb: 0, __end: 0});
 true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
@@ -829,8 +829,8 @@ function _startRemoteDesktopServer(dev, q) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.oldImageIndex = capture.image.i));
   }, cfg['resentImageForSafariAfter'] * 1000));
-  capture.timer_resentUnchangedImage = setInterval(function () {
-    capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(capture.consumerMap, function (res) { //resend image to keep image tag alive
+  capture.timer_resentUnchangedImage = setInterval(function () { //resend image to keep image tag alive
+    capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
       writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg['resentUnchangedImageInterval'] * 1000);
@@ -1041,7 +1041,7 @@ function web_handler(req, res) {
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
+  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
       || !chkDev(dev, {connected: true, capturing: true, image: true})) {
     return end(res, chk.err);
   }
@@ -1080,7 +1080,7 @@ streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) 
       , 'text/html');
 };
 streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.html'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
+  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
   return fs.readdir(cfg.outputDir, function (e, filenameAry) {
@@ -1107,7 +1107,7 @@ streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.h
       return end(res, replaceComVar(htmlCache[urlPath], dev)
           .replace(/@count\b/g, String(sortedKeys.length))
           .replace(re_repeatableHtmlBlock, function/*createMultipleHtmlBlocks*/(wholeMatch, htmlBlock) {
-            return sortedKeys.slice(0, Number(q.count) || cfg['defaultMaxRecentImageFiles']).reduce(function (joinedStr, key) {
+            return sortedKeys.slice(0, Number(q.count) || cfg['maxImagesInImageViewer']).reduce(function (joinedStr, key) {
               return joinedStr + htmlBlock.replace(/@filename\b/g, querystring.escape(filenameMap[key]));
             }, ''/*initial joinedStr*/);
           }), 'text/html');
@@ -1115,7 +1115,7 @@ streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.h
   });
 };
 streamWeb_handlerMap['/getFile'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.enableGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
+  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
       || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
     return end(res, chk.err);
   }
@@ -1250,13 +1250,13 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   end(res, 'OK');
 }).option = {log: true};
 (adminWeb_handlerMap['/cmd' + cfg.adminUrlSuffix] = function (req, res, q) {
-  var dev = getDev(q, {connected: true}), restLen = (q.size = Number(q.size)) > 0 ? q.size : cfg['defaultMaxAdminCmdOutputLength'];
+  var dev = getDev(q, {connected: true}), restLen = (q.size = Number(q.size)) > 0 ? q.size : cfg['adbAdmCmdMaxOutputLength'];
   if (!dev) {
     end(res, chk.err);
   } else {
     var adbCon = adbRun('[cmd]', dev, q.cmd, function/*on_close*/(stderr) {
       end(res, !stderr ? '' : ((res.headersSent ? '\n' : '') + stderr));
-    }, {timeout: (Number(q.timeout) || cfg['adbCmdTimeout']) * 1000, log: q.log !== 'false'});
+    }, {timeout: (Number(q.timeout) || cfg['adbAdmCmdTimeout']) * 1000, log: q.log !== 'false'});
     adbCon.__on_adb_stream_data = function (buf) {
       res.write(buf.slice(0, Math.min(buf.length, restLen)));
       (restLen -= buf.length) <= 0 && adbCon.__cleanup('too much output');
