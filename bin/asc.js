@@ -1067,6 +1067,15 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
 (streamWeb_handlerMap['/setOrientation'] = function (req, res, q, urlPath, dev) {
   end(res, setDeviceOrientation(dev, q.orientation) ? 'OK' : chk.err);
 }).option = {log: true};
+(streamWeb_handlerMap['/showHome'] = function (req, res, q, urlPath, dev) {
+  if (!chkDev(dev, {connected: true, capturing: true})) {
+    return end(res, chk.err);
+  }
+  adbRun('[ShowHome]', dev, 'am start -c android.intent.category.HOME -a android.intent.action.MAIN', function (stderr, stdout) {
+    (!stderr && /^Starting Intent:/.test(stdout) && !/Error:/.test(stdout));
+  });
+  return end(res, 'OK');
+}).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
   if (!chkCaptureParameter(dev, req, q, /*force_ajpg:*/true)) {
     return end(res, chk.err);
