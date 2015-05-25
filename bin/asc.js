@@ -1222,8 +1222,8 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   q.download === 'true' && res.setHeader('Content-Disposition', 'attachment;filename=' + Path.basename(q._logFilePath)); //remove dir part
   q.device && (res.__oldWrite = res.write) && (res.write = function (buf) {
     Buffer.concat([res.__orphanBuf, buf]).toString('binary').split(/\n/).forEach(function (s, i, lineAry) {
-      (q._matched = s.indexOf(q.device) >= 0) && res.__oldWrite(s + '\n', 'binary');
-      i === lineAry.length - 1 && !q._matched && (res.__orphanBuf = new Buffer(s, 'binary'));
+      (q._pos = s.indexOf(q.device)) >= 0 && res.__oldWrite(s.slice(0, q._pos) + s.slice(q._pos + q.device.length) + '\n', 'binary');
+      i === lineAry.length - 1 && q._pos < 0 && (res.__orphanBuf = new Buffer(s, 'binary'));
     });
   }) && (res.__orphanBuf = EMPTY_BUF) && (q.device = '{' + q.device + '}');
   return fs.createReadStream(q._logFilePath, {
