@@ -23,9 +23,9 @@
   "maxRecordTime": 7200, //max recorded time
   "fastResize": true,
   "fastCapture": true,
-  "checkDevTimeLimit": true,
-  "adbBridge": true,
-  "canGetFileFromStreamWeb": false,
+  "should_callAscLibSecurely": true,
+  "support_adbBridge": true,
+  "enable_getFileFromStreamWeb": false,
 
   //log settings
   "log_filePath": "../log/log.txt", //empty this means output to stderr(Usally means console). The real file name will be like log_201401020304.txt
@@ -54,7 +54,6 @@
   "binDir": "./android",
   "androidWorkDir": "/data/local/tmp/sji-asc",
   "androidLogPath": "/data/local/tmp/sji-asc.log",
-  "adbGetDeviceListTimeout": 60,
   "adbEchoTimeout": 10,
   "adbRetryDeviceTrackerInterval": 5,
   "adbAutoStartServerInterval": 5,
@@ -72,6 +71,7 @@
   "adbAdmCmdTimeout": 30,
   "adbAdmCmdMaxOutputLength": 65536,
   "maxImagesInImageViewer": 1024,
+  "maxTextInputLength": 63356,
 
   "__end": 0
 }

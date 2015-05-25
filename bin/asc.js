@@ -18,14 +18,14 @@ var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
     re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
-var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'checkDevTimeLimit', 'adbBridge'];
+var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'should_callAscLibSecurely', 'support_adbBridge'];
 var keyCodeMap = {}, keyNameMap = {3: 'KEYCODE_HOME', 4: 'KEYCODE_BACK', 82: 'KEYCODE_MENU', 26: 'KEYCODE_POWER', 187: 'KEYCODE_APP_SWITCH', 66: 'KEYCODE_ENTER', 67: 'KEYCODE_DEL', 112: 'KEYCODE_FORWARD_DEL', 21: 'KEYCODE_DPAD_LEFT', 22: 'KEYCODE_DPAD_RIGHT', 19: 'KEYCODE_DPAD_UP', 20: 'KEYCODE_DPAD_DOWN', 122: 'KEYCODE_MOVE_HOME', 123: 'KEYCODE_MOVE_END'};
 Object.keys(keyNameMap).forEach(function (keyCode) {
   return keyCodeMap[keyNameMap[keyCode]] = keyCode;
 });
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
-true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, canGetFileFromStreamWeb: 0, __end: 0});
+true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, __end: 0});
 true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
@@ -374,7 +374,7 @@ function chkDev(dev, opt) {
           || opt.connected && !isDevConnectedReally(dev) && (chk.err = 'device not connected')
           || opt.capturing && !(dev.capture) && (chk.err = 'screen capturer not started')
           || opt.image && !(dev.capture && dev.capture.image) && (chk.err = 'screen capturer not started completely')
-          || opt.adbBridge && !(dev.adbBridge && cfg['adbBridge']) && (chk.err = 'adbBridge disabled')
+          || opt.adbBridge && !(dev.adbBridge && cfg['support_adbBridge']) && (chk.err = 'adbBridge disabled')
           || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
           || opt.touchable && !(dev.capture && dev.capture.touchSrv ) && (chk.err = 'device not ready for touch')
           || opt.keybdable && !(dev.capture && dev.capture.keybdSrv ) && (chk.err = 'device not ready for keyboard')
@@ -680,10 +680,9 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   if (isKeyCode) {
     dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
   } else {
-    keyCodeOrText.slice(0, 64 * 1024).split(/\r*\n/).forEach(function (ls, n) {
+    keyCodeOrText.slice(0, cfg['maxTextInputLength']).split(/\r*\n/).forEach(function (ls, n) {
       n && dev.capture.keybdSrv.__runCmd('k ' + 66/*enter*/);
-      for (var i = 0; i < ls.length; i += 32)
-        dev.capture.keybdSrv.__runCmd('K ' + ls.slice(i, i + 32)); //.replace(/\t/g, '%s%s%s%s').replace(/[\x00-\x20\s]/g, '%s').replace(/([\\*?$'"><|&;{}!\[\]()`~#])/g, '\\$1'));
+      dev.capture.keybdSrv.__runCmd('K ' + ls.replace(/\t/g, '    '));
     });
   }
   return true;
@@ -716,7 +715,7 @@ function turnOnScreen(dev, unlock) {
 function encryptSn(sn) {
   sn = sn || ' ';
   var d, i;
-  if (cfg['checkDevTimeLimit']) {
+  if (cfg['should_callAscLibSecurely']) {
     var dt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     d = pad234(dt.getFullYear() % 100, 2) + pad234(dt.getMonth() + 1, 2) + pad234(dt.getDate(), 2);
   } else {
@@ -1041,7 +1040,7 @@ function web_handler(req, res) {
   }
 };
 (streamWeb_handlerMap['/saveImage'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
+  if (!cfg['enable_getFileFromStreamWeb'] && cfg.adminKey && q.adminKey !== cfg.adminKey && dev.re_lastViewId_cookie.test(req.headers.cookie) && (chk.err = 'access denied')
       || !chkDev(dev, {connected: true, capturing: true, image: true})) {
     return end(res, chk.err);
   }
@@ -1080,7 +1079,7 @@ streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) 
       , 'text/html');
 };
 streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.html'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
+  if (!cfg['enable_getFileFromStreamWeb'] && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')) {
     return end(res, chk.err);
   }
   return fs.readdir(cfg.outputDir, function (e, filenameAry) {
@@ -1115,7 +1114,7 @@ streamWeb_handlerMap['/videoViewer.html'] = streamWeb_handlerMap['/imageViewer.h
   });
 };
 streamWeb_handlerMap['/getFile'] = function (req, res, q, urlPath, dev) {
-  if (!cfg.canGetFileFromStreamWeb && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
+  if (!cfg['enable_getFileFromStreamWeb'] && cfg.adminKey && q.adminKey !== cfg.adminKey && (chk.err = 'access denied')
       || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
     return end(res, chk.err);
   }
