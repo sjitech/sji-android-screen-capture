@@ -467,7 +467,7 @@ var cmd_getBasicInfo = ' getprop ro.product.manufacturer; getprop ro.product.mod
     + ' echo ===; getevent -pS;'
     + ' echo ===;';
 var cmd_getVer = ' cat ' + cfg.androidWorkDir + '/version';
-var cmd_clearFiles = ' rm -r ' + cfg.androidWorkDir + ' 2> /dev/null; umask 007 && mkdir ' + cfg.androidWorkDir + ';';
+var cmd_clearFiles = ' rm -r ' + cfg.androidWorkDir + ' 2>/dev/null; umask 007 && mkdir ' + cfg.androidWorkDir + ';';
 var cmd_cdWorkDir = ' cd ' + cfg.androidWorkDir + ' || exit;';
 var cmd_updateVerFile = ' chmod 770 * && echo $FILE_VER > version || exit;';
 var cmd_getExtraInfo = ''
@@ -475,10 +475,12 @@ var cmd_getExtraInfo = ''
     + ' echo ===; ./busybox grep -Ec \'^processor\' /proc/cpuinfo;'
     + ' echo ===; ./busybox head -n 1 /proc/meminfo;'
     + ' echo ===; LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./$DLOPEN ./sc-??? ./fsc-???;'
-    + ' echo ===; ls -d /data/data/asc.tool.screencontroller;';
-var cmd_uninstallScreenControllerApp = ' pm uninstall asc.tool.screencontroller >/dev/null 2>/dev/null;';
-var cmd_installScreenControllerApp = ' pm install ' + cfg.androidWorkDir + '-screencontroller.apk;';
-var cmd_deleteScreenControllerAppFile = ' rm ' + cfg.androidWorkDir + '-screencontroller.apk;';
+    + ' echo ===; ls -d /data/data/asc.tool.screencontroller 2>/dev/null;';
+var cmd_uninstallScreenController = ' pm uninstall asc.tool.screencontroller >/dev/null 2>&1;';
+var cmd_installScreenController = ' umask 000; cat ' + cfg.androidWorkDir + '/screencontroller.apk > ' + cfg.androidWorkDir + '-screencontroller.apk &&' +
+    ' pm install ' + cfg.androidWorkDir + '-screencontroller.apk;';
+var cmd_startScreenController = ' am startservice -n asc.tool.screencontroller/.ScreenControllerService $OPTION;';
+var cmd_deleteScreenControllerApk = ' rm ' + cfg.androidWorkDir + '-screencontroller.apk >/dev/null 2>&1;';
 
 function prepareDevice(dev, force/*optional*/) {
   if (dev.status === 'OK' && !force || dev.status === 'preparing') return;
@@ -500,7 +502,7 @@ function prepareDevice(dev, force/*optional*/) {
 
     getTouchDevInfo(parts[1]);
 
-    if (!force && parts[2] === fileVer) {
+    if (parts[2] === fileVer) {
       return finishPrepare(/*fileChanged:*/false);
     }
     var adbCon = adb('[PushFile]', dev, 'sync:', function/*on_close*/(stderr, stdout) {
@@ -514,7 +516,7 @@ function prepareDevice(dev, force/*optional*/) {
         var name = _filename, sysVer = parseInt(name.slice(name.replace(/-\d+$/, '').length + 1)) / 100, armv = parseInt(name.slice(name.replace(/\.armv\d+$/, '').length + 5));
         (!sysVer || sysVer <= dev.sysVer) && (!armv || dev.armv === armv)
         && (dev.sysVer < 5 ? !/\.pie$/.test(name) : !pushContentMap[name + '.pie']) //noinspection JSUnfilteredForInLoop
-        && log(adbCon.__tag, 'push local file to ' + cfg.androidWorkDir + (/\.apk/i.test(name) ? '-' : '/') + name)
+        && log(adbCon.__tag, 'push local file to ' + cfg.androidWorkDir + '/' + name)
         && adbCon.write(pushContentMap[name]);
       }
       adbCon.write(new Buffer('QUIT\0\0\0\0'));
@@ -529,7 +531,7 @@ function prepareDevice(dev, force/*optional*/) {
   }
 
   function finishPrepare(fileChanged) {
-    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallScreenControllerApp + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
+    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallScreenController + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
       if (stderr) {
         return setStatus(stderr);
       }
@@ -542,16 +544,9 @@ function prepareDevice(dev, force/*optional*/) {
         return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
       }
       if (parts[5] === '/data/data/asc.tool.screencontroller') { //app already installed
-        startScreenControllerService(dev);
+        startScreenController(dev, /*deleteApk:*/true);
       } else {
-        dev.postPrepareProc = adbRun('[InstallScreenControllerApp]', dev, cmd_installScreenControllerApp, function/*on_close*/(stderr, stdout) {
-          dev.postPrepareProc = null;
-          if (!/\nSuccess/.test(stdout)) return;
-          startScreenControllerService(dev);
-          dev.postPrepareProc = adbRun('[DeleteScreenControllerAppFile]', dev, cmd_deleteScreenControllerAppFile, function/*on_close*/() {
-            dev.postPrepareProc = null;
-          }, {timeout: 2000, log: true});
-        }, {timeout: cfg['adbInstallScreenControllerAppTimeout'] * 1000, log: true});
+        installScreenController(dev);
       }
       return setStatus('OK');
     }, {timeout: cfg['adbFinishPrepareFileTimeout'] * 1000, log: true});
@@ -603,16 +598,36 @@ function prepareDevice(dev, force/*optional*/) {
   } //end of chkTouchDev
 } //end of prepareDevice
 
-function startScreenControllerService(dev) {
-  adbRun('[StartScreenControllerService]', dev, 'am startservice -n asc.tool.screencontroller/.ScreenControllerService' + (dev.sysVer >= 4.22 ? ' --user 0' : ''), function (stderr, stdout) {
-    dev.capture && (!stderr && /^Starting service:/.test(stdout) && !/Error:/.test(stdout)) && turnOnScreen_setDeviceOrientation(dev);
-  }, {timeout: cfg['adbStartScreenControllerServiceTimeout'] * 1000, log: true});
+function installScreenController(dev) {
+  dev.postPrepareProc = adbRun('[InstallScreenController]', dev, cmd_installScreenController, function/*on_close*/(stderr, stdout) {
+    dev.postPrepareProc = null;
+    if (!/\n(Success|INSTALL_FAILED_ALREADY_EXISTS)/.test(stdout)) return;
+    startScreenController(dev, /*deleteApk:*/true);
+  }, {timeout: cfg['adbInstallScreenControllerTimeout'] * 1000, log: true});
+}
+
+function startScreenController(dev, deleteApk) {
+  !dev.am_startservice_option && (dev.am_startservice_option = (dev.sysVer >= 4.22 ? '--user 0' : ''));
+  dev.postPrepareProc = adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option) + (deleteApk ? cmd_deleteScreenControllerApk : ''), function (stderr, stdout) {
+    dev.postPrepareProc = null;
+    if ((!stderr && /^Starting service:/.test(stdout) && !/Error|Exception:/.test(stdout))) {
+      dev.capture && turnOnScreen_setDeviceOrientation(dev);
+    } else if (/^Error: Unknown option: --user:/.test(stdout)) {
+      dev.am_startservice_option = '';
+      startScreenController(dev);
+    } else if (/\nSecurityException:.*not privileged to communicate with user/.test(stdout)) {
+      dev.am_startservice_option = '--user 0';
+      startScreenController(dev);
+    } else if (/\nError: Not found; no service started/.test(stdout)) {
+      installScreenController(dev);
+    }
+  }, {timeout: cfg['adbStartScreenControllerTimeout'] * 1000, log: true});
 }
 
 function turnOnScreen_setDeviceOrientation(dev, orient) {
   !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/() {
-    dev.capture && (dev.capture.screenController = null);
-    dev.capture && startScreenControllerService(dev);
+    dev.capture.screenController = null;
+    startScreenController(dev);
   }, {log: true}));
   turnOnScreen(dev, /*unlock:*/true);
   setDeviceOrientation(dev, orient || dev.last_devOrient);
@@ -851,7 +866,7 @@ function _startRemoteDesktopServer(dev, q) {
     capture.keybdSrv = null;
   });
   capture.keybdSrv.once('__on_adb_stream_open', function () {
-    capture.keybdSrv.__runCmd('exec >/dev/null 2>/dev/null');
+    capture.keybdSrv.__runCmd('exec >/dev/null 2>&1');
     capture.keybdSrv.__runCmd('cd ' + cfg.androidWorkDir);
     capture.keybdSrv.__runCmd('./busybox stty -echo -onlcr; PS1=');
     capture.keybdSrv.__runCmd('mkdir ./dalvik-cache; export ANDROID_DATA=.; export CLASSPATH=./keybdserver.jar:/system/framework/input.jar; exec /system/bin/app_process /system/bin keybdserver.KeybdServer');
@@ -1183,6 +1198,14 @@ streamWeb_handlerMap['/common.js'] = streamWeb_handlerMap['/jquery.js'] = stream
   devAry.forEach(function (dev) {
     isDevConnectedReally(dev) && prepareDevice(dev, q.mode === 'forcePrepare');
   });
+  end(res, 'OK');
+}).option = {log: true};
+(adminWeb_handlerMap['/prepareDeviceForcibly' + cfg.adminUrlSuffix] = function (req, res, q, urlPath, dev) {
+  if (!chkDev(dev, {connected: true})) {
+    return end(res, chk.err);
+  }
+  reloadPushFiles();
+  prepareDevice(dev, /*force:*/true);
   end(res, 'OK');
 }).option = {log: true};
 adminWeb_handlerMap['/getWebHost'] = function (req, res) {
@@ -1546,7 +1569,7 @@ function reloadPushFiles() {
   pushContentMap = {};
   fileVer = fs.readdirSync(cfg.binDir).sort().reduce(function (hash, filename) {
     if (/^\./.test(filename)) return hash;
-    var content = fs.readFileSync(cfg.binDir + '/' + filename), isApk = /\.apk$/i.test(filename), remotePath = cfg.androidWorkDir + (isApk ? '-' : '/') + filename.toLocaleLowerCase();
+    var content = fs.readFileSync(cfg.binDir + '/' + filename), remotePath = cfg.androidWorkDir + '/' + filename.toLocaleLowerCase();
     pushContentMap[filename] = adbPreparePushFile(content, remotePath);
     return hash.update(content);
   }, crypto.createHash('md5')/*initial value*/).digest('hex');
