@@ -197,7 +197,7 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
 
     }; //end of AscUtil.setTouchHandler
 
-    var keyCodeMap = {0xd: 66/*enter*/, 0x8: 67 /*del*/, 0x2e: 112 /*forward_del*/, 0x25: 21/*left*/, 0x27: 22/*right*/, 0x26: 19/*up*/, 0x28: 20/*down*/, 0x24: 122/*home*/, 0x23: 123/*end*/};
+    var keyCodeMap = {0x1b: 'BACK', 0xd: 'ENTER', 0x8: 'DEL', 0x2e: 'FORWARD_DEL', 0x25: 'DPAD_LEFT', 0x27: 'DPAD_RIGHT', 0x26: 'DPAD_UP', 0x28: 'DPAD_DOWN', 0x24: 'MOVE_HOME', 0x23: 'MOVE_END'};
 
     function init_keyboard_handler() {
       if (init_keyboard_handler.called) return;
