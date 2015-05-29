@@ -29,6 +29,9 @@ public class ScreenControllerService extends Service {
 	String tag = "ASC";
 	ScreenControllerService _this = this;
 	Handler mainthreadAccessor;
+	WindowManager wm;
+	PowerManager powerManager;
+	KeyguardManager keyguardManager;
 	boolean debug;
 	ArrayList<LocalSocket> conAry = new ArrayList<LocalSocket>();
 
@@ -142,127 +145,119 @@ public class ScreenControllerService extends Service {
 	}
 
 	class Orient {
-		boolean did_addGhostView;
-		WindowManager wm;
 		View ghostView;
 		LayoutParams lp;
 
 		public void set(final String orientStr) {
 			mainthreadAccessor.post(new Runnable() {
 				public void run() {
-					action_free.run();
 					if (debug)
 						Log.d(tag, "orient:" + orientStr);
 
 					if (wm == null)
 						wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-					if (ghostView == null)
-						ghostView = new View(_this);
+					View ghostView_to_deleted = ghostView;
+					ghostView = new View(_this);
 					if (lp == null)
 						lp = newGhostLayout();
 
 					lp.screenOrientation = "landscape".equals(orientStr) ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 
 					wm.addView(ghostView, lp);
-					did_addGhostView = true;
+
+					if (ghostView_to_deleted != null)
+						wm.removeView(ghostView_to_deleted);
 				}
 			});
 		}
 
 		public void free() {
-			mainthreadAccessor.post(action_free);
-		}
-
-		Runnable action_free = new Runnable() {
-			public void run() {
-				if (did_addGhostView) {
-					if (debug)
-						Log.d(tag, "orient:free");
-					wm.removeView(ghostView);
-					did_addGhostView = false;
+			mainthreadAccessor.post(new Runnable() {
+				public void run() {
+					if (ghostView != null) {
+						if (debug)
+							Log.d(tag, "orient:free");
+						wm.removeView(ghostView);
+						ghostView = null;
+					}
 				}
-			}
-		};
+			});
+		}
 	}
 
 	class Screen {
-		boolean did_addGhostView;
-		WindowManager wm;
 		View ghostView;
 		LayoutParams lp;
 
-		boolean did_acquireWakeLock;
-		PowerManager powerManager;
 		PowerManager.WakeLock wakeLock;
 
-		boolean did_disableKeyguard;
-		KeyguardManager keyGuardManager;
-		KeyguardManager.KeyguardLock keyGuardLock;
+		KeyguardManager.KeyguardLock keyguardLock;
 
 		public void turnOn(final boolean unlock) {
 			mainthreadAccessor.post(new Runnable() {
 				public void run() {
-					action_free.run();
 					if (debug)
 						Log.d(tag, "screen:on" + (unlock ? "+unlock" : ""));
 
 					if (wm == null)
 						wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-					if (ghostView == null)
-						ghostView = new View(_this);
+					View old_ghostView = ghostView;
+					ghostView = new View(_this);
 					if (lp == null) {
 						lp = newGhostLayout();
 						lp.flags |= LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 						lp.flags |= LayoutParams.FLAG_TURN_SCREEN_ON;
 						lp.flags |= LayoutParams.FLAG_KEEP_SCREEN_ON;
-						lp.flags |= LayoutParams.FLAG_DISMISS_KEYGUARD;
 					}
+					if (unlock)
+						lp.flags |= LayoutParams.FLAG_DISMISS_KEYGUARD;
 
 					wm.addView(ghostView, lp);
-					did_addGhostView = true;
+
+					if (old_ghostView != null)
+						wm.removeView(old_ghostView);
 
 					if (powerManager == null)
 						powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-					if (wakeLock == null)
-						wakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, _this.getPackageName() + '#' + Thread.currentThread().getId());
+					PowerManager.WakeLock old_wakeLock = wakeLock;
+					wakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, _this.getPackageName() + '#' + Thread.currentThread().getId());
 					wakeLock.acquire();
-					did_acquireWakeLock = true;
+
+					if (old_wakeLock != null)
+						old_wakeLock.release();
 
 					if (unlock) {
-						if (keyGuardManager == null)
-							keyGuardManager = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-						if (keyGuardLock == null)
-							keyGuardLock = keyGuardManager.newKeyguardLock(_this.getPackageName() + '#' + Thread.currentThread().getId());
-						keyGuardLock.disableKeyguard();
-						did_disableKeyguard = true;
+						if (keyguardManager == null)
+							keyguardManager = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+						if (keyguardLock == null) {
+							keyguardLock = keyguardManager.newKeyguardLock(_this.getPackageName() + '#' + Thread.currentThread().getId());
+						}
+						keyguardLock.disableKeyguard();
 					}
 				}
 			});
 		}
 
 		public void free() {
-			mainthreadAccessor.post(action_free);
+			mainthreadAccessor.post(new Runnable() {
+				public void run() {
+					if (debug && (ghostView != null || wakeLock != null || keyguardLock != null))
+						Log.d(tag, "screen:free");
+
+					if (ghostView != null) {
+						wm.removeView(ghostView);
+						ghostView = null;
+					}
+					if (wakeLock != null) {
+						wakeLock.release();
+						wakeLock = null;
+					}
+					if (keyguardLock != null) {
+						keyguardLock.reenableKeyguard();
+					}
+				}
+			});
 		}
-
-		Runnable action_free = new Runnable() {
-			public void run() {
-				if (debug && (did_addGhostView || did_acquireWakeLock || did_disableKeyguard))
-					Log.d(tag, "screen:free");
-
-				if (did_addGhostView) {
-					wm.removeView(ghostView);
-					did_addGhostView = false;
-				}
-				if (did_acquireWakeLock) {
-					wakeLock.release();
-					did_acquireWakeLock = false;
-				}
-				if (did_disableKeyguard) {
-					keyGuardLock.reenableKeyguard();
-					did_disableKeyguard = false;
-				}
-			}
-		};
 	}
 
 	LayoutParams newGhostLayout() {

@@ -407,25 +407,52 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
 
   })(); //end of RDC namespace -----------------------------------------------
 
-  AscUtil.rotateChildLocally = function (targetContainer) {
+  AscUtil.rotateChildLocally = function (targetContainer, explicitOrient) {
     //noinspection JSValidateTypes
     var $c = $(targetContainer), $v = $c.children();
-    if ($v.css('transform').indexOf('matrix') < 0) {
-      targetContainer.oldCss = {
-        width: targetContainer.style.width,
-        height: targetContainer.style.height,
-        overflow: ''
-      };
-      var w = $c.outerWidth(true), h = $c.outerHeight(true);
-      if (w === 0 || h === 0) {
-        w = $v.outerWidth(true);
-        h = $v.outerHeight(true);
-      }
-      $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', overflow: 'hidden'});
-      $v.css({'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
+
+    if (explicitOrient) {
+      set_orient(explicitOrient === 'landscape');
     } else {
-      $v.css({'transform-origin': '', transform: ''});
-      $c.css(targetContainer.oldCss);
+      set_orient(!get_orient());
+    }
+
+    function set_orient(orient) {
+      if (orient === get_orient())
+        return;
+
+      if (targetContainer.__orig_orient === orient) {
+        $v.css({'transform-origin': '', transform: ''});
+        $c.css(targetContainer.oldCss);
+      }
+      else {
+        var w = $c.outerWidth(true), h = $c.outerHeight(true);
+        if (w === 0 || h === 0) {
+          w = $v.outerWidth(true);
+          h = $v.outerHeight(true);
+        }
+        $c.css({width: h, height: w, 'text-align': 'left', 'vertical-align': 'top', overflow: 'hidden'});
+        $v.css({'transform-origin': '0 0', transform: 'rotate(270deg) translate(-100%,0)'});
+      }
+      targetContainer.__orient = !targetContainer.__orient;
+    }
+
+    function get_orient() {
+      if (targetContainer.__orient === undefined) {
+        var w = $c.outerWidth(true), h = $c.outerHeight(true);
+        if (w === 0 || h === 0) {
+          w = $v.outerWidth(true);
+          h = $v.outerHeight(true);
+        }
+        targetContainer.__orig_orient = targetContainer.__orient = (w > h);
+
+        targetContainer.oldCss = {
+          width: targetContainer.style.width,
+          height: targetContainer.style.height,
+          overflow: ''
+        };
+      }
+      return targetContainer.__orient;
     }
   };
 
