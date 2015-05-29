@@ -2,13 +2,17 @@ package asc.tool.screencontroller;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
+
 import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
@@ -26,6 +30,7 @@ public class ScreenControllerService extends Service {
 	ScreenControllerService _this = this;
 	Handler mainthreadAccessor;
 	boolean debug;
+	ArrayList<LocalSocket> conAry = new ArrayList<LocalSocket>();
 
 	@Override
 	public void onCreate() {
@@ -43,7 +48,11 @@ public class ScreenControllerService extends Service {
 		final LocalServerSocket _srv = srv;
 
 		mainthreadAccessor = new Handler();
-		startForeground(Process.myPid(), new Notification());
+
+		IntentFilter screenStateFilter = new IntentFilter();
+		screenStateFilter.addAction(Intent.ACTION_SCREEN_ON);
+		screenStateFilter.addAction(Intent.ACTION_SCREEN_OFF);
+		registerReceiver(stateReceiver, screenStateFilter);
 
 		new Thread() {
 			public void run() {
@@ -64,7 +73,15 @@ public class ScreenControllerService extends Service {
 						continue;
 					}
 
+					synchronized (conAry) {
+						conAry.add(con);
+					}
+
+					mainthreadAccessor.post(action_startForeground);
+
+					final LocalSocket _con = con;
 					final Scanner _scanner = new Scanner(ins);
+
 					new Thread() {
 						public void run() {
 							final Orient orient = new Orient();
@@ -99,6 +116,13 @@ public class ScreenControllerService extends Service {
 							} // end of command loop
 
 							_scanner.close();
+
+							synchronized (conAry) {
+								conAry.remove(_con);
+							}
+
+							mainthreadAccessor.post(action_stopForeground);
+
 						}; // end of thread of connection handler
 					}.start();
 				} // end of connection handler
@@ -251,4 +275,51 @@ public class ScreenControllerService extends Service {
 		lp.flags |= LayoutParams.FLAG_NOT_TOUCHABLE;
 		return lp;
 	}
+
+	int foreground_count = 0;
+	Runnable action_startForeground = new Runnable() {
+		public void run() {
+			if (foreground_count == 0) {
+				startForeground(Process.myPid(), new Notification());
+			}
+			foreground_count++;
+		}
+	};
+
+	Runnable action_stopForeground = new Runnable() {
+		public void run() {
+			foreground_count--;
+			if (foreground_count <= 0) {
+				foreground_count = 0;
+				stopForeground(true);
+			}
+		}
+	};
+
+	BroadcastReceiver stateReceiver = new BroadcastReceiver() {
+		byte[] on = "screen:on\n".getBytes();
+		byte[] off = "screen:off\n".getBytes();
+
+		public void onReceive(Context context, Intent intent) {
+			if (intent == null || intent.getAction() == null)
+				return;
+			if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+				notifyClient(off);
+			} else if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+				notifyClient(on);
+			}
+		}
+
+		void notifyClient(byte[] buf) {
+			synchronized (conAry) {
+				for (LocalSocket con : conAry) {
+					try {
+						con.getOutputStream().write(buf);
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+	};
 }

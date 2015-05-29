@@ -17,16 +17,13 @@ var REC_TAG = '[REC]', EMPTY_BUF = new Buffer([]), touchEventBuf = new Buffer([/
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
-    re_httpRange = /^bytes=(\d*)-(\d*)$/i, re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'), re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
+    re_adminKey_cookie = new RegExp('\\b' + cookie_id_head + 'adminKey=([^;]+)'),
+    re_repeatableHtmlBlock = /<!--repeatBegin-->\s*([^\0]*)\s*<!--repeatEnd-->/g;
 var switchList = ['showDisconnectedDevices', 'logFfmpegDebugInfo', 'logFpsStatistic', 'logHttpReqDetail', 'logAllProcCmd', 'logAllHttpReqRes', 'logAdbBridgeDetail', 'logAdbBridgeReceivedData', 'logRdcWebSocketDetail', 'fastResize', 'fastCapture', 'should_callAscLibSecurely', 'support_adbBridge'];
 var keyCodeMapOfName = {}, keyNameMapOfCode = {3: 'HOME', 4: 'BACK', 82: 'MENU', 26: 'POWER', 187: 'APP_SWITCH', 66: 'ENTER', 67: 'DEL', 112: 'FORWARD_DEL', 21: 'DPAD_LEFT', 22: 'DPAD_RIGHT', 19: 'DPAD_UP', 20: 'DPAD_DOWN', 122: 'MOVE_HOME', 123: 'MOVE_END'};
 Object.keys(keyNameMapOfCode).forEach(function (keyCode) {
   return keyCodeMapOfName[keyNameMapOfCode[keyCode]] = keyCode;
 });
-//just to avoid compiler warning about undefined properties/methods
-true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
-true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, __end: 0});
-true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
   var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
@@ -165,7 +162,7 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString('binary')) && _log && log(tag + '>', stdout);
     (stderr = Buffer.concat(stderr).toString('binary')) && _log && (stderr = stderr.slice(8) || stderr.slice(0, 4)) && log(tag + '!', stderr);
-    (stdout || stderr) && _log && log(tag, '---- end of stdout/stderr');
+    (stdout || stderr) && _log && log(tag, '---- end of output');
     on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + stderr), stdout);
   }
 }
@@ -410,15 +407,9 @@ function initDeviceTrackers() {
 
   setInterval(function () {
     devAry.forEach(function (dev) {
-      dev.status === 'OK' && !Object.keys(dev.adbConMap).length && adbRun('[KeepAlive]', dev, 'a=', {timeout: cfg['adbEchoTimeout'] * 1000});
+      dev.status === 'OK' && !Object.keys(dev.adbConMap).length && adbRun('[KeepAlive]', dev, 'a=', {timeout: 10 * 1000});
     });
   }, cfg['adbKeepDeviceAliveInterval'] * 1000);
-
-  setInterval(function () {
-    devAry.forEach(function (dev) {
-      dev.isOsStartingUp && prepareDevice(dev);
-    });
-  }, cfg['adbRetryPrepareDeviceInterval'] * 1000);
 
   function _initDeviceTracker(adbHost) {
     var adbCon = adb('[TrackDevices]', adbHost, 'host:track-devices', function/*on_close*/() {
@@ -477,7 +468,7 @@ var cmd_getExtraInfo = ''
     + ' echo ===; LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./$DLOPEN ./sc-??? ./fsc-???;'
     + ' echo ===; ls -d /data/data/asc.tool.screencontroller 2>/dev/null;';
 var cmd_uninstallScreenController = ' pm uninstall asc.tool.screencontroller >/dev/null 2>&1;';
-var cmd_installScreenController = ' umask 000; cat ' + cfg.androidWorkDir + '/screencontroller.apk > ' + cfg.androidWorkDir + '-screencontroller.apk &&' +
+var cmd_installScreenController = ' umask 003; cat ' + cfg.androidWorkDir + '/screencontroller.apk > ' + cfg.androidWorkDir + '-screencontroller.apk &&' +
     ' pm install ' + cfg.androidWorkDir + '-screencontroller.apk;';
 var cmd_startScreenController = ' am startservice -n asc.tool.screencontroller/.ScreenControllerService $OPTION;';
 var cmd_deleteScreenControllerApk = ' rm ' + cfg.androidWorkDir + '-screencontroller.apk >/dev/null 2>&1;';
@@ -486,7 +477,9 @@ function prepareDevice(dev, force/*optional*/) {
   if (dev.status === 'OK' && !force || dev.status === 'preparing') return;
   log('[PrepareDevice] {' + dev.id + '}', 'BEGIN');
   (dev.status = 'preparing') && scheduleUpdateWholeUI();
-  dev.postPrepareProc && dev.postPrepareProc.__cleanup('restart');
+  force && forEachValueIn(dev.adbConMap, function (adbCon) {
+    /InstallScreenController|StartScreenController|DeleteTempApk/.test(adbCon.__tag) && adbCon.__cleanup('restart preparing');
+  });
   adbRun('[CheckBasicInfo]', dev, cmd_getBasicInfo + (force ? cmd_clearFiles : cmd_getVer), function/*on_close*/(stderr, stdout) {
     if (stderr) {
       return setStatus(stderr);
@@ -541,22 +534,23 @@ function prepareDevice(dev, force/*optional*/) {
       } else if (parts[0]) {
         return setStatus('failed to prepare: unexpected result: ' + parts[0].replace(/\s/g, ' ').trim());
       } else if (!getMoreInfo(parts)) {
-        return setStatus('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?'));
+        return setStatus(dev.isOsStartingUp ? 'starting up' : ('failed to ' + (!dev.libPath ? 'check internal lib' : !dev.disp ? 'check display size' : '?')));
       }
-      if (parts[5] === '/data/data/asc.tool.screencontroller') { //app already installed
-        startScreenController(dev, /*deleteApk:*/true);
-      } else {
-        installScreenController(dev);
-      }
+      parts[5] === '/data/data/asc.tool.screencontroller' ? startScreenController(dev) : installScreenController(dev);
       return setStatus('OK');
     }, {timeout: cfg['adbFinishPrepareFileTimeout'] * 1000, log: true});
   } //end of finishPrepare
 
   function getMoreInfo(parts/*result of cmd_getExtraInfo*/) {
-    dev.isOsStartingUp = (parts[1] === "Can't find service: window");
-    (parts[1] = parts[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(parts[1][1], parts[1][2]), h: Math.max(parts[1][1], parts[1][2])}) && [1, 2, 4, 5, 6, 7].forEach(function (i) {
-      dev.disp[i] = {w: Math.ceil(dev.disp.w * i / 8 / 2) * 2, h: Math.ceil(dev.disp.h * i / 8 / 2) * 2};
-    });
+    if ((dev.isOsStartingUp = (parts[1] === "Can't find service: window"))) {
+      setTimeout(function () {
+        prepareDevice(dev);
+      }, 1000)
+    } else {
+      (parts[1] = parts[1].match(/([1-9]\d\d+)\D+([1-9]\d\d+)/)) && (dev.disp = {w: Math.min(parts[1][1], parts[1][2]), h: Math.max(parts[1][1], parts[1][2])}) && [1, 2, 4, 5, 6, 7].forEach(function (i) {
+        dev.disp[i] = {w: Math.ceil(dev.disp.w * i / 8 / 2) * 2, h: Math.ceil(dev.disp.h * i / 8 / 2) * 2};
+      });
+    }
     dev.cpuCount = Number(parts[2]) || 1;
     (parts[3] = parts[3].match(/\d+/)) && (dev.memSize = Number(parts[3][0]));
     var libs = parts[4].split(/\r*\n/).sort();
@@ -566,7 +560,7 @@ function prepareDevice(dev, force/*optional*/) {
     dev.fastLibPath = (libs.filter(function (lib) {
       return /^\.\/fsc.*: OK$/.test(lib);
     }).pop() || '').replace(': OK', '');
-    return dev.libPath && dev.disp;
+    return !dev.isOsStartingUp && dev.libPath && dev.disp;
   }
 
   function getTouchDevInfo(stdout) {
@@ -599,18 +593,18 @@ function prepareDevice(dev, force/*optional*/) {
 } //end of prepareDevice
 
 function installScreenController(dev) {
-  dev.postPrepareProc = adbRun('[InstallScreenController]', dev, cmd_installScreenController, function/*on_close*/(stderr, stdout) {
-    dev.postPrepareProc = null;
-    if (!/\n(Success|INSTALL_FAILED_ALREADY_EXISTS)/.test(stdout)) return;
-    startScreenController(dev, /*deleteApk:*/true);
+  adbRun('[InstallScreenController]', dev, cmd_installScreenController, function/*on_close*/(stderr, stdout) {
+    if (stderr || !/\n(Success|INSTALL_FAILED_ALREADY_EXISTS)/.test(stdout)) return;
+    startScreenController(dev);
+    adbRun('[DeleteTempApk]', dev, cmd_deleteScreenControllerApk, {timeout: 2 * 1000, log: true});
   }, {timeout: cfg['adbInstallScreenControllerTimeout'] * 1000, log: true});
 }
 
-function startScreenController(dev, deleteApk) {
+function startScreenController(dev) {
   !dev.am_startservice_option && (dev.am_startservice_option = (dev.sysVer >= 4.22 ? '--user 0' : ''));
-  dev.postPrepareProc = adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option) + (deleteApk ? cmd_deleteScreenControllerApk : ''), function (stderr, stdout) {
-    dev.postPrepareProc = null;
-    if ((!stderr && /^Starting service:/.test(stdout) && !/Error|Exception:/.test(stdout))) {
+  adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option), function /*on_close*/(stderr, stdout) {
+    if (stderr) return;
+    if (/^Starting service:/.test(stdout) && !/Error|Exception:/.test(stdout)) {
       dev.capture && turnOnScreen_setDeviceOrientation(dev);
     } else if (/^Error: Unknown option: --user:/.test(stdout)) {
       dev.am_startservice_option = '';
@@ -625,12 +619,28 @@ function startScreenController(dev, deleteApk) {
 }
 
 function turnOnScreen_setDeviceOrientation(dev, orient) {
-  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/() {
+  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/(stderr) {
     dev.capture.screenController = null;
-    startScreenController(dev);
+    stderr !== 'capture closed' && startScreenController(dev);
   }, {log: true}));
   turnOnScreen(dev, /*unlock:*/true);
   setDeviceOrientation(dev, orient || dev.last_devOrient);
+
+  var adbCon = dev.capture.screenController, acc_str = '';
+  adbCon.__on_adb_stream_data = function (buf) {
+    log(adbCon.__tag + '>', buf.toString());
+
+    acc_str += buf.toString();
+    acc_str.split(/\n/).forEach(function (ls, i, ary) {
+      if (i === ary.length - 1) {
+        acc_str = ls;
+      } else if (ls === 'screen:on') {
+        log(adbCon.__tag, ls);
+      } else if (ls === 'screen:off') {
+        log(adbCon.__tag, ls);
+      }
+    });
+  };
 }
 
 function sendTouchEvent(dev, _type, _x, _y) {
@@ -1086,9 +1096,7 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   if (!chkDev(dev, {connected: true, capturing: true})) {
     return end(res, chk.err);
   }
-  adbRun('[ShowHome]', dev, 'am start -c android.intent.category.HOME -a android.intent.action.MAIN', function (stderr, stdout) {
-    (!stderr && /^Starting Intent:/.test(stdout) && !/Error:/.test(stdout));
-  });
+  adbRun('[ShowHome]', dev, 'am start -c android.intent.category.HOME -a android.intent.action.MAIN', {timeout: 5 * 1000});
   return end(res, 'OK');
 }).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
@@ -1142,7 +1150,7 @@ streamWeb_handlerMap['/getFile'] = function (req, res, q, urlPath, dev) {
       || !(q.filename = new FilenameInfo(q.filename, dev.sn)).isValid && (chk.err = '`filename`: invalid name')) {
     return end(res, chk.err);
   }
-  if ((q._range = (req.headers.range || '').match(re_httpRange))) {
+  if ((q._range = (req.headers.range || '').match(/^bytes=(\d*)-(\d*)$/i))) {
     if (!(q._fileSize = getFileSizeSync(cfg.outputDir + '/' + q.filename))) {
       return end(res, chk.err);
     }
@@ -1597,3 +1605,7 @@ adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*
       });
 });
 
+//just to avoid compiler warning about undefined properties/methods
+true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
+true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, __end: 0});
+true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, __end: 0});
