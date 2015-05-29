@@ -605,7 +605,7 @@ function startScreenController(dev) {
   adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option), function /*on_close*/(err, stdout) {
     if (err) return;
     if (/^Starting service:/.test(stdout) && !/Error|Exception:/.test(stdout)) {
-      dev.capture && turnOnScreen_setDeviceOrientation(dev);
+      dev.capture && connectScreenController(dev);
     } else if (/^Error: Unknown option: --user:/.test(stdout)) {
       dev.am_startservice_option = '';
       startScreenController(dev);
@@ -618,18 +618,27 @@ function startScreenController(dev) {
   }, {timeout: cfg['adbStartScreenControllerTimeout'] * 1000, log: true});
 }
 
-function turnOnScreen_setDeviceOrientation(dev, orient) {
-  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/(err) {
-    dev.capture.screenController = null;
+function connectScreenController(dev) {
+  var capture = dev.capture, q = capture.q, acc_str = '';
+  var adbCon = capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/(err) {
+    capture.screenController = null;
     err !== 'capture closed' && startScreenController(dev);
-  }, {log: true}));
-  turnOnScreen(dev, /*unlock:*/true);
-  setDeviceOrientation(dev, orient || dev.pref.devOrient);
-
-  var adbCon = dev.capture.screenController, acc_str = '';
+  }, {log: true});
+  adbCon.on('__on_adb_stream_open', function () {
+    turnOnScreen(dev, /*unlock:*/true);
+    if (dev.explicit_devOrient) {
+      setDeviceOrientation(dev, dev.explicit_devOrient);
+    } else if (q.orientation) {
+      setDeviceOrientation(dev, q.orientation);
+    } else {
+      setDeviceOrientation(dev, q.orient, /*doNotRemember:*/true);
+      capture.timer_free_devOrient = setTimeout(function () {
+        setDeviceOrientation(dev, 'free', /*doNotRemember:*/true);
+      }, 5 * 1000);
+    }
+  });
   adbCon.__on_adb_stream_data = function (buf) {
     log(adbCon.__tag + '>', buf.toString());
-
     acc_str += buf.toString();
     acc_str.split(/\n/).forEach(function (ls, i, ary) {
       if (i === ary.length - 1) {
@@ -713,16 +722,17 @@ function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
   return true;
 }
 
-function setDeviceOrientation(dev, orient) {
+function setDeviceOrientation(dev, orient, doNotRemember) {
   if (!chkDev(dev, {connected: true, capturing: true, orientable: true})
       || !chk('orientation', orient, ['landscape', 'portrait', 'free'])) {
     return false;
   }
+  clearTimeout(dev.capture.timer_free_devOrient);
   (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__on_adb_stream_open', function () {
     cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', orient);
-    return dev.capture.screenController.write('orient:' + orient + '\n');
+    dev.capture.screenController.write('orient:' + orient + '\n');
   });
-  dev.pref.devOrient = orient;
+  !doNotRemember && (dev.explicit_devOrient = orient);
   return true;
 }
 
@@ -732,7 +742,7 @@ function turnOnScreen(dev, unlock) {
   }
   (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__on_adb_stream_open', function () {
     cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', 'screen:on' + (unlock ? '+unlock' : ''));
-    return dev.capture.screenController.write('screen:on' + (unlock ? '+unlock' : '') + '\n');
+    dev.capture.screenController.write('screen:on' + (unlock ? '+unlock' : '') + '\n');
   });
   return true;
 }
@@ -840,6 +850,7 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
 
 function _startRemoteDesktopServer(dev, q) {
   var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
+  connectScreenController(dev);
   var adbCon = capture.adbCon = adbRun('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
@@ -913,6 +924,7 @@ function _startRemoteDesktopServer(dev, q) {
     cleanup.called = true;
     forEachValueIn(capture.consumerMap, endCaptureConsumer);
     clearTimeout(capture.delayKillTimer);
+    clearTimeout(capture.timer_free_devOrient);
     clearInterval(capture.timer_resentImageForSafari);
     clearInterval(capture.timer_resentUnchangedImage);
     capture.adbCon && capture.adbCon.__cleanup(reason);
@@ -925,6 +937,7 @@ function _startRemoteDesktopServer(dev, q) {
       !Object.keys(rdcWebSocket.devMapOfHandle).length && rdcWebSocket.__cleanup('capturer closed');
     });
     dev.rdcWebSocketMap = {};
+    dev.explicit_devOrient = null;
     scheduleUpdateLiveUI();
   }
 }
@@ -948,7 +961,6 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
   capture.q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && useExisting && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
-  (q.type === 'ajpg' || q._isFirstSingleJpgReq) && turnOnScreen_setDeviceOrientation(dev, q.orientation);
 }
 
 function doRecord(dev, q/*same as capture*/) {
