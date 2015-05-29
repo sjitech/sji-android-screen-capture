@@ -204,20 +204,19 @@ var AscUtil = {debug: false, debugBreak: false, showEventsOnly: false, useWebSoc
       init_keyboard_handler.called = true;
       var txtQueue = [], keyQueue = [];
 
-      $(document.body).unbind('keydown.live_input keypress.live_input paste.live_input')
+      $(document.body).unbind('keydown.live_input paste.live_input')
           .on('keydown.live_input', function (e) {
             if (!focusedLiveImage) return;
             var c = keyCodeMap[e.which];
-            if (!c) return;
-            keyQueue.push(c) === 1 && sendKey();
-            e.preventDefault();
-          })
-          .on('keypress.live_input', function (e) {
-            if (!focusedLiveImage) return;
-            if (e.metaKey || e.which < 0x20 || e.which > 0x7f) return;
-            var c = String.fromCharCode(e.which);
-            txtQueue.push(c) === 1 && sendText();
-            e.preventDefault();
+            if (c) {
+              keyQueue.push(c) === 1 && sendKey();
+              e.preventDefault();
+            } else if (e.which >= 0x20 && e.which <= 0x7f && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              c = String.fromCharCode(e.which);
+              if (!e.shiftKey) c = c.toLowerCase();
+              txtQueue.push(c) === 1 && sendText();
+              e.preventDefault();
+            }
           })
           .on("paste.live_input", function (e) {
             if (!focusedLiveImage) return;
