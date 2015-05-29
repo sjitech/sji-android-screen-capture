@@ -26,7 +26,7 @@ Object.keys(keyNameMapOfCode).forEach(function (keyCode) {
 });
 
 function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*{stdio{}, timeout}*/) {
-  var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
+  var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], err = [], timer;
   log(tag, 'SPAWN ' + JSON.stringify(_path) + ' ' + JSON.stringify(args) + (opt.timeout ? ' timeout:' + opt.timeout : ''), /*autoNewLine:*/false);
 
   var childProc = child_process.spawn(_path, args, opt);
@@ -41,7 +41,7 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
   });
   childProc.stderr && childProc.stderr.on('data', function (buf) {
     log(tag + '!', buf, /*autoNewLine:*/false);
-    on_close.length >= 1 && stderr.push(buf);
+    on_close.length >= 1 && err.push(buf);
   });
 
   opt.timeout && (timer = setTimeout(function () {
@@ -63,19 +63,19 @@ function spawn(tag, _path, args, _on_close/*(err, stdout, ret, signal)*/, _opt/*
     reason !== 'CLOSED' && childProc.kill('SIGKILL');
     delete procMap[childProc.pid];
     clearTimeout(timer);
-    stderr = Buffer.concat(stderr).toString('binary');
+    err = Buffer.concat(err).toString('binary');
     stdout = Buffer.concat(stdout).toString('binary');
-    stderr = reason !== 'CLOSED' && reason || signal || stderr;
-    on_close(stderr, stdout, code, signal);
+    err = reason !== 'CLOSED' && reason || signal || err;
+    on_close(err, stdout, code, signal);
   }
 }
 
-function adbRun(_tag, dev, cmd, _on_close/*(stderr, stdout)*/, _opt) {
+function adbRun(_tag, dev, cmd, _on_close/*(err, stdout)*/, _opt) {
   return adb(_tag, dev, 'shell:' + cmd, _on_close, _opt);
 }
 
-function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
-  var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], stderr = [], timer;
+function adb(_tag, devOrHost, service, _on_close/*(err, stdout)*/, _opt) {
+  var on_close = typeof(_on_close) === 'function' ? _on_close : dummyFunc, opt = (typeof(_on_close) === 'function' ? _opt : _on_close) || {}, stdout = [], err = [], timer;
   var isDevCmd = !!devOrHost.adbHost, dev = isDevCmd ? devOrHost : null, adbHost = isDevCmd ? dev.adbHost : devOrHost;
   var tag = _tag + ' {' + (isDevCmd ? dev.id : adbHost) + '} [ADB]', _log = cfg.logAllProcCmd || opt.log;
   _log && log(tag, 'OPEN ' + JSON.stringify(service) + (opt.timeout ? ' timeout:' + opt.timeout : ''));
@@ -88,11 +88,11 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
 
     adbCon.on('data', function (buf) {
       if (cleanup.called) return;
-      if (stderr.length) return stderr.push(buf);
+      if (err.length) return err.push(buf);
       if (total_okay_len < (isDevCmd ? 8/*len of OKAYOKAY*/ : 4/*len of OKAY*/)) {
         var okay_len = Math.min(buf.length, 4 - total_okay_len % 4), i;
         for (i = 0; i < okay_len; i++, total_okay_len++)
-          if (buf[i] !== 'OKAY'.charCodeAt(total_okay_len % 4)) return stderr.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
+          if (buf[i] !== 'OKAY'.charCodeAt(total_okay_len % 4)) return err.push(buf); //"FAIL" + hexUint32(msg.byteLength) + msg
         if (total_okay_len !== 4 && total_okay_len !== 8) return;
 
         if (total_okay_len === 4/*len of OKAY*/ && isDevCmd) {
@@ -161,9 +161,9 @@ function adb(_tag, devOrHost, service, _on_close/*(stderr, stdout)*/, _opt) {
     }
     clearTimeout(timer);
     (stdout = Buffer.concat(stdout).toString('binary')) && _log && log(tag + '>', stdout);
-    (stderr = Buffer.concat(stderr).toString('binary')) && _log && (stderr = stderr.slice(8) || stderr.slice(0, 4)) && log(tag + '!', stderr);
-    (stdout || stderr) && _log && log(tag, '---- end of output');
-    on_close(reason !== 'CLOSED' && reason || stderr && ('error: ' + stderr), stdout);
+    (err = Buffer.concat(err).toString('binary')) && (err = err.slice(8) || err.slice(0, 4)) && _log && log(tag + '!', err);
+    (stdout || err) && _log && log(tag, '---- end of output');
+    on_close(reason !== 'CLOSED' && reason || err && ('error: ' + err), stdout);
   }
 }
 
@@ -391,8 +391,8 @@ function AdbHost(adbHostStr) {
   this.port = port || 5037;
   this.str = this.host + ':' + this.port;
   (this.autoStartLocalAdbServer = !host) && !AdbHost.haveCheckedLocalAdb && (AdbHost.haveCheckedLocalAdb = true)
-  && spawn('[CheckAdb]', cfg['adb'], ['version'], function/*on_close*/(stderr) {
-    stderr && process.stderr.write('Warning: failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
+  && spawn('[CheckAdb]', cfg['adb'], ['version'], function/*on_close*/(err) {
+    err && process.stderr.write('Warning: failed to check ADB(Android Debug Bridge) utility while you are configured to connect to some local port of ADB server.\nSo if ADB server is not started yet, this app can not start it and you need start it manually by command "adb start-server".\nYou\'d better install ADB and add path INSTALLED_DIR/platform-tools into PATH env var or set full path of adb to "adb" in config.json or your own config file.\n');
   }, {timeout: 30 * 1000});
 }
 
@@ -480,9 +480,9 @@ function prepareDevice(dev, force/*optional*/) {
   force && forEachValueIn(dev.adbConMap, function (adbCon) {
     /InstallScreenController|StartScreenController|DeleteTempApk/.test(adbCon.__tag) && adbCon.__cleanup('restart preparing');
   });
-  adbRun('[CheckBasicInfo]', dev, cmd_getBasicInfo + (force ? cmd_clearFiles : cmd_getVer), function/*on_close*/(stderr, stdout) {
-    if (stderr) {
-      return setStatus(stderr);
+  adbRun('[CheckBasicInfo]', dev, cmd_getBasicInfo + (force ? cmd_clearFiles : cmd_getVer), function/*on_close*/(err, stdout) {
+    if (err) {
+      return setStatus(err);
     }
     var parts = stdout.trim().split(/\s*===\s*/);
     if (parts.length !== 3) {
@@ -498,9 +498,9 @@ function prepareDevice(dev, force/*optional*/) {
     if (parts[2] === fileVer) {
       return finishPrepare(/*fileChanged:*/false);
     }
-    var adbCon = adb('[PushFile]', dev, 'sync:', function/*on_close*/(stderr, stdout) {
-      if (stderr || (stdout = stdout.replace(/OKAY\0*/g, '').split(/FAIL..../)).length > 1) {
-        return setStatus(stderr || ('failed to push file. reason: ' + (stdout[1] || 'unknown')));
+    var adbCon = adb('[PushFile]', dev, 'sync:', function/*on_close*/(err, stdout) {
+      if (err || (stdout = stdout.replace(/OKAY\0*/g, '').split(/FAIL..../)).length > 1) {
+        return setStatus(err || ('failed to push file. reason: ' + (stdout[1] || 'unknown')));
       }
       return finishPrepare(/*fileChanged:*/true);
     }, {timeout: cfg['adbPushFileToDeviceTimeout'] * 1000, log: true}); //end of PushFileToDevice
@@ -524,9 +524,9 @@ function prepareDevice(dev, force/*optional*/) {
   }
 
   function finishPrepare(fileChanged) {
-    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallScreenController + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(stderr, stdout) {
-      if (stderr) {
-        return setStatus(stderr);
+    adbRun('[FinishPrepare]', dev, cmd_cdWorkDir + (fileChanged ? cmd_uninstallScreenController + cmd_updateVerFile.replace(/\$FILE_VER/g, fileVer) : '') + cmd_getExtraInfo.replace(/\$DLOPEN/g, 'dlopen' + (dev.sysVer >= 5 ? '.pie' : '')), function/*on_close*/(err, stdout) {
+      if (err) {
+        return setStatus(err);
       }
       var parts = stdout.trim().split(/\s*===\s*/);
       if (parts.length !== 6) {
@@ -593,8 +593,8 @@ function prepareDevice(dev, force/*optional*/) {
 } //end of prepareDevice
 
 function installScreenController(dev) {
-  adbRun('[InstallScreenController]', dev, cmd_installScreenController, function/*on_close*/(stderr, stdout) {
-    if (stderr || !/\n(Success|INSTALL_FAILED_ALREADY_EXISTS)/.test(stdout)) return;
+  adbRun('[InstallScreenController]', dev, cmd_installScreenController, function/*on_close*/(err, stdout) {
+    if (err || !/\n(Success|INSTALL_FAILED_ALREADY_EXISTS)/.test(stdout)) return;
     startScreenController(dev);
     adbRun('[DeleteTempApk]', dev, cmd_deleteScreenControllerApk, {timeout: 2 * 1000, log: true});
   }, {timeout: cfg['adbInstallScreenControllerTimeout'] * 1000, log: true});
@@ -602,8 +602,8 @@ function installScreenController(dev) {
 
 function startScreenController(dev) {
   !dev.am_startservice_option && (dev.am_startservice_option = (dev.sysVer >= 4.22 ? '--user 0' : ''));
-  adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option), function /*on_close*/(stderr, stdout) {
-    if (stderr) return;
+  adbRun('[StartScreenController]', dev, cmd_startScreenController.replace(/\$OPTION/, dev.am_startservice_option), function /*on_close*/(err, stdout) {
+    if (err) return;
     if (/^Starting service:/.test(stdout) && !/Error|Exception:/.test(stdout)) {
       dev.capture && turnOnScreen_setDeviceOrientation(dev);
     } else if (/^Error: Unknown option: --user:/.test(stdout)) {
@@ -619,9 +619,9 @@ function startScreenController(dev) {
 }
 
 function turnOnScreen_setDeviceOrientation(dev, orient) {
-  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/(stderr) {
+  !dev.capture.screenController && (dev.capture.screenController = adb('[ScreenController]', dev, 'localabstract:asc.tool.screencontroller', function/*on_close*/(err) {
     dev.capture.screenController = null;
-    stderr !== 'capture closed' && startScreenController(dev);
+    err !== 'capture closed' && startScreenController(dev);
   }, {log: true}));
   turnOnScreen(dev, /*unlock:*/true);
   setDeviceOrientation(dev, orient || dev.last_devOrient);
@@ -830,8 +830,8 @@ function _startRemoteDesktopServer(dev, q) {
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
-      , function/*on_close*/(stderr) {
-        cleanup(stderr || 'CLOSED');
+      , function/*on_close*/(err) {
+        cleanup(err || 'CLOSED');
       }, {log: true});
   adbCon.__on_adb_stream_data = function (buf) {
     var pos = 0, unsavedStart = 0, endPos = buf.length;
@@ -1293,8 +1293,8 @@ adminWeb_handlerMap['/getServerLog' + cfg.adminUrlSuffix] = function (req, res, 
   if (!dev) {
     end(res, chk.err);
   } else {
-    var adbCon = adbRun('[cmd]', dev, q.cmd, function/*on_close*/(stderr) {
-      end(res, !stderr ? '' : ((res.headersSent ? '\n' : '') + stderr));
+    var adbCon = adbRun('[cmd]', dev, q.cmd, function/*on_close*/(err) {
+      end(res, !err ? '' : ((res.headersSent ? '\n' : '') + err));
     }, {timeout: (Number(q.timeout) || cfg['adbAdmCmdTimeout']) * 1000, log: q.log !== 'false'});
     adbCon.__on_adb_stream_data = function (buf) {
       res.write(buf.slice(0, Math.min(buf.length, restLen)));
@@ -1585,7 +1585,7 @@ function reloadPushFiles() {
 
 reloadResource();
 
-spawn('[CheckFfmpeg]', cfg['ffmpeg'], ['-version'], function/*on_close*/(stderr, stdout) {
+spawn('[CheckFfmpeg]', cfg['ffmpeg'], ['-version'], function/*on_close*/(err, stdout) {
   !/version/i.test(stdout) && process.stderr.write('Warning: failed to check FFMPEG (for this machine, not for Android device). You can not record video in H264/MP4 format.\nPlease install it from http://www.ffmpeg.org/download.html and add the ffmpeg\'s dir to PATH env var or set full path of ffmpeg to "ffmpeg" in config.json or your own config file.\n');
 }, {timeout: 10 * 1000});
 
