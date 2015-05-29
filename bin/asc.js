@@ -314,7 +314,7 @@ function createDev(conId/*sn or ip:port which maybe same on different host*/, ad
     if ((dev = devGrp[0])) return dev;
   }
   dev = devAry[devAry.length] = devGrp[devGrp.length] = {
-    i: devAry.length, status: '', touchStatus: '', touch: {}, info_htm: '',
+    i: devAry.length, status: '', touchStatus: '', touch: {}, info_htm: '', pref: {},
     adbConMap: {}, rdcWebSocketMap: {}, adbBridge: true,
     masterMode: false, accessKey: newAutoAccessKey().replace(/^.{10}/, '----------'), subOutputDir: ''
   };
@@ -624,7 +624,7 @@ function turnOnScreen_setDeviceOrientation(dev, orient) {
     err !== 'capture closed' && startScreenController(dev);
   }, {log: true}));
   turnOnScreen(dev, /*unlock:*/true);
-  setDeviceOrientation(dev, orient || dev.last_devOrient);
+  setDeviceOrientation(dev, orient || dev.pref.devOrient);
 
   var adbCon = dev.capture.screenController, acc_str = '';
   adbCon.__on_adb_stream_data = function (buf) {
@@ -722,7 +722,7 @@ function setDeviceOrientation(dev, orient) {
     cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', orient);
     return dev.capture.screenController.write('orient:' + orient + '\n');
   });
-  dev.last_devOrient = orient;
+  dev.pref.devOrient = orient;
   return true;
 }
 
@@ -760,18 +760,34 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
   q._priority = (q.size || q.orient || q.fastCapture || q.fastResize) ? 1 : 0;
   if (dev && !chkDev(dev, {connected: true, capturable: true})
       || dev && !chk('type', q.type = force_ajpg ? 'ajpg' : q.type || 'ajpg', ['ajpg', 'jpg'])
-      || ( !(q._psz = (q.size = q.size || cfg.viewSize).match(re_size)) && !((q._scaleFactor = Number(q.size)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`size`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600 (600x400 means landscape)') )
-      || !chk('orient', (q.orient = q.orient || cfg.viewOrient), ['portrait', 'landscape'])
-      || !chk('fastResize', (q.fastResize = q.fastResize || String(cfg.fastResize)), ['true', 'false'])
-      || !chk('fastCapture', (q.fastCapture = q.fastCapture || String(cfg.fastCapture)), ['true', 'false'])) {
+      || ( !(q._psz = (q.size = q.size || (dev && dev.pref.viewSize) || cfg.viewSize).match(re_size)) && !((q._scaleFactor = Number(q.size)) >= 0.1 && q._scaleFactor <= 1) && (chk.err = '`size`: must be resize factor (>=0.1 <=1) or size patterns: Example: 400x600, 400x, x600 (600x400 means landscape)') )
+      || !chk('orient', (q.orient = q.orient || (dev && dev.pref.viewOrient) || cfg.viewOrient), ['portrait', 'landscape'])
+      || !chk('fastResize', (q.fastResize = q.fastResize || (dev && dev.pref.fastResize) || String(cfg.fastResize)), ['true', 'false'])
+      || !chk('fastCapture', (q.fastCapture = q.fastCapture || (dev && dev.pref.fastCapture) || String(cfg.fastCapture)), ['true', 'false'])) {
     return false;
   }
   var w = q._psz ? Number(q._psz[1] || q._psz[3]) : 0, h = q._psz ? Number(q._psz[2] || q._psz[4]) : 0;
   (w && h) && (q.orient = (w > h) ? 'landscape' : 'portrait'); //adjust orientation if w > h
 
   if (dev) {
+    dev.pref.viewSize = q.size;
+    dev.pref.viewOrient = q.orient;
+    dev.pref.fastResize = q.fastResize;
+    dev.pref.fastCapture = q.fastCapture;
+    var landscape = (q.orient === 'landscape');
+
     //set q._psz = normalized portrait size. (keep q._psz.w < q._psz.h)  Note: dev.disp.w always < dev.disp.h
-    q._psz = (w || h) ? {w: w && h ? Math.min(w, h) : w, h: w && h ? Math.max(w, h) : h} : {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
+    if (w && h) {
+      q._psz = {w: Math.min(w, h), h: Math.max(w, h)};
+    } else if (w || h) {
+      if (landscape) {
+        q._psz = {w: h, h: w};
+      } else {
+        q._psz = {w: w, h: h};
+      }
+    } else {
+      q._psz = {w: dev.disp.w * q._scaleFactor, h: dev.disp.h * q._scaleFactor};
+    }
     q._psz = {w: Math.min(dev.disp.w, Math.ceil((q._psz.w || q._psz.h * dev.disp.w / dev.disp.h) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((q._psz.h || q._psz.w * dev.disp.h / dev.disp.w) / 2) * 2)};
 
     q.fastResize = q.fastResize === 'true' && (!!dev.fastLibPath || dev.libPath >= './sc-400');
@@ -784,7 +800,6 @@ function chkCaptureParameter(dev, req, q, force_ajpg, forRecording) {
       var rr = Math.max(q._psz.w / dev.disp.w, q._psz.h / dev.disp.h);
       q._psz = {w: Math.min(dev.disp.w, Math.ceil((rr * dev.disp.w) / 2) * 2), h: Math.min(dev.disp.h, Math.ceil((rr * dev.disp.h) / 2) * 2)};
     }
-    var landscape = (q.orient === 'landscape');
     w = landscape ? q._psz.h : q._psz.w; //adjust visibly requested w  (maybe > h)
     h = landscape ? q._psz.w : q._psz.h; //adjust visibly requested h  (maybe < w)
     q.size = w + 'x' + h; //adjust display string for size again
