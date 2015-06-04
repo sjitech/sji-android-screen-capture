@@ -15,6 +15,10 @@
 #include <time.h>
 #include <signal.h>
 #include <termios.h>
+#include <pthread.h>
+#include <linux/input.h>
+#include <sys/un.h>
+#include <sys/socket.h>
 
 struct ASC_PRIV_DATA;
 struct ASC {
@@ -52,9 +56,13 @@ static void _LOG(const char* format, ...) {
 #include "libcutils.h"
 #if (ANDROID_VER>=400)
     #include "libgui.h"
-
-    using namespace android;
 #endif
+#include "libinline.h"
+using namespace android;
+
+static bool isPaused = false;
+static Mutex mutex;
+static Condition cond;
 
 static bool isFirstTime = true;
 static bool needLog = true;
@@ -118,6 +126,81 @@ static void chkDev() {
     free(ds);
 }
 
+static void handle_cmd_locked(unsigned char cmd) {
+    AutoMutex autoLock(mutex);
+    switch (cmd) {
+    case '+': //start
+        if (isPaused) {
+            isPaused = false;
+            cond.signal();
+        }
+        break;
+    case '-': //pause
+        if (!isPaused) {
+            isPaused = true;
+            cond.signal();
+        }
+        break;
+    }
+}
+
+static void* thread_cmd_server_connection_handler(void* thd_param) {
+    int connection_fd = (int)thd_param;
+    for(;;) {
+        unsigned char cmd;
+        LOG("~~~~ reading cmd");
+        if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
+            LOG("~~~~ can not read cmd");
+            break;
+        }
+        LOG("~~~~ got cmd: %c (%d)", cmd, cmd);
+        handle_cmd_locked(cmd);
+    }
+    close(connection_fd);
+    return 0;
+}
+
+static int socket_server_fd;
+
+static void* thread_socket_server(void* thd_param) {
+    for(;;) {
+        LOG("~~~~ accept");
+        int connection_fd = accept(socket_server_fd, NULL, NULL);
+        if (connection_fd == -1) ABORT_ERRNO("accept");
+        LOG("~~~~ new connection come in");
+
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_cmd_server_connection_handler, (void*)connection_fd);
+        if (err) ABORT("pthread_create err %d", err);
+    }
+    return 0;
+}
+
+static void create_cmd_socket_server() {
+    char* socket_name = getenv("ASC_SOCKET_NAME");
+    if (socket_name && socket_name[0]) {
+        LOG("~~~~ create socket server %s", socket_name);
+        socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) ABORT_ERRNO("socket");
+
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_LOCAL;
+        int namelen = strlen(socket_name);
+        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
+        memcpy(&addr.sun_path[1], socket_name, namelen);
+        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
+        LOG("~~~~ namelen %d (%d %s) sun_path[0]:%d", namelen, strlen(&addr.sun_path[1]), &addr.sun_path[1], addr.sun_path[0]);
+
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) ABORT_ERRNO("bind");
+
+        if (listen(socket_server_fd, 4)) ABORT_ERRNO("listen");
+
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_socket_server, socket_name);
+        if (err) ABORT("pthread_create err %d", err);
+    }
+}
+
 extern "C" void asc_capture(ASC* asc) {
     int err, width, height, internal_width, bytesPerPixel, rawImageSize;
 
@@ -146,6 +229,26 @@ extern "C" void asc_capture(ASC* asc) {
             cfmakeraw(&term);
             LOG("tsa");
             if (tcsetattr(STDOUT_FILENO, TCSANOW, &term)) ABORT_ERRNO("tsa");
+        }
+
+        create_cmd_socket_server();
+    }
+
+    if (isPaused && !isFirstTime) {
+        if (!blackscreen) {
+            blackscreen = (char*)calloc(asc->size, 1);
+            asc->data = blackscreen;
+            return;
+        }
+        else {
+            AutoMutex autoLock(mutex);
+            if (isPaused) {
+                cond.wait(mutex);
+                if (blackscreen) {
+                    free(blackscreen);
+                    blackscreen = NULL;
+                }
+            }
         }
     }
 
@@ -276,6 +379,13 @@ extern "C" void asc_capture(ASC* asc) {
 
         asc->data = mapbase + offset;
     #endif
+
+    if (isPaused) {
+        if (!blackscreen) {
+            blackscreen = (char*)calloc(asc->size, 1);
+            asc->data = blackscreen;
+        }
+    }
 
     if (isFirstTime) {
         asc->width = width;

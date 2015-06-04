@@ -66,12 +66,14 @@
     <div style="margin-top: 4px">
       <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=landscape" target="resultIFrame" onclick="$('#devOrient').val('landscape'); AscUtil.rotateChildLocally($('#viewerContainer')[0],'landscape')" title="Landscape (Locked)" style="border: 1px solid #000000; width: 35px; height: 15px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
       <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=portrait" target="resultIFrame" onclick="$('#devOrient').val('portrait'); AscUtil.rotateChildLocally($('#viewerContainer')[0],'portrait')" title="Portrait (Locked)" style="border: 1px solid #000000; width: 15px; height: 35px; padding: 0; margin: 0; vertical-align: middle">&nbsp;</a>
-      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame" onclick="$('#devOrient').val('free')" title="Unlock Orientation" style="vertical-align: middle">Free</a>
+      <a class="button" href="setOrientation?device=@device&accessKey=@accessKey&orientation=free" target="resultIFrame" onclick="$('#devOrient').val('free')" title="Free Orientation" style="vertical-align: middle">Free</a>
     </div>
     <div style="margin-top: 12px">
       <a class="button" href="turnOnScreen?device=@device&accessKey=@accessKey" target="resultIFrame">Screen ON</a>
       <a class="button" href="turnOnScreen?device=@device&accessKey=@accessKey&unlock=true" target="resultIFrame">ON+Unlock</a>
       <a class="button" href="showHome?device=@device&accessKey=@accessKey" target="resultIFrame">Force Home</a>
+      <a class="button" href="pause?device=@device&accessKey=@accessKey" target="resultIFrame">||</a>
+      <a class="button" href="resume?device=@device&accessKey=@accessKey" target="resultIFrame">&gt;</a>
     </div>
   </div>
   <div style="margin-top: 12px; margin-bottom: 4px; background-color: white; border: 1px solid #000000">

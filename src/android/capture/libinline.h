@@ -1,4 +1,4 @@
-#if !defined(HFILE_libinline) && ANDROID_VER>=400
+#if !defined(HFILE_libinline)
 #define HFILE_libinline
 
 #include <sys/types.h>

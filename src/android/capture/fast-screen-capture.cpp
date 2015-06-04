@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <linux/fb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -19,18 +18,15 @@
 #include <signal.h>
 #include <termios.h>
 #include <pthread.h>
+#include <linux/input.h>
+#include <sys/un.h>
+#include <sys/socket.h>
+
 #include "libcutils.h"
 #include "libgui.h"
 #include "libui.h"
 #include "libskia.h"
 #include "libstagefright.h"
-#if 0
-    #include "libpowermanager.h"
-    #error please include libpowermanager.so in build script
-#endif
-#if MAKE_STD==1
-    #include "libutils_stl.h"
-#endif
 
 using namespace android;
 
@@ -67,6 +63,8 @@ static void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
+static bool isPaused = false;
+
 #define ENABLE_RESEND 1
 
 #if ENABLE_RESEND 
@@ -100,11 +98,6 @@ static DisplayState* virtDispState = new DisplayState();
 static int TRANS_ID_GET_DISPLAY_INFO = 0;
 static int TRANS_ID_SET_DISPLAY_STATE = 0;
 #define BPP 4
-
-#if MAKE_STD==1
-    static sp<MediaCodec> codec;
-    static Vector<sp<ABuffer> > ibfs;
-#endif
 
 struct CallbackStep {
     int ind;
@@ -170,11 +163,11 @@ static int convertOrient(int orient) {
 }
 
 #if (ANDROID_VER>=500)
-    #define MIN_DISP_INFO_HEAD 2*sizeof(int)  //vector head
+    #define MIN_DISP_INFO_HEAD_SIZE 2*sizeof(int)  //vector head
 #else
-    #define MIN_DISP_INFO_HEAD 0
+    #define MIN_DISP_INFO_HEAD_SIZE 0
 #endif
-#define MIN_DISP_INFO_SIZE  (MIN_DISP_INFO_HEAD + ((size_t)&(((DisplayInfo*)NULL)->reserved)))
+#define MIN_DISP_INFO_SIZE  (MIN_DISP_INFO_HEAD_SIZE + ((size_t)&(((DisplayInfo*)NULL)->reserved)))
 
 static int getOrient() {
     LOG("r go");
@@ -186,7 +179,7 @@ static int getOrient() {
     status_t err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
     if (err) ABORT("r go e %d", err);
     if (reply.dataSize() < MIN_DISP_INFO_SIZE) ABORT("r go s t l");
-    DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD);
+    DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD_SIZE);
     LOGI("r go o %d", info->orientation);
     return info->orientation;
 }
@@ -334,7 +327,14 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
                 clock_gettime(CLOCK_MONOTONIC, &origTime);
                 resend_count = 0;
             #endif
-            cond.signal(); //anyway wake up main or resend thread
+            if ( isPaused && !isFirstTime ) {
+                //skip
+            } else {
+                if (isPaused && isFirstTime) {
+                    memset(mGBufData, 0, mInternalWidth*mHeight*BPP);
+                }
+                cond.signal(); //anyway wake up main or resend thread
+            }
         }
         return 0;
     }
@@ -573,6 +573,81 @@ static void chkDev() {
     free(ds);
 }
 
+static void handle_cmd_locked(unsigned char cmd) {
+    AutoMutex autoLock(mutex);
+    switch (cmd) {
+    case '+': //start
+        if (isPaused) {
+            isPaused = false;
+            cond.signal();
+        }
+        break;
+    case '-': //pause
+        if (!isPaused) {
+            isPaused = true;
+            cond.signal();
+        }
+        break;
+    }
+}
+
+static void* thread_cmd_server_connection_handler(void* thd_param) {
+    int connection_fd = (int)thd_param;
+    for(;;) {
+        unsigned char cmd;
+        LOG("~~~~ reading cmd");
+        if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
+            LOG("~~~~ can not read cmd");
+            break;
+        }
+        LOG("~~~~ got cmd: %c (%d)", cmd, cmd);
+        handle_cmd_locked(cmd);
+    }
+    close(connection_fd);
+    return 0;
+}
+
+static int socket_server_fd;
+
+static void* thread_socket_server(void* thd_param) {
+    for(;;) {
+        LOG("~~~~ accept");
+        int connection_fd = accept(socket_server_fd, NULL, NULL);
+        if (connection_fd == -1) ABORT_ERRNO("accept");
+        LOG("~~~~ new connection come in");
+
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_cmd_server_connection_handler, (void*)connection_fd);
+        if (err) ABORT("pthread_create err %d", err);
+    }
+    return 0;
+}
+
+static void create_cmd_socket_server() {
+    char* socket_name = getenv("ASC_SOCKET_NAME");
+    if (socket_name && socket_name[0]) {
+        LOG("~~~~ create socket server %s", socket_name);
+        socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) ABORT_ERRNO("socket");
+
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_LOCAL;
+        int namelen = strlen(socket_name);
+        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
+        memcpy(&addr.sun_path[1], socket_name, namelen);
+        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
+        LOG("~~~~ namelen %d (%d %s) sun_path[0]:%d", namelen, strlen(&addr.sun_path[1]), &addr.sun_path[1], addr.sun_path[0]);
+
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) ABORT_ERRNO("bind");
+
+        if (listen(socket_server_fd, 4)) ABORT_ERRNO("listen");
+
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_socket_server, socket_name);
+        if (err) ABORT("pthread_create err %d", err);
+    }
+}
+
 static void asc_init(ASC* asc) {
     status_t err;
     chkDev();
@@ -627,7 +702,7 @@ static void asc_init(ASC* asc) {
         err = __csBinder->transact(TRANS_ID_GET_DISPLAY_INFO, data, &reply);
         if (err) ABORT("r gd abn");
         if (reply.dataSize() < MIN_DISP_INFO_SIZE) ABORT("r gd s t l");
-        DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD);
+        DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD_SIZE);
         if (info->w != mainDispInfo.w || info->h != mainDispInfo.h) ABORT("r gd abn. w %d h %d", info->w, info->h);
         mainDispInfo.orientation = info->orientation;
     }
@@ -661,7 +736,6 @@ static void asc_init(ASC* asc) {
     LOG("c c r w %d h %d ar", capture_w, capture_h);
 
 
-
     if (isatty(STDOUT_FILENO)) {
         LOG("iaty");
         struct termios term;
@@ -672,19 +746,7 @@ static void asc_init(ASC* asc) {
         if (tcsetattr(STDOUT_FILENO, TCSANOW, &term)) ABORT_ERRNO("tsa");
     }
 
-    #if 0
-        LOG("gsp");
-        sp<IBinder> __pm = defaultServiceManager()->getService(String16("power"));
-        sp<IPowerManager> pm = IPowerManager::asInterface(__pm);
-        sp<IBinder> tmpLocalObj = new BBinder();
-        LOG("awl");
-        #if (ANDROID_VER>=440)
-            err = pm->acquireWakeLock(1/*PARTIAL_WAKE_LOCK*/|0x10000000/*ACQUIRE_CAUSES_WAKEUP*/, tmpLocalObj, String16("asc"), String16("asc"));
-        #else
-            err = pm->acquireWakeLock(1/*PARTIAL_WAKE_LOCK*/|0x10000000/*ACQUIRE_CAUSES_WAKEUP*/, tmpLocalObj, String16("asc"));
-        #endif
-        if (err) LOGI("awl e %d", err);
-    #endif
+    create_cmd_socket_server();
 }
 
 static void asc_create_virtual_display() {
@@ -775,16 +837,23 @@ extern "C" void asc_capture(ASC* asc) {
         }
     #endif
 
-    while ( !bp->mHaveData ) {
+    while ( ! ( bp->mHaveData || (isPaused && !isFirstTime) ) ) {
         LOG("w 4 d");
         cond.wait(mutex);
     }
-    LOG("g n d e");
-    bp->mHaveData = false;
 
-    if (bp->mFence && bp->mFence->isValid()) {
-         LOG("w 4 f");
-         bp->mFence->wait(-1);
+    if ( bp->mHaveData ) {
+        LOG("g n d e");
+        bp->mHaveData = false;
+
+        if (bp->mFence && bp->mFence->isValid()) {
+             LOG("w 4 f");
+             bp->mFence->wait(-1);
+        }
+    }
+    else {
+        LOG("isPaused so clear data");
+        memset(asc->data, 0, asc->size);
     }
 
     if (isFirstTime) {
@@ -836,173 +905,3 @@ extern "C" void asc_capture(ASC* asc) {
     }
 #endif
 
-#if MAKE_STD==1
-    static void* thread_feed_input(void* thd_param) {
-        for(;;) {
-            status_t err;
-            AutoMutex autoLock(mutex);
-            static int64_t seq = 0;
-
-
-            LOG("codec->dequeueInputBuffer")
-            int ibfs_index;
-            err = codec->dequeueInputBuffer(&ibfs_index);
-            if (err) ABORT('codec->dequeueInputBuffer err %d', err);
-
-
-            while ( !bp->mHaveData ) {
-                LOG("w 4 d");
-                cond.wait(mutex);
-            }
-            LOG("g n d e");
-            bp->mHaveData = false;
-
-            if (bp->mFence && bp->mFence->isValid()) {
-                 LOG("w 4 f");
-                 bp->mFence->wait(-1);
-            }
-
-            LOG("copy data to codec input buf")
-            if (bp->mInternalWidth==bp->mWidth) {
-                memcpy(ibfs->get(ibfs_index)->base(), mGBufData, logicalFrameSize);
-            } else {
-                char* p1 = ibfs.get(ibfs_index)->base();
-                char* p2 = bp->mGBufData;
-                int size1 = bp->mWidth*BPP;
-                int size2 = bp->mInternalWidth*BPP;
-                for (int h=0; h < height; h++, p2 += size2, p1+= size1)
-                    memmove(p1, p2, size1);
-            }
-
-            LOG("codec->queueInputBuffer")
-            err = codec->queueInputBuffer(slot, 0, logicalFrameSize, ALooper::GetNowUs(), 0);
-            if (err) ABORT("codec->queueInputBuffer err %d", err);
-
-            seq++;
-            LOG("r d sq:%lld t c c...", seq);
-
-            if (isFirstTime) {
-                if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
-                    needLog = false;
-                isFirstTime = false;
-            }
-        }
-    }
-
-
-    static int mainThreadId = 0;
-
-    static void cleanup(const char* msg) {
-        if (gettid() == mainThreadId) ABORT("%s", msg);
-    }
-
-    static void on_SIGPIPE(int signum) {
-        cleanup("pipe peer ended first, no problem");
-    }
-    static void on_SIGINT(int signum) {
-        cleanup("SIGINT(Ctl+C)");
-    }
-    static void on_SIGHUP(int signum) {
-        cleanup("SIGHUP(adb shell terminated)");
-    }
-
-    extern "C" int main(int argc, char** argv) {
-        status_t err;
-
-        mainThreadId = gettid();
-        LOG("set sig handler for SIGINT, SIGHUP, SIGPIPE");
-        signal(SIGINT, on_SIGINT);
-        signal(SIGHUP, on_SIGHUP);
-        signal(SIGPIPE, on_SIGPIPE);
-
-        ASC asc;
-        memset(&asc, 0, sizeof(ASC));
-        asc.w = argc>1 && atoi(argv[1])> 0 ? atoi(argv[1]) : 0;
-        asc.h = argc>2 && atoi(argv[2])> 0 ? atoi(argv[2]) : 0;
-
-        asc_init(asc);
-
-        // const char* vformat = "video/x-vnd.on2.vp8";
-        const char* vformat = "video/avc";
-        // const char* vformat = "video/mp4v-es";
-
-        sp<AMessage> format = new AMessage;
-        format->setInt32("width", capture_w);
-        format->setInt32("height", capture_h);
-        format->setString("mime", vformat);
-        format->setInt32("color-format", 0x7F000789/*OMX_COLOR_FormatAndroidOpaque*/);
-        format->setInt32("bitrate", 4000000);
-        format->setFloat("frame-rate", 30);
-        format->setInt32("i-frame-interval", 1);
-
-        LOG("Creating ALooper");
-        sp<ALooper> looper = new ALooper;
-        looper->setName("screenrecord_looper");
-        LOG("Starting ALooper");
-        looper->start();
-
-        LOG("Creating codec");
-        codec = MediaCodec::CreateByType(looper, vformat, true/*encoder*/);
-        if (codec.get() == NULL) ABORT("ERROR: unable to create codec instance");
-        LOG("configure codec");
-        static void* nullPtr = NULL;
-        #if (ANDROID_VER>=440)
-            err = codec->configure(format, *(sp<Surface>*)&nullPtr, *(sp<ICrypto>*)&nullPtr, 1/*CONFIGURE_FLAG_ENCODE*/);
-        #elif (ANDROID_VER>=420)
-            err = codec->configure(format, *(sp<SurfaceTextureClient>*)&nullPtr, *(sp<ICrypto>*)&nullPtr, 1/*CONFIGURE_FLAG_ENCODE*/);
-        #endif
-        if (err) ABORT("ERROR: unable to configure codec (err=%d)", err);
-
-        LOG("Starting codec");
-        err = codec->start();
-        if (err) ABORT("ERROR: unable to start codec (err=%d)", err);
-
-        Vector<sp<ABuffer> > obfs;
-        LOG("getOutputBuffers");
-        err = codec->getOutputBuffers(&obfs);
-        if (err) ABORT("getOutputBuffers ret:%d", err);
-        LOG("obfs cnt %d", obfs.size());
-
-        LOG("getInputBuffers");
-        err = codec->getInputBuffers(&ibfs);
-        if (err) ABORT("getInputBuffers ret:%d", err);
-        LOG("ibfs cnt %d", ibfs.size());
-
-        pthread_t thd_feed_input;
-        err = pthread_create(&thd_feed_input, NULL, thread_feed_input, NULL); 
-        if (err) ABORT("pthread_create err %d", err);
-
-        while (true) {
-            size_t bufIndex, offset, size;
-            int64_t ptsUsec;
-            uint32_t flags;
-
-            LOG("dequeueOutputBuffer");
-            err = codec->dequeueOutputBuffer(&bufIndex, &offset, &size, &ptsUsec, &flags, 250000);
-            switch (err) {
-            case 0:
-                if ((flags & MediaCodec::BUFFER_FLAG_CODECCONFIG) != 0) {
-                    LOG("Got codec config buffer (%u bytes); ignoring", size);
-                    size = 0;
-                }
-                if (size != 0) {
-                    LOG("Got data in buffer %d, size=%d, pts=%lld", bufIndex, size, ptsUsec);
-                }
-
-                LOG("releaseOutputBuffer");
-                err = codec->releaseOutputBuffer(bufIndex);
-                LOG("releaseOutputBuffer ret:%d", err);
-                break;
-            default:
-                LOG("dequeueOutputBuffer ret:%d", err);
-                // exit(0);
-                // return err;
-            }
-        }
-
-        LOG("joinThreadPool");
-        IPCThreadState::self()->joinThreadPool(/*isMain*/true);
-        ABORT("unexpected here");
-        return 0;
-    }
-#endif
