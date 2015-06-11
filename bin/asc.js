@@ -376,10 +376,13 @@ function chkDev(dev, opt) {
           || opt.touchable && !(dev.capture && dev.capture.touchSrv ) && (chk.err = 'device not ready for touch')
           || opt.touchable && dev.isPaused && (chk.err = 'device is paused')
           || opt.keybdable && !(dev.capture && dev.capture.keybdSrv ) && (chk.err = 'device not ready for keyboard')
-          || opt.keybdable && dev.isPaused && (chk.err = 'device is paused')
+          || opt.keybdable && !opt.powerButton && dev.isPaused && (chk.err = 'device is paused')
           || opt.orientable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for changing orientation!')
           || opt.unlockable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for turning on and unlocking screen')
-          || opt.canPauseResume && !(dev.capture && dev.capture.controller ) && (chk.err = 'device not ready for pause/resume')
+          || opt.pausable && !(dev.capture && dev.capture.controller ) && (chk.err = 'device not ready for pause')
+          || opt.pausable && !(!dev.isScreenOff) && (chk.err = 'screen not on')
+          || opt.resumable && !(dev.capture && dev.capture.controller) && (chk.err = 'device not ready for resume')
+          || opt.resumable && !(!dev.isScreenOff) && (chk.err = 'screen not on')
       ;
   return !failed;
 }
@@ -647,9 +650,11 @@ function connectScreenController(dev) {
       if (i === ary.length - 1) {
         acc_str = ls;
       } else if (ls === 'screen:on') {
-        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('+');
+        dev.isScreenOff = dev.isPaused = false;
+        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('1');
       } else if (ls === 'screen:off') {
-        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('-');
+        dev.isScreenOff = dev.isPaused = true;
+        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('0');
       } else if (ls == 'orient:landscape') {
 
       } else if (ls == 'orient:portrait') {
@@ -713,13 +718,17 @@ function sendTouchEvent(dev, _type, _x, _y) {
 }
 
 function sendKeybdEvent(dev, keyCodeOrText, isKeyCode) {
-  if (!chkDev(dev, {connected: true, capturing: true, keybdable: true})
+  if (!chkDev(dev, {connected: true, capturing: true, keybdable: true, powerButton: isKeyCode && keyCodeOrText === 'POWER' || keyNameMapOfCode[keyCodeOrText] === 'POWER'})
       || isKeyCode && !keyNameMapOfCode[keyCodeOrText] && !(keyCodeOrText = keyCodeMapOfName[keyCodeOrText]) && (chk.err = '`keyCode`: must be in ' + JSON.stringify(Object.keys(keyNameMapOfCode).concat(Object.keys(keyCodeMapOfName))) )
       || !isKeyCode && !chk('text', keyCodeOrText)) {
     return false;
   }
   if (isKeyCode) {
-    dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
+    if (dev.isScreenOff && dev.sysVer < 4.2 && keyNameMapOfCode[keyCodeOrText] === 'POWER') {
+      turnOnScreen(dev, /*unlock:*/true);
+    } else {
+      dev.capture.keybdSrv.__runCmd('k ' + keyCodeOrText);
+    }
   } else {
     keyCodeOrText.slice(0, cfg['maxTextInputLength']).split(/\r*\n/).forEach(function (ls, n) {
       n && dev.capture.keybdSrv.__runCmd('k ' + keyCodeMapOfName['ENTER']);
@@ -980,7 +989,7 @@ function doCapture(dev, res/*Any Type Output Stream*/, q) {
     (cfg.logFpsStatistic || res.__framesDropped) && log(res.__tag + ' ' + capture.adbCon.__tag, 'statistics: Fps=' + ((res.__framesWritten || 0) / cfg.fpsStatisticInterval).toPrecision(3) + (res.__framesDropped ? ' dropped frames: ' + res.__framesDropped : ''));
     res.__framesWritten = res.__framesDropped = 0;
   }, cfg.fpsStatisticInterval * 1000));
-  capture.q.fastCapture && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
+  (capture.q.fastCapture || dev.isPaused) && capture.image && (res.setHeader && q.type === 'ajpg') && writeMultipartImage(res, capture.image.buf);
   q.type === 'jpg' && capture.image && endCaptureConsumer(res, capture.image.buf);
   q.type === 'jpg' && capture.image && useExisting && clearTimeout(status.updateLiveUITimer); //remove unnecessary update if not new capture process
 }
@@ -1149,11 +1158,11 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   return end(res, 'OK');
 }).option = {log: true};
 (streamWeb_handlerMap['/pause'] = streamWeb_handlerMap['/resume'] = function (req, res, q, urlPath, dev) {
-  if (!chkDev(dev, {connected: true, capturing: true, canPauseResume: true})) {
+  if (!chkDev(dev, {connected: true, capturing: true, pausable: urlPath === '/pause', resumable: urlPath === '/resume'})) {
     return end(res, chk.err);
   }
-  dev.capture.controller.__sendCmd(urlPath === '/pause' ? '-' : '+');
   dev.isPaused = (urlPath === '/pause');
+  dev.capture.controller.__sendCmd(dev.isPaused ? '-' : '+');
   return end(res, 'OK');
 }).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
@@ -1665,4 +1674,4 @@ adminWeb.listen(cfg.adminWeb_port, cfg.adminWeb_ip === '*' ? undefined/*all ip4*
 //just to avoid compiler warning about undefined properties/methods
 true === false && log({binDir: '', androidWorkDir: '', androidLogPath: '', streamWeb_ip: '', streamWeb_port: 0, streamWeb_protocol: '', streamWeb_cert: '', adminWeb_ip: '', adminWeb_port: 0, adminWeb_protocol: '', adminWeb_cert: '', outputDir: '', maxRecordTime: 0, adminUrlSuffix: '', viewSize: '', viewOrient: '', videoFileFrameRate: 0, __end: 0});
 true === false && log({showDisconnectedDevices: 0, logFfmpegDebugInfo: 0, logFpsStatistic: 0, fpsStatisticInterval: 0, logAllProcCmd: 0, logAllHttpReqRes: 0, logHttpReqDetail: 0, logAdbBridgeDetail: 0, logRdcWebSocketDetail: 0, __end: 0});
-true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, canPauseResume: 0, __end: 0});
+true === false && log({keyCode: '', text: '', x: 0, y: 0, download: 0, cookie: '', range: '', orientation: '', logCondition: 0, _isSafari: 0, httpRequest: {}, binaryData: {}, accept: Function, reject: Function, pausable: 0, resumable: 0, __end: 0});

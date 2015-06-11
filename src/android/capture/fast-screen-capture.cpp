@@ -64,6 +64,9 @@ static void _LOG(const char* format, ...) {
 }
 
 static bool isPaused = false;
+static bool isScreenOff = false;
+static char* blackscreen = NULL;
+static int blackscreen_count = 0;
 
 #define ENABLE_RESEND 1
 
@@ -327,12 +330,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
                 clock_gettime(CLOCK_MONOTONIC, &origTime);
                 resend_count = 0;
             #endif
-            if ( isPaused && !isFirstTime ) {
+            if ( isPaused ) {
                 //skip
             } else {
-                if (isPaused && isFirstTime) {
-                    memset(mGBufData, 0, mInternalWidth*mHeight*BPP);
-                }
                 cond.signal(); //anyway wake up main or resend thread
             }
         }
@@ -588,6 +588,14 @@ static void handle_cmd_locked(unsigned char cmd) {
             cond.signal();
         }
         break;
+    case '1': //screen on
+        isScreenOff = isPaused = false;
+        cond.signal();
+        break;
+    case '0': //screen off
+        isScreenOff = isPaused = true;
+        cond.signal();
+        break;
     }
 }
 
@@ -809,7 +817,7 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     #if ENABLE_RESEND
-        if (!isFirstTime && !bp->mHaveData && resend_count < RESEND_COUNT) {
+        if (!isFirstTime && !(bp->mHaveData && isPaused) && resend_count < RESEND_COUNT) {
             struct timespec now;
             clock_gettime(CLOCK_MONOTONIC, &now);
             if ( (now.tv_sec-origTime.tv_sec)*1000000000 + (now.tv_nsec-origTime.tv_nsec) >= RESEND_INTERVAL_NS*RESEND_COUNT) {
@@ -837,23 +845,46 @@ extern "C" void asc_capture(ASC* asc) {
         }
     #endif
 
-    while ( ! ( bp->mHaveData || (isPaused && !isFirstTime) ) ) {
+    for(;;) {
+        if (isPaused && !isFirstTime) {
+            blackscreen_count++;
+            if (blackscreen==NULL) {
+                asc->data = blackscreen = (char*)malloc(asc->size);
+                if (!blackscreen) ABORT("oom");
+                memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+                LOG("use blackscreen. count: %d", blackscreen_count);
+                return;
+            }
+            else {
+                if (blackscreen_count<=8) { //very strange!
+                    asc->data = blackscreen;
+                    memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+                    LOG("use blackscreen. count: %d", blackscreen_count);
+                    return;
+                }
+                blackscreen_count = 0;
+                free(blackscreen);
+                blackscreen = NULL;
+
+                do {
+                    LOG("wait for resume");
+                    cond.wait(mutex);
+                } while ( isPaused );
+            }
+        } //end of if (isPaused)
+
+        if ( bp->mHaveData )
+            break;
         LOG("w 4 d");
         cond.wait(mutex);
     }
+    LOG("g n d e");
+    bp->mHaveData = false;
+    asc->data = bp->mGBufData;
 
-    if ( bp->mHaveData ) {
-        LOG("g n d e");
-        bp->mHaveData = false;
-
-        if (bp->mFence && bp->mFence->isValid()) {
-             LOG("w 4 f");
-             bp->mFence->wait(-1);
-        }
-    }
-    else {
-        LOG("isPaused so clear data");
-        memset(asc->data, 0, asc->size);
+    if (bp->mFence && bp->mFence->isValid()) {
+         LOG("w 4 f");
+         bp->mFence->wait(-1);
     }
 
     if (isFirstTime) {
@@ -861,7 +892,13 @@ extern "C" void asc_capture(ASC* asc) {
         asc->h = bp->mHeight;
         strcpy(asc->pixfmtName, bp->mFormat==1?"rgb0":"bgr0");
         asc->size = bp->mInternalWidth*bp->mHeight*BPP;
-        asc->data = bp->mGBufData;
+        if (isPaused) {
+            blackscreen_count = 1;
+            asc->data = blackscreen = (char*)calloc(asc->size, 1);
+            if (!blackscreen) ABORT("oom");
+            memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+            LOG("use blackscreen. count: %d", blackscreen_count);
+        }
     }
     
     seq++;

@@ -61,6 +61,10 @@ static void _LOG(const char* format, ...) {
 using namespace android;
 
 static bool isPaused = false;
+static bool isScreenOff = false;
+static char* blackscreen = NULL;
+static int blackscreen_count = 0;
+
 static Mutex mutex;
 static Condition cond;
 
@@ -76,7 +80,6 @@ static bool needLog = true;
     static char* mapbase;
     static size_t lastMapSize;
 #endif
-static char* blackscreen = NULL;
 
 static void chkDev() {
     char k[128] = {0};
@@ -140,6 +143,14 @@ static void handle_cmd_locked(unsigned char cmd) {
             isPaused = true;
             cond.signal();
         }
+        break;
+    case '1': //screen on
+        isScreenOff = isPaused = false;
+        cond.signal();
+        break;
+    case '0': //screen off
+        isScreenOff = isPaused = true;
+        cond.signal();
         break;
     }
 }
@@ -235,21 +246,33 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     if (isPaused && !isFirstTime) {
-        if (!blackscreen) {
-            blackscreen = (char*)calloc(asc->size, 1);
-            asc->data = blackscreen;
-            return;
-        }
-        else {
-            AutoMutex autoLock(mutex);
-            if (isPaused) {
-                cond.wait(mutex);
-                if (blackscreen) {
-                    free(blackscreen);
-                    blackscreen = NULL;
-                }
+        AutoMutex autoLock(mutex);
+        if (isPaused && !isFirstTime) {
+            blackscreen_count++;
+            if (blackscreen==NULL) {
+                asc->data = blackscreen = (char*)malloc(asc->size);
+                if (!blackscreen) ABORT("oom");
+                LOG("use blackscreen. count: %d", blackscreen_count);
+                memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+                return;
             }
-        }
+            else {
+                if (blackscreen_count<=8) { //very strange!
+                    asc->data = blackscreen;
+                    memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+                    LOG("use blackscreen. count: %d", blackscreen_count);
+                    return;
+                }
+                blackscreen_count = 0;
+                free(blackscreen);
+                blackscreen = NULL;
+
+                do {
+                    LOG("wait for resume");
+                    cond.wait(mutex);
+                } while ( isPaused );
+            }
+        } //end of if (isPaused)
     }
 
     #if (ANDROID_VER>=400)
@@ -267,9 +290,11 @@ extern "C" void asc_capture(ASC* asc) {
                 usleep(250*1000);
                 if (!isFirstTime) {
                     if (!blackscreen) {
-                        blackscreen = (char*)calloc(asc->size, 1);
-                        asc->data = blackscreen;
+                        blackscreen = (char*)malloc(asc->size);
+                        if (!blackscreen) ABORT("oom");
                     }
+                    memset(blackscreen,  0x80, asc->size);
+                    asc->data = blackscreen;
                     return;
                 }
             } else {
@@ -380,17 +405,17 @@ extern "C" void asc_capture(ASC* asc) {
         asc->data = mapbase + offset;
     #endif
 
-    if (isPaused) {
-        if (!blackscreen) {
-            blackscreen = (char*)calloc(asc->size, 1);
-            asc->data = blackscreen;
-        }
-    }
-
     if (isFirstTime) {
         asc->width = width;
         asc->height = height;
         asc->size = width*height*bytesPerPixel;
+        if (isPaused) {
+            blackscreen_count = 1;
+            asc->data = blackscreen = (char*)calloc(asc->size, 1);
+            if (!blackscreen) ABORT("oom");
+            memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+            LOG("use blackscreen. count: %d", blackscreen_count);
+        }
 
         if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
             needLog = false;
