@@ -257,7 +257,7 @@ extern "C" void asc_capture(ASC* asc) {
                 return;
             }
             else {
-                if (blackscreen_count<=8) { //very strange!
+                if (blackscreen_count<=4) { //very strange!
                     asc->data = blackscreen;
                     memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
                     LOG("use blackscreen. count: %d", blackscreen_count);
