@@ -374,7 +374,9 @@ function chkDev(dev, opt) {
           || opt.adbBridge && !(dev.adbBridge && cfg['support_adbBridge']) && (chk.err = 'adbBridge disabled')
           || opt.capturable && !(dev.status === 'OK') && (chk.err = 'device not ready for capturing screen')
           || opt.touchable && !(dev.capture && dev.capture.touchSrv ) && (chk.err = 'device not ready for touch')
+          || opt.touchable && dev.isPaused && (chk.err = 'device is paused')
           || opt.keybdable && !(dev.capture && dev.capture.keybdSrv ) && (chk.err = 'device not ready for keyboard')
+          || opt.keybdable && dev.isPaused && (chk.err = 'device is paused')
           || opt.orientable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for changing orientation!')
           || opt.unlockable && !(dev.capture && dev.capture.screenController) && (chk.err = 'device not ready for turning on and unlocking screen')
           || opt.canPauseResume && !(dev.capture && dev.capture.controller ) && (chk.err = 'device not ready for pause/resume')
@@ -1150,7 +1152,8 @@ streamWeb_handlerMap['/sendText'] = function (req, res, q, urlPath, dev) {
   if (!chkDev(dev, {connected: true, capturing: true, canPauseResume: true})) {
     return end(res, chk.err);
   }
-  dev.capture.controller.__sendCmd(urlPath == '/pause' ? '-' : '+');
+  dev.capture.controller.__sendCmd(urlPath === '/pause' ? '-' : '+');
+  dev.isPaused = (urlPath === '/pause');
   return end(res, 'OK');
 }).option = {log: true};
 streamWeb_handlerMap['/liveViewer.html'] = function (req, res, q, urlPath, dev) {
