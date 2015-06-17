@@ -968,7 +968,7 @@ function _startRemoteDesktopServer(dev, q) {
       !Object.keys(rdcWebSocket.devMapOfHandle).length && rdcWebSocket.__cleanup('capture closed');
     });
     dev.rdcWebSocketMap = {};
-    dev.explicit_devOrient = null;
+    dev.isScreenOff = dev.isPaused = dev.explicit_devOrient = null;
     scheduleUpdateLiveUI();
   }
 }
