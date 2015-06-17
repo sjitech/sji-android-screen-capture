@@ -525,7 +525,7 @@ function prepareDevice(dev, force/*optional*/) {
   function setStatus(status) {
     log('[PrepareDevice] {' + dev.id + '}', 'END: ' + status);
     dev.info && (dev.info_htm = htmlEncode(dev.info[0]/*manufacturer*/ + ' ' + dev.info[1]/*model*/ + ' ' + dev.info[2]/*release*/ + ' ' + ((dev.info[3] === 'armeabi-v7a' || dev.info[3] === 'arm64-v7a') ? '' : dev.info[3])
-    + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
+        + (dev.cpuCount === undefined ? '' : ' ' + dev.cpuCount + 'c') + (dev.memSize === undefined ? '' : ' ' + (dev.memSize / 1000).toFixed() + 'm') + (!dev.disp ? '' : ' ' + dev.disp.w + 'x' + dev.disp.h)));
     (dev.status = status) && scheduleUpdateWholeUI();
   }
 
