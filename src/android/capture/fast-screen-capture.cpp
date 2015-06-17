@@ -573,70 +573,99 @@ static void chkDev() {
     free(ds);
 }
 
-static void handle_cmd_locked(unsigned char cmd) {
-    AutoMutex autoLock(mutex);
-    switch (cmd) {
-    case '+': //start
-        if (isPaused) {
-            isPaused = false;
-            cond.signal();
-        }
-        break;
-    case '-': //pause
-        if (!isPaused) {
-            isPaused = true;
-            cond.signal();
-        }
-        break;
-    case '1': //screen on
-        isScreenOff = isPaused = false;
-        cond.signal();
-        break;
-    case '0': //screen off
-        isScreenOff = isPaused = true;
-        cond.signal();
-        break;
-    }
-}
-
-static void* thread_cmd_server_connection_handler(void* thd_param) {
-    int connection_fd = (int)thd_param;
+static void* thread_cmd_socket_server(void* thd_param) {
+    int socket_server_fd = (int)thd_param;
     for(;;) {
-        unsigned char cmd;
-        LOG("~~~~ reading cmd");
-        if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
-            LOG("~~~~ can not read cmd");
-            break;
+        LOG("accept");
+        int connection_fd = accept(socket_server_fd, NULL, NULL);
+        if (connection_fd == -1) {
+            LOG("accept err %d", errno);
+            continue;
         }
-        LOG("~~~~ got cmd: %c (%d)", cmd, cmd);
-        handle_cmd_locked(cmd);
+
+        for(;;) {
+            unsigned char cmd;
+            LOG("read cmd");
+            if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
+                LOG("read err %d", errno);
+                break;
+            }
+            LOG("handle cmd: %c (%d)", cmd, cmd);
+
+            AutoMutex autoLock(mutex);
+            switch (cmd) {
+            case '+': //start
+                if (isPaused) {
+                    isPaused = false;
+                    cond.signal();
+                }
+                break;
+            case '-': //pause
+                if (!isPaused) {
+                    isPaused = true;
+                    cond.signal();
+                }
+                break;
+            case '1': //screen on
+                isScreenOff = isPaused = false;
+                cond.signal();
+                break;
+            case '0': //screen off
+                isScreenOff = isPaused = true;
+                cond.signal();
+                break;
+            }
+        } //end of for(;;)
+
+        LOG("close cmd connection");
+        close(connection_fd);
     }
-    close(connection_fd);
     return 0;
 }
 
-static int socket_server_fd;
+static int touch_dev_fd = -1;
 
-static void* thread_socket_server(void* thd_param) {
+static void* thread_touch_socket_server(void* thd_param) {
+    int socket_server_fd = (int)thd_param;
     for(;;) {
-        LOG("~~~~ accept");
+        LOG("accept");
         int connection_fd = accept(socket_server_fd, NULL, NULL);
-        if (connection_fd == -1) ABORT_ERRNO("accept");
-        LOG("~~~~ new connection come in");
+        if (connection_fd == -1) {
+            LOG("accept err %d", errno);
+            continue;
+        }
 
-        pthread_t thd;
-        int err = pthread_create(&thd, NULL, thread_cmd_server_connection_handler, (void*)connection_fd);
-        if (err) ABORT("pthread_create err %d", err);
+        struct input_event event = {0};
+        const int event_core_size = (((char*)&event.value) + sizeof(event.value)) - ((char*)&event.type);
+        for(;;) {
+            LOG("read touch event");
+            if (read(connection_fd, &event.type, event_core_size) != event_core_size) {
+                LOG("read err %d", errno);
+                break;
+            }
+            LOG("handle touch event %d %d %d", event.type, event.code, event.value);
+            if (write(touch_dev_fd, &event, sizeof(event)) != sizeof(event)) {
+                LOG("write err %d", errno);
+                break;
+            }
+        } //end of for(;;)
+
+        LOG("close touch connection");
+        close(connection_fd);
     }
     return 0;
 }
 
 static void create_cmd_socket_server() {
-    char* socket_name = getenv("ASC_SOCKET_NAME");
+    char* socket_name = getenv("ASC_CMD_SOCKET");
     if (socket_name && socket_name[0]) {
-        LOG("~~~~ create socket server %s", socket_name);
-        socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-        if (socket_server_fd == -1) ABORT_ERRNO("socket");
+
+        LOG("c s r %s", socket_name);
+        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) {
+            LOG("socket err %d", errno);
+            return;
+        }
 
         struct sockaddr_un addr = {0};
         addr.sun_family = AF_LOCAL;
@@ -644,15 +673,73 @@ static void create_cmd_socket_server() {
         if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
         memcpy(&addr.sun_path[1], socket_name, namelen);
         int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
-        LOG("~~~~ namelen %d (%d %s) sun_path[0]:%d", namelen, strlen(&addr.sun_path[1]), &addr.sun_path[1], addr.sun_path[0]);
 
-        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) ABORT_ERRNO("bind");
+        LOG("bnd");
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
+            LOG("bind err %d", errno);
+            return;
+        }
 
-        if (listen(socket_server_fd, 4)) ABORT_ERRNO("listen");
+        LOG("lstn");
+        if (listen(socket_server_fd, 1)) {
+            LOG("listen err %d", errno);
+            return;
+        }
 
+        LOG("cthd");
         pthread_t thd;
-        int err = pthread_create(&thd, NULL, thread_socket_server, socket_name);
-        if (err) ABORT("pthread_create err %d", err);
+        int err = pthread_create(&thd, NULL, thread_cmd_socket_server, (void*)socket_server_fd);
+        if (err) {
+            LOG("pthread_create err %d", err);
+            return;
+        }
+    }
+}
+
+static void create_touch_socket_server() {
+    char* socket_name = getenv("ASC_TOUCH_SOCKET");
+    if (socket_name && socket_name[0]) {
+
+        LOG("o t d %s", socket_name);
+        touch_dev_fd = open(socket_name, O_WRONLY);
+        if (touch_dev_fd==-1) {
+            LOG("open err %d", errno);
+            return;
+        }
+
+        LOG("c s r %s", socket_name);
+        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) {
+            LOG("socket err %d", errno);
+            return;
+        }
+
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_LOCAL;
+        int namelen = strlen(socket_name);
+        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
+        memcpy(&addr.sun_path[1], socket_name, namelen);
+        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
+
+        LOG("bnd");
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
+            LOG("bind err %d", errno);
+            return;
+        }
+
+        LOG("lstn");
+        if (listen(socket_server_fd, 1)) {
+            LOG("listen err %d", errno);
+            return;
+        }
+
+        LOG("cthd");
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_touch_socket_server, (void*)socket_server_fd);
+        if (err) {
+            LOG("pthread_create err %d", err);
+            return;
+        }
     }
 }
 
@@ -755,6 +842,7 @@ static void asc_init(ASC* asc) {
     }
 
     create_cmd_socket_server();
+    create_touch_socket_server();
 }
 
 static void asc_create_virtual_display() {

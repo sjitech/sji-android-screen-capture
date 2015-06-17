@@ -13,7 +13,7 @@ process.on('uncaughtException', function (e) {
 });
 var adminWeb, streamWeb, devGrpMap = {/*sn:*/}, devAry = [], status = {consumerMap: {/*consumerId:*/}}, htmlCache = {/*'/'+filename:*/}, procMap = {/*pid:*/}, adminWeb_handlerMap = {/*urlPath:*/}, streamWeb_handlerMap = {/*urlPath:*/}, httpSeq = 0, websocket, fileVer, pushContentMap = {/*filename:*/};
 var CrLfBoundTypeCrLf2 = new Buffer('\r\n--MULTIPART_BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n');
-var REC_TAG = '[REC]', EMPTY_BUF = new Buffer([]), touchEventBuf = new Buffer([/*time*/0, 0, 0, 0, 0, 0, 0, 0, /*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
+var REC_TAG = '[REC]', EMPTY_BUF = new Buffer([]), touchEventBuf = new Buffer([/*type*/0, 0, /*code*/0, 0, /*value*/0, 0, 0, 0]);
 var re_filename = /^(([^\/\\]+)~(?:live|rec)_[fF]\d+[^_]*_(\d{14}\.\d{3}(?:\.[A-Z]?\d+)?)(?:\.ajpg)?)(?:(?:\.(mp4))|(?:~frame([A-Z]?\d+)\.(jpg)))$/,
     re_size = /^0{0,3}([1-9][0-9]{0,3})x0{0,3}([1-9][0-9]{0,3})$|^0{0,3}([1-9][0-9]{0,3})x(?:Auto)?$|^(?:Auto)?x0{0,3}([1-9][0-9]{0,3})$/i,
     cookie_id_head = '_' + crypto.createHash('md5').update(os.hostname()).digest().toString('hex') + '_' + cfg.adminWeb_port + '_',
@@ -869,7 +869,7 @@ function _startRemoteDesktopServer(dev, q) {
   connectScreenController(dev);
   var adbCon = capture.adbCon = adbRun('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
-      + ' && export ASC_SOCKET_NAME=' + cfg.androidWorkDir
+      + ' && export ASC_CMD_SOCKET=' + cfg.androidWorkDir + ' && export ASC_TOUCH_SOCKET=' + dev.touch.devPath
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
@@ -902,6 +902,21 @@ function _startRemoteDesktopServer(dev, q) {
         });
       };
     }
+
+    if (capture.touchSrv === undefined) {
+      capture.touchSrv = adb('[TouchSrv]', dev, 'localabstract:' + dev.touch.devPath, function/*on_close*/() {
+        capture.touchSrv = null;
+      });
+      capture.touchSrv.__sendEvent = function (type, code, value) {
+        touchEventBuf.writeUInt16LE(type, 0, /*noAssert:*/true);
+        touchEventBuf.writeUInt16LE(code, 2, /*noAssert:*/true);
+        touchEventBuf.writeInt32LE(value, 4, /*noAssert:*/true);
+        (capture.touchSrv.__adb_stream_opened ? passthrough : capture.touchSrv).once('__adb_stream_opened', function () {
+          cfg.logAllProcCmd && log(capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
+          capture.touchSrv.write(touchEventBuf);
+        });
+      };
+    }
   };
 
   q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
@@ -914,19 +929,6 @@ function _startRemoteDesktopServer(dev, q) {
       writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
     }) : (capture.veryOldImageIndex = capture.image.i));
   }, cfg['resentUnchangedImageInterval'] * 1000);
-
-  capture.touchSrv = adb('[TouchSrv]', dev, 'dev:' + dev.touch.devPath, function/*on_close*/() {
-    capture.touchSrv = null;
-  });
-  capture.touchSrv.__sendEvent = function (type, code, value) {
-    touchEventBuf.writeUInt16LE(type, 8, /*noAssert:*/true);
-    touchEventBuf.writeUInt16LE(code, 10, /*noAssert:*/true);
-    touchEventBuf.writeInt32LE(value, 12, /*noAssert:*/true);
-    (capture.touchSrv.__adb_stream_opened ? passthrough : capture.touchSrv).once('__adb_stream_opened', function () {
-      cfg.logAllProcCmd && log(capture.touchSrv.__tag + '<', 'T ' + type + ' ' + code + ' ' + value);
-      capture.touchSrv.write(touchEventBuf);
-    });
-  };
 
   capture.keybdSrv = adb('[KeybdSrv]', dev, 'shell:', function/*on_close*/() {
     capture.keybdSrv = null;
