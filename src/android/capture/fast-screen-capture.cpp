@@ -905,7 +905,7 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     #if ENABLE_RESEND
-        if (!isFirstTime && !(bp->mHaveData && isPaused) && resend_count < RESEND_COUNT) {
+        if (!isFirstTime && !bp->mHaveData && !isPaused && resend_count < RESEND_COUNT) {
             struct timespec now;
             clock_gettime(CLOCK_MONOTONIC, &now);
             if ( (now.tv_sec-origTime.tv_sec)*1000000000 + (now.tv_nsec-origTime.tv_nsec) >= RESEND_INTERVAL_NS*RESEND_COUNT) {
@@ -958,6 +958,12 @@ extern "C" void asc_capture(ASC* asc) {
                     LOG("wait for resume");
                     cond.wait(mutex);
                 } while ( isPaused );
+
+                bp->mHaveData = true; //force send image
+                #if ENABLE_RESEND
+                    clock_gettime(CLOCK_MONOTONIC, &origTime);
+                    resend_count = 0;
+                #endif
             }
         } //end of if (isPaused)
 
