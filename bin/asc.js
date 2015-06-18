@@ -651,14 +651,10 @@ function connectScreenController(dev) {
         acc_str = ls;
       } else if (ls === 'screen:on') {
         dev.isScreenOff = dev.isPaused = false;
-        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('1');
+        capture.controller && capture.controller.__sendCmd('1');
       } else if (ls === 'screen:off') {
         dev.isScreenOff = dev.isPaused = true;
-        dev.sysVer < 4.2 && capture.controller && capture.controller.__sendCmd('0');
-      } else if (ls == 'orient:landscape') {
-
-      } else if (ls == 'orient:portrait') {
-
+        capture.controller && capture.controller.__sendCmd('0');
       }
     });
   };
