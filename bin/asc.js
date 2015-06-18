@@ -753,13 +753,20 @@ function setDeviceOrientation(dev, orient, doNotRemember) {
 }
 
 function turnOnScreen(dev, unlock) {
-  if (!chkDev(dev, {connected: true, capturing: true, unlockable: true})) {
+  if (!chkDev(dev, {connected: true, capturing: true})) {
     return false;
   }
-  (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__adb_stream_opened', function () {
-    cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', 'screen:on' + (unlock ? '+unlock' : ''));
-    dev.capture.screenController.write('screen:on' + (unlock ? '+unlock' : '') + '\n');
-  });
+  if (chkDev(dev, {unlockable: true})) {
+    (dev.capture.screenController.__adb_stream_opened ? passthrough : dev.capture.screenController).once('__adb_stream_opened', function () {
+      cfg.logAllProcCmd && log(dev.capture.screenController.__tag + '<', 'screen:on' + (unlock ? '+unlock' : ''));
+      dev.capture.screenController.write('screen:on' + (unlock ? '+unlock' : '') + '\n');
+    });
+  } else {
+    dev.adbCon_turnOnScreen && dev.adbCon_turnOnScreen.__cleanup('new request comes');
+    (dev.adbCon_turnOnScreen = adbRun('[TurnScreenOn]', dev, 'dumpsys power | ' + (dev.sysVer >= 4.22 ? 'grep' : cfg.androidWorkDir + ' /busybox grep') + ' -q ' + (dev.sysVer >= 4.22 ? 'mScreenOn=false' : 'mPowerState=0') + ' && input keyevent 26 && input keyevent 82', function/*on_close*/() {
+      dev.adbCon_turnOnScreen = null;
+    }, {timeout: 10 * 1000}));
+  }
   return true;
 }
 
