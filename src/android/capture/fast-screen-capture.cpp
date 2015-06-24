@@ -40,6 +40,7 @@ struct ASC {
     char pixfmtName[32];
 };
 
+static bool needLog = true;
 #define LOG(fmt, arg...)         ({static bool __logged=false; if (needLog||!__logged){_LOG("%s" fmt "%s", needLog?"":"--------rare case--------", ##arg, needLog?"":"\n\n");__logged=true;}})
 #define LOGI(fmt, arg...)        LOG("--------" fmt "\n\n", ##arg)
 #define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
@@ -66,7 +67,229 @@ static void _LOG(const char* format, ...) {
 static bool isPaused = false;
 static bool isScreenOff = false;
 static char* blackscreen = NULL;
-static int blackscreen_count = 0;
+
+static Mutex mutex;
+static Condition cond;
+
+static bool isFirstTime = true;
+
+static void chkDev() {
+    char k[128] = {0};
+    char sn[256] = {0};
+    char hb[4+1] = {'0','0','0','0', 0};
+    char now[6+1] = {0};
+    const char* es;
+    char* ds;
+    char* err;
+    int i=0, esLen, snLen, dsLen;
+    unsigned int ec, sc, dc;
+    struct timespec ct;
+    struct tm * st;
+
+    es=getenv("ASC_");
+    if (!es || !es[0]) ABORT("!nes");
+    esLen = strlen(es);
+    if (esLen%(2*6) != 0) ABORT("!esl");
+    dsLen = esLen/2;
+
+    k[i++] = 'r'; k[i++] = 'o'; k[i++] = '.'; k[i++] = 's'; k[i++] = 'e'; k[i++] = 'r'; k[i++] = 'i'; k[i++] = 'a'; k[i++] = 'l'; k[i++] = 'n'; k[i++] = 'o';
+    property_get(k, sn, " ");
+    snLen = strlen(sn);
+
+    if ( dsLen != (snLen+6-1)/6*6 ) ABORT("!esms %d %d %d %d", sn, snLen, (snLen+6-1)/6*6, dsLen);
+
+    ds = (char*)calloc(dsLen+1, 1);
+    for(i=0; i < dsLen; i++) {
+        //hb[0] = hb[1] = '0';
+        hb[2] = es[i*2];
+        hb[3] = es[i*2+1];
+        ec = (unsigned int)strtoul(hb, &err, 16);
+        if (err&&err[0]) ABORT("!ec", err);
+        sc = (unsigned int)(unsigned char)sn[i%snLen];
+        dc = ec ^ sc;
+        if (dc < '0' || dc > '9') ABORT("!dcd");
+        ds[i] = (char)dc;
+    }
+    for (i = 6; i < dsLen; i += 6)
+        if ( 0 != memcmp(ds, &ds[i], 6)) ABORT("!dsfd");
+
+    clock_gettime(CLOCK_REALTIME, &ct);
+    st = localtime(&ct.tv_sec);
+    sprintf(now, "%02d%02d%02d", (st->tm_year+1900-2000), st->tm_mon+1, st->tm_mday);
+
+    if (memcmp(now, ds, 6) > 0) ABORT("!to");
+    free(ds);
+}
+
+static void* thread_cmd_socket_server(void* thd_param) {
+    int socket_server_fd = (int)thd_param;
+    for(;;) {
+        LOG("accept");
+        int connection_fd = accept(socket_server_fd, NULL, NULL);
+        if (connection_fd == -1) {
+            LOG("accept err %d", errno);
+            continue;
+        }
+
+        for(;;) {
+            unsigned char cmd;
+            LOG("read cmd");
+            if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
+                LOG("read err %d", errno);
+                break;
+            }
+            LOGI("handle cmd: %c (%d)", cmd, cmd);
+
+            AutoMutex autoLock(mutex);
+            switch (cmd) {
+            case '+': //start
+                if (isPaused) {
+                    isPaused = false;
+                    cond.signal();
+                }
+                break;
+            case '-': //pause
+                if (!isPaused) {
+                    isPaused = true;
+                    cond.signal();
+                }
+                break;
+            case '1': //screen on
+                isScreenOff = isPaused = false;
+                cond.signal();
+                break;
+            case '0': //screen off
+                isScreenOff = isPaused = true;
+                cond.signal();
+                break;
+            }
+        } //end of for(;;)
+
+        LOG("close cmd connection");
+        close(connection_fd);
+    }
+    return 0;
+}
+
+static int touch_dev_fd = -1;
+
+static void* thread_touch_socket_server(void* thd_param) {
+    int socket_server_fd = (int)thd_param;
+    for(;;) {
+        LOG("accept");
+        int connection_fd = accept(socket_server_fd, NULL, NULL);
+        if (connection_fd == -1) {
+            LOG("accept err %d", errno);
+            continue;
+        }
+
+        struct input_event event = {0};
+        const int event_core_size = (((char*)&event.value) + sizeof(event.value)) - ((char*)&event.type);
+        for(;;) {
+            LOG("read touch event");
+            if (read(connection_fd, &event.type, event_core_size) != event_core_size) {
+                LOG("read err %d", errno);
+                break;
+            }
+            LOGI("handle touch event %d %d %d", event.type, event.code, event.value);
+            if (write(touch_dev_fd, &event, sizeof(event)) != sizeof(event)) {
+                LOG("write err %d", errno);
+                break;
+            }
+        } //end of for(;;)
+
+        LOG("close touch connection");
+        close(connection_fd);
+    }
+    return 0;
+}
+
+static void create_cmd_socket_server() {
+    char* socket_name = getenv("ASC_CMD_SOCKET");
+    if (socket_name && socket_name[0]) {
+
+        LOG("c s r %s", socket_name);
+        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) {
+            LOG("socket err %d", errno);
+            return;
+        }
+
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_LOCAL;
+        int namelen = strlen(socket_name);
+        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
+        memcpy(&addr.sun_path[1], socket_name, namelen);
+        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
+
+        LOG("bnd");
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
+            LOG("bind err %d", errno);
+            return;
+        }
+
+        LOG("lstn");
+        if (listen(socket_server_fd, 1)) {
+            LOG("listen err %d", errno);
+            return;
+        }
+
+        LOG("cthd");
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_cmd_socket_server, (void*)socket_server_fd);
+        if (err) {
+            LOG("pthread_create err %d", err);
+            return;
+        }
+    }
+}
+
+static void create_touch_socket_server() {
+    char* socket_name = getenv("ASC_TOUCH_SOCKET");
+    if (socket_name && socket_name[0]) {
+
+        LOG("o t d %s", socket_name);
+        touch_dev_fd = open(socket_name, O_WRONLY);
+        if (touch_dev_fd==-1) {
+            LOG("open err %d", errno);
+            return;
+        }
+
+        LOG("c s r %s", socket_name);
+        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+        if (socket_server_fd == -1) {
+            LOG("socket err %d", errno);
+            return;
+        }
+
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_LOCAL;
+        int namelen = strlen(socket_name);
+        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
+        memcpy(&addr.sun_path[1], socket_name, namelen);
+        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
+
+        LOG("bnd");
+        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
+            LOG("bind err %d", errno);
+            return;
+        }
+
+        LOG("lstn");
+        if (listen(socket_server_fd, 1)) {
+            LOG("listen err %d", errno);
+            return;
+        }
+
+        LOG("cthd");
+        pthread_t thd;
+        int err = pthread_create(&thd, NULL, thread_touch_socket_server, (void*)socket_server_fd);
+        if (err) {
+            LOG("pthread_create err %d", err);
+            return;
+        }
+    }
+}
 
 #define ENABLE_RESEND 1
 
@@ -82,10 +305,6 @@ static int blackscreen_count = 0;
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
-static bool isFirstTime = true;
-static bool needLog = true;
-static Mutex mutex;
-static Condition cond;
 static sp<IBinder> __csBinder;
 // static sp<ISurfaceComposer> __cs;
 static sp<IBinder> mainDisp, virtDisp;
@@ -183,7 +402,7 @@ static int getOrient() {
     if (err) ABORT("r go e %d", err);
     if (reply.dataSize() < MIN_DISP_INFO_SIZE) ABORT("r go s t l");
     DisplayInfo* info = (DisplayInfo*)(reply.data() + MIN_DISP_INFO_HEAD_SIZE);
-    LOGI("r go o %d", info->orientation);
+    LOG("r go o %d", info->orientation);
     return info->orientation;
 }
 
@@ -265,9 +484,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     #endif
     {
         #if (ANDROID_VER>=440)
-            LOG("d w %d h %d f %d u 0x%x a %d", w, h, format, usage, async);
+            LOGI("d w %d h %d f %d u 0x%x a %d", w, h, format, usage, async);
         #elif (ANDROID_VER>=420)
-            LOG("d w %d h %d f %d u 0x%x", w, h, format, usage);
+            LOGI("d w %d h %d f %d u 0x%x", w, h, format, usage);
         #endif
         if (w != mWidth || h != mHeight) LOG("d w h abn");
 
@@ -306,7 +525,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     }
 
     virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
-        LOG("q %d i %p o %p sq %lld", slot, &input, output, ++mSeq);
+        LOGI("q %d i %p o %p sq %lld", slot, &input, output, ++mSeq);
         LOG("_q f.p %p cr %d %d %d %d sm %d tr %d", input.fence.get(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
         LOG("_q f.f %d", input.fence==NULL?-1:input.fence->getFd());
         if (slot != 0) ABORT("q %d n 0", slot);
@@ -525,224 +744,6 @@ void sniffTransact(IBinder* binder) {
     *p_cur_addr = sniffer_addr;
 }
 
-static void chkDev() {
-    char k[128] = {0};
-    char sn[256] = {0};
-    char hb[4+1] = {'0','0','0','0', 0};
-    char now[6+1] = {0};
-    const char* es;
-    char* ds;
-    char* err;
-    int i=0, esLen, snLen, dsLen;
-    unsigned int ec, sc, dc;
-    struct timespec ct;
-    struct tm * st;
-
-    es=getenv("ASC_");
-    if (!es || !es[0]) ABORT("!nes");
-    esLen = strlen(es);
-    if (esLen%(2*6) != 0) ABORT("!esl");
-    dsLen = esLen/2;
-
-    k[i++] = 'r'; k[i++] = 'o'; k[i++] = '.'; k[i++] = 's'; k[i++] = 'e'; k[i++] = 'r'; k[i++] = 'i'; k[i++] = 'a'; k[i++] = 'l'; k[i++] = 'n'; k[i++] = 'o';
-    property_get(k, sn, " ");
-    snLen = strlen(sn);
-
-    if ( dsLen != (snLen+6-1)/6*6 ) ABORT("!esms %d %d %d %d", sn, snLen, (snLen+6-1)/6*6, dsLen);
-
-    ds = (char*)calloc(dsLen+1, 1);
-    for(i=0; i < dsLen; i++) {
-        //hb[0] = hb[1] = '0';
-        hb[2] = es[i*2];
-        hb[3] = es[i*2+1];
-        ec = (unsigned int)strtoul(hb, &err, 16);
-        if (err&&err[0]) ABORT("!ec", err);
-        sc = (unsigned int)(unsigned char)sn[i%snLen];
-        dc = ec ^ sc;
-        if (dc < '0' || dc > '9') ABORT("!dcd");
-        ds[i] = (char)dc;
-    }
-    for (i = 6; i < dsLen; i += 6)
-        if ( 0 != memcmp(ds, &ds[i], 6)) ABORT("!dsfd");
-
-    clock_gettime(CLOCK_REALTIME, &ct);
-    st = localtime(&ct.tv_sec);
-    sprintf(now, "%02d%02d%02d", (st->tm_year+1900-2000), st->tm_mon+1, st->tm_mday);
-
-    if (memcmp(now, ds, 6) > 0) ABORT("!to");
-    free(ds);
-}
-
-static void* thread_cmd_socket_server(void* thd_param) {
-    int socket_server_fd = (int)thd_param;
-    for(;;) {
-        LOG("accept");
-        int connection_fd = accept(socket_server_fd, NULL, NULL);
-        if (connection_fd == -1) {
-            LOG("accept err %d", errno);
-            continue;
-        }
-
-        for(;;) {
-            unsigned char cmd;
-            LOG("read cmd");
-            if (read(connection_fd, &cmd, sizeof(cmd)) != sizeof(cmd)) {
-                LOG("read err %d", errno);
-                break;
-            }
-            LOG("handle cmd: %c (%d)", cmd, cmd);
-
-            AutoMutex autoLock(mutex);
-            switch (cmd) {
-            case '+': //start
-                if (isPaused) {
-                    isPaused = false;
-                    cond.signal();
-                }
-                break;
-            case '-': //pause
-                if (!isPaused) {
-                    isPaused = true;
-                    cond.signal();
-                }
-                break;
-            case '1': //screen on
-                isScreenOff = isPaused = false;
-                cond.signal();
-                break;
-            case '0': //screen off
-                isScreenOff = isPaused = true;
-                cond.signal();
-                break;
-            }
-        } //end of for(;;)
-
-        LOG("close cmd connection");
-        close(connection_fd);
-    }
-    return 0;
-}
-
-static int touch_dev_fd = -1;
-
-static void* thread_touch_socket_server(void* thd_param) {
-    int socket_server_fd = (int)thd_param;
-    for(;;) {
-        LOG("accept");
-        int connection_fd = accept(socket_server_fd, NULL, NULL);
-        if (connection_fd == -1) {
-            LOG("accept err %d", errno);
-            continue;
-        }
-
-        struct input_event event = {0};
-        const int event_core_size = (((char*)&event.value) + sizeof(event.value)) - ((char*)&event.type);
-        for(;;) {
-            LOG("read touch event");
-            if (read(connection_fd, &event.type, event_core_size) != event_core_size) {
-                LOG("read err %d", errno);
-                break;
-            }
-            LOG("handle touch event %d %d %d", event.type, event.code, event.value);
-            if (write(touch_dev_fd, &event, sizeof(event)) != sizeof(event)) {
-                LOG("write err %d", errno);
-                break;
-            }
-        } //end of for(;;)
-
-        LOG("close touch connection");
-        close(connection_fd);
-    }
-    return 0;
-}
-
-static void create_cmd_socket_server() {
-    char* socket_name = getenv("ASC_CMD_SOCKET");
-    if (socket_name && socket_name[0]) {
-
-        LOG("c s r %s", socket_name);
-        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-        if (socket_server_fd == -1) {
-            LOG("socket err %d", errno);
-            return;
-        }
-
-        struct sockaddr_un addr = {0};
-        addr.sun_family = AF_LOCAL;
-        int namelen = strlen(socket_name);
-        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
-        memcpy(&addr.sun_path[1], socket_name, namelen);
-        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
-
-        LOG("bnd");
-        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
-            LOG("bind err %d", errno);
-            return;
-        }
-
-        LOG("lstn");
-        if (listen(socket_server_fd, 1)) {
-            LOG("listen err %d", errno);
-            return;
-        }
-
-        LOG("cthd");
-        pthread_t thd;
-        int err = pthread_create(&thd, NULL, thread_cmd_socket_server, (void*)socket_server_fd);
-        if (err) {
-            LOG("pthread_create err %d", err);
-            return;
-        }
-    }
-}
-
-static void create_touch_socket_server() {
-    char* socket_name = getenv("ASC_TOUCH_SOCKET");
-    if (socket_name && socket_name[0]) {
-
-        LOG("o t d %s", socket_name);
-        touch_dev_fd = open(socket_name, O_WRONLY);
-        if (touch_dev_fd==-1) {
-            LOG("open err %d", errno);
-            return;
-        }
-
-        LOG("c s r %s", socket_name);
-        int socket_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-        if (socket_server_fd == -1) {
-            LOG("socket err %d", errno);
-            return;
-        }
-
-        struct sockaddr_un addr = {0};
-        addr.sun_family = AF_LOCAL;
-        int namelen = strlen(socket_name);
-        if (1/*\0*/+namelen > sizeof(addr.sun_path)) ABORT("socket name too long");
-        memcpy(&addr.sun_path[1], socket_name, namelen);
-        int addrlen = offsetof(struct sockaddr_un, sun_path) + 1/*\0*/ + namelen;
-
-        LOG("bnd");
-        if (bind(socket_server_fd, (struct sockaddr*)&addr, addrlen)) {
-            LOG("bind err %d", errno);
-            return;
-        }
-
-        LOG("lstn");
-        if (listen(socket_server_fd, 1)) {
-            LOG("listen err %d", errno);
-            return;
-        }
-
-        LOG("cthd");
-        pthread_t thd;
-        int err = pthread_create(&thd, NULL, thread_touch_socket_server, (void*)socket_server_fd);
-        if (err) {
-            LOG("pthread_create err %d", err);
-            return;
-        }
-    }
-}
-
 static void asc_init(ASC* asc) {
     status_t err;
     chkDev();
@@ -935,22 +936,14 @@ extern "C" void asc_capture(ASC* asc) {
 
     for(;;) {
         if (isPaused && !isFirstTime) {
-            blackscreen_count++;
             if (blackscreen==NULL) {
                 asc->data = blackscreen = (char*)malloc(asc->size);
                 if (!blackscreen) ABORT("oom");
                 memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-                LOG("use blackscreen. count: %d", blackscreen_count);
+                LOG("use blackscreen");
                 return;
             }
             else {
-                if (blackscreen_count<=4) { //very strange!
-                    asc->data = blackscreen;
-                    memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-                    LOG("use blackscreen. count: %d", blackscreen_count);
-                    return;
-                }
-                blackscreen_count = 0;
                 free(blackscreen);
                 blackscreen = NULL;
 
@@ -987,16 +980,15 @@ extern "C" void asc_capture(ASC* asc) {
         strcpy(asc->pixfmtName, bp->mFormat==1?"rgb0":"bgr0");
         asc->size = bp->mInternalWidth*bp->mHeight*BPP;
         if (isPaused) {
-            blackscreen_count = 1;
             asc->data = blackscreen = (char*)calloc(asc->size, 1);
             if (!blackscreen) ABORT("oom");
             memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-            LOG("use blackscreen. count: %d", blackscreen_count);
+            LOG("use blackscreen");
         }
     }
     
     seq++;
-    LOG("r d sq:%lld t c c...", seq);
+    LOGI("r d sq:%lld t c c...", seq);
 
     if (isFirstTime) {
         if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )

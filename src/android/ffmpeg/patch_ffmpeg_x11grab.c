@@ -31,15 +31,14 @@ struct ASC {
 struct androidgrab {
     const AVClass *class;    /**< Class for private options. */
 
-    // double framerate;
+    double framerate;
 
     void* dlhandle;
     void (*asc_capture)(struct ASC*);
     struct ASC asc;
-    int reuseFirstFrame;
 
-    // int interval; //unit: us
-    // int64_t time_frame;      /**< Current time */
+    int interval; //unit: us
+    int64_t time_frame;      /**< Current time */
 };
 
 /**
@@ -61,10 +60,9 @@ androidgrab_read_header(AVFormatContext *s1)
     st = avformat_new_stream(s1, NULL);
     if (!st) return AVERROR(ENOMEM);
 
-    //avpriv_set_pts_info(st, 64, 1, 1000000); /* 64 bits pts in us */
+    avpriv_set_pts_info(st, 64, 1, 1000000); /* 64 bits pts in us */
 
-    // agrab->time_frame = av_gettime();
-    // agrab->interval = ((double)1000000)/agrab->framerate;
+    agrab->interval = ((double)1000000)/agrab->framerate;
     agrab->dlhandle = dlopen(s1->filename, RTLD_NOW);
     if (!agrab->dlhandle) {
         av_log(s1, AV_LOG_ERROR, "dlopen err:%d(%s) %s\n", errno, strerror(errno), dlerror());
@@ -79,14 +77,15 @@ androidgrab_read_header(AVFormatContext *s1)
 
     agrab->asc.priv_data = NULL;
     agrab->asc_capture(&agrab->asc);
+    agrab->time_frame = av_gettime();
 
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
     st->codec->width  = agrab->asc.width;
     st->codec->height = agrab->asc.height;
     st->codec->pix_fmt = av_get_pix_fmt(agrab->asc.pixfmtName);
-    // st->codec->time_base = av_d2q(1/agrab->framerate, 1000000);
-    // st->codec->bit_rate = agrab->asc.size * agrab->framerate * 8;
+    st->codec->time_base = av_d2q(1/agrab->framerate, 1000000);
+    st->codec->bit_rate = agrab->asc.size * agrab->framerate * 8;
 
     return 0;
 }
@@ -102,34 +101,21 @@ static int
 androidgrab_read_packet(AVFormatContext *s1, AVPacket *pkt)
 {
     struct androidgrab *agrab = s1->priv_data;
-    // int64_t curtime;
-    // int64_t waitInterval;
-    // int ret;
+    int64_t waitInterval;
 
-    // /* Calculate the time of the next frame */
-    // agrab->time_frame += agrab->interval;
-
-    // /* wait based on the frame rate */
-    // for(;;) {
-    //     curtime = av_gettime();
-    //     waitInterval = agrab->time_frame - curtime;
-    //     if (waitInterval <= 0) {
-    //         agrab->time_frame = curtime;
-    //         break;
-    //     }
-    //     usleep(waitInterval);
-    // }
+    /* wait based on the frame rate */
+    waitInterval = av_gettime() - (agrab->time_frame + agrab->interval);
+    if (waitInterval > 0)
+        usleep(waitInterval);
 
     av_init_packet(pkt);
-    // pkt->pts = curtime;
 
-    if (agrab->reuseFirstFrame) {
-        agrab->reuseFirstFrame--;
-    } else {
-        agrab->asc_capture(&agrab->asc);
-    }
+    agrab->asc_capture(&agrab->asc);
+
     pkt->data = agrab->asc.data;
     pkt->size = agrab->asc.size;
+
+    pkt->pts = agrab->time_frame = av_gettime();
 
     return agrab->asc.size;
 }
@@ -152,7 +138,7 @@ static const AVOption options[] = {
     // { "framerate", "set video frame rate",  OFFSET(framerate),  AV_OPT_TYPE_DOUBLE, {.dbl = 4}, 0.1, 40,   DEC },
     { "width",     "horizontal size",   OFFSET(asc.width),  AV_OPT_TYPE_INT,    {.i64 = 0}, 0,   4096, DEC },
     { "height",    "vertical size",     OFFSET(asc.height), AV_OPT_TYPE_INT,    {.i64 = 0}, 0,   4096, DEC },
-    { "reuseFirstFrame",    "reuse N times with first frame",     OFFSET(reuseFirstFrame), AV_OPT_TYPE_INT,    {.i64 = 3}, 0,   1024, DEC },
+    { "framerate",    "max framerate",     OFFSET(framerate), AV_OPT_TYPE_DOUBLE,    {.dbl = 60}, 0,   60, DEC },
     { NULL },
 };
 

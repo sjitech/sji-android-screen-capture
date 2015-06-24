@@ -20,17 +20,26 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 
+// hack android OS head file
+#include "libinline.h"
+#include "libcutils.h"
+#include "libgui.h"
+
+using namespace android;
+
 struct ASC_PRIV_DATA;
 struct ASC {
     ASC_PRIV_DATA* priv_data;
     char* data;
     int size;
-    int width;
-    int height;
+    int w; //short size
+    int h; //long size
     char pixfmtName[32];
 };
 
-#define LOG(fmt, arg...)           _LOG(fmt, ##arg)
+static bool needLog = true;
+#define LOG(fmt, arg...)         ({static bool __logged=false; if (needLog||!__logged){_LOG("%s" fmt "%s", needLog?"":"--------rare case--------", ##arg, needLog?"":"\n\n");__logged=true;}})
+#define LOGI(fmt, arg...)        LOG("--------" fmt "\n\n", ##arg)
 #define ABORT(fmt, arg...)       ({_LOG(fmt ". Now exit", ##arg); exit(0);})
 #define ABORT_ERRNO(fmt, arg...) ({_LOG(fmt " [errno %d(%s)] Now exit", errno, strerror(errno), ##arg); exit(0);})
 
@@ -52,34 +61,14 @@ static void _LOG(const char* format, ...) {
     write(STDERR_FILENO, buf, cnt);
 }
 
-// hack android OS head file
-#include "libcutils.h"
-#if (ANDROID_VER>=400)
-    #include "libgui.h"
-#endif
-#include "libinline.h"
-using namespace android;
-
 static bool isPaused = false;
 static bool isScreenOff = false;
 static char* blackscreen = NULL;
-static int blackscreen_count = 0;
 
 static Mutex mutex;
 static Condition cond;
 
 static bool isFirstTime = true;
-static bool needLog = true;
-#if (ANDROID_VER>=400)
-    static ScreenshotClient screenshot;
-    #if (ANDROID_VER>=420)
-        static sp<IBinder> display;
-    #endif
-#else
-    static int fb;
-    static char* mapbase;
-    static size_t lastMapSize;
-#endif
 
 static void chkDev() {
     char k[128] = {0};
@@ -146,7 +135,7 @@ static void* thread_cmd_socket_server(void* thd_param) {
                 LOG("read err %d", errno);
                 break;
             }
-            LOG("handle cmd: %c (%d)", cmd, cmd);
+            LOGI("handle cmd: %c (%d)", cmd, cmd);
 
             AutoMutex autoLock(mutex);
             switch (cmd) {
@@ -199,7 +188,7 @@ static void* thread_touch_socket_server(void* thd_param) {
                 LOG("read err %d", errno);
                 break;
             }
-            LOG("handle touch event %d %d %d", event.type, event.code, event.value);
+            LOGI("handle touch event %d %d %d", event.type, event.code, event.value);
             if (write(touch_dev_fd, &event, sizeof(event)) != sizeof(event)) {
                 LOG("write err %d", errno);
                 break;
@@ -299,6 +288,17 @@ static void create_touch_socket_server() {
     }
 }
 
+#if (ANDROID_VER>=400)
+    static ScreenshotClient screenshot;
+    #if (ANDROID_VER>=420)
+        static sp<IBinder> display;
+    #endif
+#else
+    static int fb;
+    static char* mapbase;
+    static size_t lastMapSize;
+#endif
+
 extern "C" void asc_capture(ASC* asc) {
     int err, width, height, internal_width, bytesPerPixel, rawImageSize;
 
@@ -336,22 +336,14 @@ extern "C" void asc_capture(ASC* asc) {
     if (isPaused && !isFirstTime) {
         AutoMutex autoLock(mutex);
         if (isPaused && !isFirstTime) {
-            blackscreen_count++;
             if (blackscreen==NULL) {
                 asc->data = blackscreen = (char*)malloc(asc->size);
                 if (!blackscreen) ABORT("oom");
-                LOG("use blackscreen. count: %d", blackscreen_count);
                 memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
+                LOG("use blackscreen");
                 return;
             }
             else {
-                if (blackscreen_count<=4) { //very strange!
-                    asc->data = blackscreen;
-                    memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-                    LOG("use blackscreen. count: %d", blackscreen_count);
-                    return;
-                }
-                blackscreen_count = 0;
                 free(blackscreen);
                 blackscreen = NULL;
 
@@ -364,17 +356,17 @@ extern "C" void asc_capture(ASC* asc) {
     }
 
     #if (ANDROID_VER>=400)
-        if (needLog) LOG("c w %d h %d)", asc->width, asc->height);
+        LOG("c w %d h %d", asc->w, asc->h);
         for(;;) {
             #if (ANDROID_VER>=500)
-                err = screenshot.update(display, Rect(), asc->width, asc->height, false);
+                err = screenshot.update(display, Rect(), asc->w, asc->h, false);
             #elif (ANDROID_VER>=420)
-                err = screenshot.update(display, asc->width, asc->height);
+                err = screenshot.update(display, asc->w, asc->h);
             #else
-                err = screenshot.update(asc->width, asc->height);
+                err = screenshot.update(asc->w, asc->h);
             #endif
             if(err) {
-                if (needLog) LOG("c e %d", err);
+                LOGI("c e %d", err);
                 usleep(250*1000);
                 if (!isFirstTime) {
                     if (!blackscreen) {
@@ -425,7 +417,7 @@ extern "C" void asc_capture(ASC* asc) {
                 memmove(p1, p2, size1);
         }
     #else
-        if (needLog) LOG("ic gv");
+        LOG("ic gv");
         struct fb_var_screeninfo vinfo;
         if (ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) ABORT_ERRNO("ic gv");
 
@@ -494,15 +486,14 @@ extern "C" void asc_capture(ASC* asc) {
     #endif
 
     if (isFirstTime) {
-        asc->width = width;
-        asc->height = height;
+        asc->w = width;
+        asc->h = height;
         asc->size = width*height*bytesPerPixel;
         if (isPaused) {
-            blackscreen_count = 1;
             asc->data = blackscreen = (char*)calloc(asc->size, 1);
             if (!blackscreen) ABORT("oom");
             memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-            LOG("use blackscreen. count: %d", blackscreen_count);
+            LOG("use blackscreen");
         }
 
         if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
