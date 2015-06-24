@@ -873,7 +873,7 @@ function _startRemoteDesktopServer(dev, q) {
   var adbCon = capture.adbCon = adbRun('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
       + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
       + ' && export ASC_CMD_SOCKET=' + cfg.androidWorkDir + ' && export ASC_TOUCH_SOCKET=' + dev.touch.devPath
-      + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
+      + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -r 60 -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
       + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
       , function/*on_close*/(err) {
@@ -925,7 +925,9 @@ function _startRemoteDesktopServer(dev, q) {
   q.fastCapture && (capture.timer_resentImageForSafari = setInterval(function () { //resend image once for safari to force display
     capture.image && (capture.image.i === capture.oldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
       res.q._isSafari && !res.__didResend && (res.__didResend = true) && writeMultipartImage(res, capture.image.buf, /*doNotCount:*/true);
-    }) : (capture.oldImageIndex = capture.image.i));
+    }) : ((capture.oldImageIndex = capture.image.i) && forEachValueIn(capture.consumerMap, function (res) {
+      res.__didResend = false;
+    })));
   }, cfg['resentImageForSafariAfter'] * 1000));
   capture.timer_resentUnchangedImage = setInterval(function () { //resend image to keep image tag alive
     capture.image && (capture.image.i === capture.veryOldImageIndex ? forEachValueIn(capture.consumerMap, function (res) {
