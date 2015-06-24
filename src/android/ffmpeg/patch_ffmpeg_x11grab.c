@@ -38,7 +38,7 @@ struct androidgrab {
     struct ASC asc;
 
     int interval; //unit: us
-    int64_t time_frame;      /**< Current time */
+    int64_t last_time;
 };
 
 /**
@@ -77,7 +77,7 @@ androidgrab_read_header(AVFormatContext *s1)
 
     agrab->asc.priv_data = NULL;
     agrab->asc_capture(&agrab->asc);
-    agrab->time_frame = av_gettime();
+    agrab->last_time = av_gettime();
 
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
@@ -103,19 +103,19 @@ androidgrab_read_packet(AVFormatContext *s1, AVPacket *pkt)
     struct androidgrab *agrab = s1->priv_data;
     int64_t waitInterval;
 
-    /* wait based on the frame rate */
-    waitInterval = av_gettime() - (agrab->time_frame + agrab->interval);
+    av_init_packet(pkt);
+    pkt->pts = av_gettime();
+
+    //wait based on framerate
+    waitInterval = pkt->pts - (agrab->last_time + agrab->interval);
     if (waitInterval > 0)
         usleep(waitInterval);
 
-    av_init_packet(pkt);
-
     agrab->asc_capture(&agrab->asc);
+    agrab->last_time = av_gettime();
 
     pkt->data = agrab->asc.data;
     pkt->size = agrab->asc.size;
-
-    pkt->pts = agrab->time_frame = av_gettime();
 
     return agrab->asc.size;
 }
