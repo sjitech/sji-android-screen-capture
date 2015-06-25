@@ -495,9 +495,9 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     #endif
     {
         #if (ANDROID_VER>=440)
-            LOGI("d w %d h %d f %d u 0x%x a %d", w, h, format, usage, async);
+            LOG("d w %d h %d f %d u 0x%x a %d", w, h, format, usage, async);
         #elif (ANDROID_VER>=420)
-            LOGI("d w %d h %d f %d u 0x%x", w, h, format, usage);
+            LOG("d w %d h %d f %d u 0x%x", w, h, format, usage);
         #endif
         if (w != mWidth || h != mHeight) LOG("d w h abn");
 
@@ -666,7 +666,7 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
                 if (!bpStepOfCode[code]) { //every code will be handled once
                     static int step = 0;
                     if(++step <= bpStepMax) {
-                        LOGI("rg %d st%d", code, step);
+                        LOG("rg %d st%d", code, step);
                         bpStepOfCode[code] = step;
 
                         int ind = bpCodeToVirtIndex(code);
@@ -713,7 +713,7 @@ void sniffTransact(IBinder* binder) {
 
     struct TransactSniffer {
         virtual status_t transact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
-            LOGI("sn tr c %d", code);
+            LOG("sn tr c %d", code);
             sniffered_transact_code = code;
             LOG("st sn");
             *p_cur_addr = old_addr;
@@ -922,7 +922,7 @@ extern "C" void asc_capture(ASC* asc) {
             clock_gettime(CLOCK_MONOTONIC, &now);
             if ( (now.tv_sec-origTime.tv_sec)*1000000000 + (now.tv_nsec-origTime.tv_nsec) >= RESEND_INTERVAL_NS*RESEND_COUNT) {
                 if (resend_count == 0) {
-                    LOGI("rt pr d rs lst sq %lld t c c...", seq);
+                    LOG("rt pr d rs lst sq %lld t c c...", seq);
                     resend_count = RESEND_COUNT;
                     return; //this cause caller reuse previous buffer pointer which contents maybe has been changed
                 }
@@ -934,7 +934,7 @@ extern "C" void asc_capture(ASC* asc) {
                 }
                 LOG("dl mx %d ms 4 ru d", ((untilTime.tv_sec-now.tv_sec)*1000000000 + (untilTime.tv_nsec-now.tv_nsec))/1000000);
                 if ((err=cond.waitAbsMono(mutex, &untilTime)) == -ETIMEDOUT) {
-                    LOGI("rt pr d rs sq %lld  t c c...", seq);
+                    LOG("rt pr d rs sq %lld  t c c...", seq);
                     resend_count++;
                     #if RESEND_COUNT > 1
                         clock_gettime(CLOCK_MONOTONIC, &lastRereadTime);
@@ -951,7 +951,7 @@ extern "C" void asc_capture(ASC* asc) {
                 asc->data = blackscreen = (char*)malloc(asc->size);
                 if (!blackscreen) ABORT("oom");
                 memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-                LOG("use blackscreen");
+                LOGI("use blackscreen");
                 return;
             }
             else {
@@ -959,7 +959,7 @@ extern "C" void asc_capture(ASC* asc) {
                 blackscreen = NULL;
 
                 do {
-                    LOG("wait for resume");
+                    LOGI("wait for resume");
                     cond.wait(mutex);
                 } while ( isPaused );
 
@@ -994,7 +994,7 @@ extern "C" void asc_capture(ASC* asc) {
             asc->data = blackscreen = (char*)calloc(asc->size, 1);
             if (!blackscreen) ABORT("oom");
             memset(blackscreen,  isScreenOff ? 0 : 0x40, asc->size);
-            LOG("use blackscreen");
+            LOGI("use blackscreen");
         }
     }
     
