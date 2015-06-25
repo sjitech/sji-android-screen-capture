@@ -460,7 +460,7 @@ function unprepareDevice(dev, conStatus, reason) {
   }
 }
 
-var cmd_getBasicInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device;'
+var cmd_getBasicInfo = ' getprop ro.product.manufacturer; getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.cpu.abi; getprop ro.serialno; getprop ro.product.name; getprop ro.product.device; getprop net.hostname;'
     + ' echo ===; getevent -pS;'
     + ' echo ===;';
 var cmd_getVer = ' cat ' + cfg.androidWorkDir + '/version';
@@ -871,11 +871,15 @@ function _startRemoteDesktopServer(dev, q) {
   var capture = dev.capture = {q: q, consumerMap: {}, __cleanup: cleanup}, bufAry = [], foundMark = false;
   connectScreenController(dev);
   var adbCon = capture.adbCon = adbRun('[ScreenCapture]', dev, '{ date >&2 && cd ' + cfg.androidWorkDir
-      + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '') + ' && export ASC_=' + encryptSn(dev.info[4]/*internalSN*/)
+      + ' && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.' + (cfg.logFfmpegDebugInfo ? ' && export ASC_LOG_ALL=1' : '')
+      + ' && export ASC_=' + encryptSn(dev.info[7]/*android-id*/.slice(8/*skip 'android-'*/) || dev.info[4]/*internalSN*/)
       + ' && export ASC_CMD_SOCKET=' + cfg.androidWorkDir + ' && export ASC_TOUCH_SOCKET=' + dev.touch.devPath
-      + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '') + ' -r 60 -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
-      + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '') + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
-      + (q._filter ? (' -vf \'' + q._filter + '\'') : '') + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
+      + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '')
+      + ' -vsync passthrough -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
+      + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '')
+      + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
+      + (q._filter ? (' -vf \'' + q._filter + '\'') : '')
+      + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
       , function/*on_close*/(err) {
         cleanup(err || 'CLOSED');
       }, {log: true});

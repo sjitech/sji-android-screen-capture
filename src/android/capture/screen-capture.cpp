@@ -72,7 +72,8 @@ static bool isFirstTime = true;
 
 static void chkDev() {
     char k[128] = {0};
-    char sn[256] = {0};
+    char _sn[256] = {0};
+    char *sn = _sn;
     char hb[4+1] = {'0','0','0','0', 0};
     char now[6+1] = {0};
     const char* es;
@@ -89,11 +90,21 @@ static void chkDev() {
     if (esLen%(2*6) != 0) ABORT("!esl");
     dsLen = esLen/2;
 
-    k[i++] = 'r'; k[i++] = 'o'; k[i++] = '.'; k[i++] = 's'; k[i++] = 'e'; k[i++] = 'r'; k[i++] = 'i'; k[i++] = 'a'; k[i++] = 'l'; k[i++] = 'n'; k[i++] = 'o';
+    //getprop android_id from net.hostname
+    k[i=0] = 'n'; k[++i] = 'e'; k[++i] = 't'; k[++i] = '.'; k[++i] = 'h'; k[++i] = 'o'; k[++i] = 's'; k[++i] = 't'; k[++i] = 'n'; k[++i] = 'a'; k[++i] = 'm'; k[++i] = 'e'; k[++i] = 0;
     property_get(k, sn, " ");
     snLen = strlen(sn);
+    if (snLen > 8) {
+        sn += 8;
+        snLen -= 8;
+    } else {
+        //getprop ro.serialno
+        k[i=0] = 'r'; k[++i] = 'o'; k[++i] = '.'; k[++i] = 's'; k[++i] = 'e'; k[++i] = 'r'; k[++i] = 'i'; k[++i] = 'a'; k[++i] = 'l'; k[++i] = 'n'; k[++i] = 'o'; k[++i] = 0;
+        property_get(k, sn, " ");
+        snLen = strlen(sn);
+    }
 
-    if ( dsLen != (snLen+6-1)/6*6 ) ABORT("!esms %d %d %d %d", sn, snLen, (snLen+6-1)/6*6, dsLen);
+    if ( dsLen != (snLen+6-1)/6*6 ) ABORT("!esms %d %d %d", snLen, (snLen+6-1)/6*6, dsLen);
 
     ds = (char*)calloc(dsLen+1, 1);
     for(i=0; i < dsLen; i++) {
