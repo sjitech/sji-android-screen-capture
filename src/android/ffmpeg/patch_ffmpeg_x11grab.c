@@ -39,6 +39,8 @@ struct androidgrab {
 
     int interval; //unit: us
     int64_t last_time;
+
+    bool should_reuse_data;
 };
 
 /**
@@ -79,6 +81,8 @@ androidgrab_read_header(AVFormatContext *s1)
     agrab->asc_capture(&agrab->asc);
     agrab->last_time = av_gettime();
 
+    agrab->should_reuse_data = true;
+
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
     st->codec->width  = agrab->asc.width;
@@ -100,22 +104,33 @@ androidgrab_read_header(AVFormatContext *s1)
 static int
 androidgrab_read_packet(AVFormatContext *s1, AVPacket *pkt)
 {
+//    char buf_log[512] = {0};
+//    sprintf(buf_log, "begin androidgrab_read_packet. pkt:%p\n", pkt);
+//    write(2, buf_log, strlen(buf_log));
+
     struct androidgrab *agrab = s1->priv_data;
     int64_t waitInterval;
 
     av_init_packet(pkt);
-    pkt->pts = av_gettime();
 
-    //wait based on framerate
-    waitInterval = pkt->pts - (agrab->last_time + agrab->interval);
-    if (waitInterval > 0)
-        usleep(waitInterval);
+    if (agrab->should_reuse_data) {
+        agrab->should_reuse_data = false;
+    } else {
+        //wait based on framerate
+        waitInterval = av_gettime() - (agrab->last_time + agrab->interval);
+        if (waitInterval > 0)
+            usleep(waitInterval);
 
-    agrab->asc_capture(&agrab->asc);
-    agrab->last_time = av_gettime();
+        agrab->asc_capture(&agrab->asc);
+        agrab->last_time = av_gettime();
+    }
 
     pkt->data = agrab->asc.data;
     pkt->size = agrab->asc.size;
+    pkt->pts = agrab->last_time;
+
+//    sprintf(buf_log, "end   androidgrab_read_packet. pkt:%p pkt->data:%p\n", pkt, pkt->data);
+//    write(2, buf_log, strlen(buf_log));
 
     return agrab->asc.size;
 }

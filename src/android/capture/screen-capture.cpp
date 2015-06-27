@@ -64,6 +64,7 @@ static void _LOG(const char* format, ...) {
 static bool isPaused = false;
 static bool isScreenOff = false;
 static char* blackscreen = NULL;
+static int blackscreen_extra_count = 0;
 
 static Mutex mutex;
 static Condition cond;
@@ -355,6 +356,12 @@ extern "C" void asc_capture(ASC* asc) {
                 return;
             }
             else {
+                if (blackscreen_extra_count++ < 3) { //very strange!
+                    asc->data = blackscreen;
+                    LOG("use blackscreen");
+                    return;
+                }
+                blackscreen_extra_count = 0;
                 free(blackscreen);
                 blackscreen = NULL;
 
