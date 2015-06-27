@@ -875,11 +875,13 @@ function _startRemoteDesktopServer(dev, q) {
       + ' && export ASC_=' + encryptSn(dev.info[7]/*android-id*/.slice(8/*skip 'android-'*/) || dev.info[4]/*internalSN*/)
       + ' && export ASC_CMD_SOCKET=' + cfg.androidWorkDir + ' && export ASC_TOUCH_SOCKET=' + dev.touch.devPath
       + ' && exec ./ffmpeg.armv' + dev.armv + (dev.sysVer >= 5 ? '.pie' : '')
-      + ' -vsync passthrough -nostdin -nostats -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error')
-      + ' -f androidgrab -probesize 32'/*min bytes for check*/ + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '')
+      + ' -loglevel ' + (cfg.logFfmpegDebugInfo ? 'debug' : 'error -nostats')
+      + ' -vsync drop -nostdin'
+      + ' -f androidgrab' + (q._reqSz ? (' -width ' + q._reqSz.w + ' -height ' + q._reqSz.h) : '')
       + ' -i ' + (q.fastCapture ? dev.fastLibPath : dev.libPath)
       + (q._filter ? (' -vf \'' + q._filter + '\'') : '')
-      + ' -f mjpeg -q:v 1 - ; } 2>' + cfg.androidLogPath // "-" means stdout
+      + ' -f mjpeg -q:v 1 -'
+      + ' ; } 2>' + cfg.androidLogPath // "-" means stdout
       , function/*on_close*/(err) {
         cleanup(err || 'CLOSED');
       }, {log: true});
