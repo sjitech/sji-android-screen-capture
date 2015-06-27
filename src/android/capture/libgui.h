@@ -228,24 +228,12 @@ private:
             RELEASE_ALL_BUFFERS       = 0x2,
         };
         struct QueueBufferInput {
+            size_t getFlattenedSize() const;
+            size_t getFdCount() const;
             #if (ANDROID_VER>=440)
-                int64_t timestamp;
-                int isAutoTimestamp;
-                Rect crop;
-                int scalingMode;
-                uint32_t transform;
-                #if (ANDROID_VER>=500)
-                    uint32_t stickyTransform;
-                #endif
-                int async;
-                sp<Fence> fence;
-            #else
-                void* vtbl;
-                int64_t timestamp;
-                Rect crop;
-                int scalingMode;
-                uint32_t transform;
-                sp<Fence> fence;
+                status_t flatten(void*& buffer, size_t& size, int*& fds, size_t& count) const;
+            #elif (ANDROID_VER>=420)
+                status_t flatten(void* buffer, size_t size, int fds[], size_t count) const;
             #endif
         };
 

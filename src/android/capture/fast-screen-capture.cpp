@@ -338,6 +338,8 @@ struct CallbackStep {
 };
 static CallbackStep bpSteps[1/*invalid step 0*/+32] = {0};
 static int bpStepMax = 0;
+static int step_queueBuffer = 0;
+static int step_requestBuffer = 0;
 
 
 
@@ -369,7 +371,9 @@ static void bpInitCallbackSteps() {
     #endif
     INIT_NEXT_CALLBACK_STEP(dequeueBuffer);
     INIT_NEXT_CALLBACK_STEP(requestBuffer);
+    step_requestBuffer = bpStepMax;
     INIT_NEXT_CALLBACK_STEP(queueBuffer);
+    step_queueBuffer = bpStepMax;
 }
 
 static int bpCodeToVirtIndex(uint32_t code) {
@@ -450,6 +454,10 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     bool mHaveData;
     int mConsumerUsage;
     int64_t mSeq;
+    void* mBufferInput_flattened_buf;
+    size_t mBufferInput_flattened_size;
+    int* mBufferInput_flattened_fds;
+    size_t mBufferInput_flattened_fd_count;
 
     MyGraphicBufferProducer(int w, int h) : BnGraphicBufferProducer() {
         LOG("bp c w %d h %d", w, h);
@@ -464,6 +472,10 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
         mConsumerUsage = GRALLOC_USAGE_SW_READ_OFTEN;
         mSeq = 0;
+        mBufferInput_flattened_buf = NULL;
+        mBufferInput_flattened_size = 0;
+        mBufferInput_flattened_fds = NULL;
+        mBufferInput_flattened_fd_count = 0;
     }
 
     virtual ~MyGraphicBufferProducer() {
@@ -537,10 +549,24 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
 
     virtual status_t queueBuffer(int slot, const QueueBufferInput& input, QueueBufferOutput* output) {
         LOGI("q %d i %p o %p sq %lld", slot, &input, output, ++mSeq);
-        LOG("_q f.p %p cr %d %d %d %d sm %d tr %d", input.fence.get(), input.crop.left, input.crop.top, input.crop.right, input.crop.bottom, input.scalingMode, input.transform);
-        LOG("_q f.f %d", input.fence==NULL?-1:input.fence->getFd());
+        size_t _fd_count = input.getFdCount();
+        size_t _fl_size = input.getFlattenedSize();
+        LOG("_q flsz %d fdc %d", _fl_size, _fd_count);
+        if (_fd_count > 0) {
+            if (mBufferInput_flattened_size < _fl_size || mBufferInput_flattened_buf==NULL) {
+                mBufferInput_flattened_buf = realloc(mBufferInput_flattened_buf, _fl_size);
+                mBufferInput_flattened_size = _fl_size;
+            }
+            if (mBufferInput_flattened_fd_count < _fd_count || mBufferInput_flattened_fds==NULL) {
+                mBufferInput_flattened_fds = (int*)realloc(mBufferInput_flattened_fds, _fd_count*sizeof(int));
+                mBufferInput_flattened_fd_count = _fd_count;
+            }
+        }
+
         if (slot != 0) ABORT("q %d n 0", slot);
+
         if (output) {
+            LOG("_q so");
             output->width = mWidth;
             output->height = mHeight;
             output->transformHint = 0;
@@ -550,7 +576,16 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
         int orient = getOrient();
 
         AutoMutex autoLock(mutex);
-        mFence = input.fence;
+        if (mBufferInput_flattened_fd_count > 0 && mBufferInput_flattened_buf !=NULL && mBufferInput_flattened_fds != NULL) {
+            void* _fl_buf = mBufferInput_flattened_buf;
+            int* _fds = mBufferInput_flattened_fds;
+            LOG("_q fl");
+            status_t err = input.flatten(_fl_buf, _fl_size, _fds, _fd_count); //!! //maybe change arguments after flattened
+            LOG("_q fl r %d fd %d", err, mBufferInput_flattened_fds[0]);
+            if (!err) {
+                mFence = sp<Fence>(new Fence(dup(mBufferInput_flattened_fds[0])));
+            }
+        }
 
         if (convertOrient(orient) != virtDispState->orientation) {
             setVirtDispOrient(orient);
@@ -658,46 +693,65 @@ struct MyGraphicBufferProducer : public BnGraphicBufferProducer {
     #endif
 
     virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0) {
-        LOG("t %d ds %d", code, data.dataSize());
-        #if 1 //(ANDROID_VER==420)
-            // analyse time sequence, determin each code
-            static int bpStepOfCode[32] = {0/*invalid step*/};
-            if (code > 0 && code < sizeof(bpStepOfCode)/sizeof(bpStepOfCode[0])) {
-                if (!bpStepOfCode[code]) { //every code will be handled once
-                    static int step = 0;
-                    if(++step <= bpStepMax) {
-                        LOG("rg %d st%d", code, step);
-                        bpStepOfCode[code] = step;
-
-                        int ind = bpCodeToVirtIndex(code);
-                        if (ind != bpSteps[step].ind) {
-                            LOG("n rd");
-                            AutoMutex autoLock(mutex);
-                            static PVTBL old_vtbl = NULL;
-                            if (!old_vtbl) {
-                                LOG("pr pt");
-                                old_vtbl = PVTBL_OF(this);
-                                // for(int i=-ghostCnt; i<normalCnt; i++) LOG("vtbl[%d]:%p", i, old_vtbl[i]);
-                                enum{ ghostCnt = 16, normalCnt=64};
-                                static VADDR new_vtbl[ghostCnt+normalCnt] = {0};
-                                memcpy(new_vtbl, old_vtbl-ghostCnt, sizeof(new_vtbl));
-                                LOG("pt vt %p %p", old_vtbl, new_vtbl + ghostCnt);
-                                PVTBL_OF(this) = new_vtbl + ghostCnt;
-                            }
-
-                            LOG("rd %p %p i%d i%d", PVTBL_OF(this)[ind], old_vtbl[bpSteps[step].ind], ind, bpSteps[step].ind);
-                            PVTBL_OF(this)[ind] = old_vtbl[bpSteps[step].ind];
-                            LOG(".rd");
-                        }
-                    } else {
-                        ABORT("t m b");
-                    }
-                }
-            } else {
-                LOG("ig c");
-                code = -1;
+        // analyse time sequence, determin each code
+        static int bpStepOfCode[32] = {0/*invalid step*/};
+        if (code <= 0 || code >= sizeof(bpStepOfCode)/sizeof(bpStepOfCode[0])) {
+            LOG("t. %d ds %d c b", code, data.dataSize());
+            return reply->writeInt32(-ENOSYS);
+        }
+        if (bpStepOfCode[code] < 0) {
+            LOG("t. %d ds %d sk", code, data.dataSize());
+            return reply->writeInt32(-ENOSYS);
+        }
+        if (bpStepOfCode[code] == 0) { //if not registered
+            LOGI("t %d ds %d s?", code, data.dataSize());
+            static int step = 1;
+            if(step > bpStepMax) {
+                bpStepOfCode[code] = -1;
+                LOGI(".t %d ds %d s t m", code, data.dataSize());
+                return reply->writeInt32(-ENOSYS);
             }
-        #endif
+            if (step==step_requestBuffer && code != 1) {
+                ABORT(".t %d ds %d c ! 1", code, data.dataSize());
+            }
+            if (step==step_queueBuffer && data.dataSize() < 128) {
+                bpStepOfCode[code] = -1;
+                LOGI(".t %d ds %d s t s", code, data.dataSize());
+                return reply->writeInt32(-ENOSYS);
+            }
+            LOGI("rg %d st%d", code, step);
+            bpStepOfCode[code] = step;
+
+            int ind = bpCodeToVirtIndex(code);
+            if (ind != bpSteps[step].ind) {
+                //////////////////////////////////////////////////////////////////
+                // Adjust some virtual function's position
+                //////////////////////////////////////////////////////////////////
+                LOG("n rd");
+                AutoMutex autoLock(mutex);
+                static PVTBL old_vtbl = NULL;
+                if (!old_vtbl) {
+                    LOG("pr pt");
+                    old_vtbl = PVTBL_OF(this);
+                    // for(int i=-ghostCnt; i<normalCnt; i++) LOG("vtbl[%d]:%p", i, old_vtbl[i]);
+                    enum{ ghostCnt = 16, normalCnt=64};
+                    static VADDR new_vtbl[ghostCnt+normalCnt] = {0};
+                    memcpy(new_vtbl, old_vtbl-ghostCnt, sizeof(new_vtbl));
+                    LOG("pt vt %p %p", old_vtbl, new_vtbl + ghostCnt);
+                    PVTBL_OF(this) = new_vtbl + ghostCnt;
+                }
+
+                LOG("rd %p %p i%d i%d", PVTBL_OF(this)[ind], old_vtbl[bpSteps[step].ind], ind, bpSteps[step].ind);
+                PVTBL_OF(this)[ind] = old_vtbl[bpSteps[step].ind];
+                LOG(".rd");
+            }
+
+            step++;
+        } // end of !bpStepOfCode[code])
+        else {
+            LOG("t %d ds %d s %d", code, data.dataSize(), bpStepOfCode[code]);
+        }
+
         status_t err = BnGraphicBufferProducer::onTransact(code, data, reply, flags);
         LOG(".t %d r %d", code, err);
         return err;
@@ -999,7 +1053,7 @@ extern "C" void asc_capture(ASC* asc) {
     }
     
     seq++;
-    LOGI("r d sq:%lld t c c...", seq);
+    LOGI("r d sq %lld", seq);
 
     if (isFirstTime) {
         if (! (getenv("ASC_LOG_ALL") && atoi(getenv("ASC_LOG_ALL")) > 0) )
