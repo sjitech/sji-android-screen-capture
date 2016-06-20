@@ -2,8 +2,8 @@
 
 printenv ANDROID_NDK_ROOT > /dev/null || { echo please export ANDROID_NDK_ROOT=root_dir_of_your_android_ndk; exit 1; }
 
-SYS_ROOT=`ls -d $ANDROID_NDK_ROOT/platforms/android-8/arch-arm` || exit 1
-TOOL_CHAIN_DIR=`ls -d $ANDROID_NDK_ROOT/toolchains/arm-linux-androideabi-[4-5].*/prebuilt/* | tail -n 1` || exit 1
+SYS_ROOT=`ls -d $ANDROID_NDK_ROOT/platforms/android-??/arch-arm | sort |tail -n 1` || exit 1
+TOOL_CHAIN_DIR=`ls -d $ANDROID_NDK_ROOT/toolchains/arm-linux-androideabi-[4-5].*/prebuilt/* | sort | tail -n 1` || exit 1
 CC="$TOOL_CHAIN_DIR/bin/arm-linux-androideabi-g++ --sysroot=$SYS_ROOT"
 
 #STL_ROOT=`ls -d $ANDROID_NDK_ROOT/sources/cxx-stl/gnu-libstdc++/[4-5].* | tail -n 1` || exit 1
