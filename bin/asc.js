@@ -116,7 +116,7 @@ function adb(_tag, devOrHost, service, _on_close/*(err, stdout)*/, _opt) {
             wanted_payload_len = parseInt(tmpBuf.slice(0, 4).toString(), 16); //maybe 0
             if (isNaN(wanted_payload_len)) return cleanup('protocol error(data length)');
             buf = tmpBuf.slice(4);
-            tmpBuf.length = 0;
+            tmpBuf = new Buffer(0);
           }
           if (buf.length >= wanted_payload_len) {
             tmpBufAry.push(buf.slice(0, wanted_payload_len));
