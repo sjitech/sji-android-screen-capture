@@ -5,40 +5,6 @@ sji-android-screen-capture
 I suggest you use another better project <a>https://github.com/openstf/stf</a>
 </b>
 
-
-New: Ultra speed(30-60fps) screen capture for android 4.2~4.4, ADB protocol needed.  So far tested on 15 kinds of device, thereotically works on any device because i use a special way to detect system difference and adopt it, this is not easy, because even in same version, there are still different constant used by manufacture. <br>Even work for DRM-protected youtube player.  <br>We have not yet used hardware assisted video encoder so still can not transmit fullscreen size in 30fps, but smaller is faster(Acording to size, you can check youtube link below).  <br><br><br><b>But sorry...this project have been kept private. We will open the source later, i am not sure when.  </b><br><br><br>
-<b>Only if your company really really</b> want to <b>buy</b> this now then concat osexp2003@gmail.com  (Feel free to write in  English/日本語/中国語!)<br><br>
-
-<b>New: I can provide a experience site for you to view and touch my android device remotely</b><br><br>
-
-No-Root-Needed Android Fast Screen Capture & Caster & Recorder & Remote Controller From PC's Browser
-This project is aimed to provide a fast way to capture android screen and view,record,remote control it from PC's HTML5 browser.
-No Root Required: You need NOT root your android device)
-It's real time (can encode 4+ frames/second for 1920x1080 screen. If shrink size to 320xauto image, can encode at 8+ frames/second). And it's low bandwidth usage (typically 150,000 bytes/second). This product will do encoding in host and android by ffmpeg. Support Chrome, Firefox, Safari, IE. Windows/Mac/Linux/Unix
-
-<br><br><br>
-<b>Note:We only capture screen when screen changed.</b><br>
-<b>Note:Although we can capture screen in 30-60fps, we currently can not yet transimit fullscreen at same speed.  We will working on it. I think this is possible if use native MediaEncoder API</b>
-<br><br><br>
-
-New: Recorded file can be auto converted to H.264/MP4 and WebM video format if you'v installed ffmpeg in local PC.<br>
-New: Support Remote Control by mouse click/move/drag on live view UI. (Tested on Android 2.2~4.4)<br>
-
-<br>
-New 2014/09/15: Support IE, mobile chrome/firefox.... theoretically all browsers<br>
-New 2014/09/15: Got screen capture 30frames/second in android 4.4 and 4.2(but 4.2 have scratch, on working)<br>
-<b>New 2014/10/27: Successfully capture 30 screen per second in android 4.2-4.4, any size, clearly and almost 0% CPU usage!, but ffmpeg in android is too slow. I will try to optimize it or use native Media Encoder which is hardware assisted.</b><br>
-<b>New 2015/03/09: now can map device to browser user's PC, let browser user use adb/ADT/Eclipse/AndroidStudio to develop app to the mapped virtual device.  All this are done via Chrome browser (WebSocket + Chrome App)</b><br>
-<b>New 2015/05/09: Very fast touch expeirence from PC's browser. And keyboard input from PC's browser is also improved.</b><br>
-<br>
-==========================
-==========================
-Performance:
-<a href="https://www.youtube.com/watch?v=vSFaFC_asqo&list=PLlyaJQbzuC5qUpsdetOwZtFuXEdDY4417&index=2">Youtube Video</a><br>
-==========================
-==========================
-
-
 [Screenshot]
 
 Home<br>
@@ -91,7 +57,6 @@ Actually speaking, for android 4.2+, we did can get screenshot from device at hi
 
 If you plan to use this product in slow internet environment, you maybe be disappointed. But you can customize this product, such as use OMX encoder in android, send H264 stream to PC's VLC  player instead of browser, that has been approved be fast.
 
-
-
-
+Performance:
+<a href="https://www.youtube.com/watch?v=vSFaFC_asqo&list=PLlyaJQbzuC5qUpsdetOwZtFuXEdDY4417&index=2">Youtube Video</a><br>
 
