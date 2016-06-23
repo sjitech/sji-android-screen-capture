@@ -2,7 +2,7 @@ sji-android-screen-capture
 ==========================
 
 <b>This project is stopped a year ago.
-I suggest you use another better project openstf <a>https://github.com/openstf/stf</a>
+I suggest you use another better project <a>https://github.com/openstf/stf</a>
 </b>
 
 
