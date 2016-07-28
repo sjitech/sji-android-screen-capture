@@ -1,9 +1,9 @@
 #!/bin/sh
 
-printenv ANDROID_NDK_ROOT > /dev/null || { echo please export ANDROID_NDK_ROOT=root_dir_of_your_android_ndk; exit 1; }
+printenv NDK_ROOT > /dev/null || { echo please export NDK_ROOT=root_dir_of_your_android_ndk; exit 1; }
 
-SYS_ROOT=`ls -d $ANDROID_NDK_ROOT/platforms/android-??/arch-arm | tail -n 1`
-TOOL_CHAIN_DIR=`ls -d $ANDROID_NDK_ROOT/toolchains/arm-linux-androideabi-?.?/prebuilt/* | tail -n 1`
+SYS_ROOT=`ls -d $NDK_ROOT/platforms/android-9/arch-arm | tail -n 1`
+TOOL_CHAIN_DIR=`ls -d $NDK_ROOT/toolchains/arm-linux-androideabi-?.?/prebuilt/* | tail -n 1`
 CC="$TOOL_CHAIN_DIR/bin/arm-linux-androideabi-gcc --sysroot=$SYS_ROOT"
 
 CC="$CC -O3"
