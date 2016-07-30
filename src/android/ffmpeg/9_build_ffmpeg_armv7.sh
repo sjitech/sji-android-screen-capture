@@ -3,7 +3,6 @@
 ls -d ./std_toolchain > /dev/null || { echo please execute ./0_make_ndk_toolchain.sh first; exit 1; }
 
 export PATH="$PWD/std_toolchain/bin:$PATH"
-export CC=arm-linux-androideabi-gcc
 
 cd ./ffmpeg_src            || { echo please download ffmpeg source to [./ffmpeg_src];            exit 1; }
 
